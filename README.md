@@ -20,7 +20,7 @@ Between all the SQL implementation, the one that best fitted the need for this m
 
 [How to Charge for your Open Source](http://www.mikeperham.com/2015/11/23/how-to-charge-for-your-open-source/) by Mike Perham brings well argumented thoughts on the necessity to charge for work done by developers, even in the Open Source world.
 
-I have started, myself, a lot of Open Source project that, eventually, are all death because I wasn't able to dedicate the right ammount of time to them.
+I have started myself a lot of Open Source project that, eventually, are all death because I wasn't able to dedicate the right ammount of time to them.
 
 I am hoping to find the necessary funds to keep maintain this project.
 
@@ -28,7 +28,9 @@ I am starting with only an Open Source version, and then move to an enterprise v
 
 ## Usage
 
-From the root of the project you should be able to compile and link the module, all with a simple:
+From the root of the project you should be able to compile and link the module.
+Assuming you have both gcc and ld installed should be sufficient to run:
+
 ``` bash
 make
 ```
