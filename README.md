@@ -59,3 +59,6 @@ This is extremelly alpha code, there will be definitely some rough edges and som
 
 A lot of possible functionality are not yet implemented, by now it is suppose to work on a single redis instance, in a future will be possible to distributed some functionality of the modules.
 
+## Need incentives
+
+I am not sure, myself, that this modules should exists at all, if you find utility or potential in this little module please star the project or open issues requiring functionality.
