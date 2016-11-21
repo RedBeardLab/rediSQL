@@ -28,12 +28,14 @@ I am starting with only an Open Source version, and then move to an enterprise v
 
 ## Usage
 
-You can compile and link the process, all with a simple:
+From the root of the project you should be able to compile and link the module, all with a simple:
 ``` bash
 make
 ```
 
-Now a rediSQL.so object should have been generate, now you simply load the module inside Redis.
+Now a rediSQL.so object should have been generate, and you simply load the module inside Redis.
+
+Note that you need the last unstable redis branch in order of modules to work. 
 
 ```bash
 ./redis-server --loadmodule ~/rediSQL/rediSQL.so
