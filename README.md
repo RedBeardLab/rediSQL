@@ -53,6 +53,9 @@ Now, your Redis instance has loaded the module and it is capable of accept SQL q
 
 Now you can create tables, insert data on those tables, make queries, remove elements, everything.
 
-## Bug and Error
+## Alpha code
 
 This is extremelly alpha code, there will be definitely some rough edges and some plain bugs, I really appreciate if you take your time to report those bugs.
+
+A lot of possible functionality are not yet implemented, by now it is suppose to work on a single redis instance, in a future will be possible to distributed some functionality of the modules.
+
