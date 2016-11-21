@@ -9,6 +9,11 @@
 
 #define rediSQL_ENCODING_VERSION 0
 
+#define REPLY_ERROR_FMT(ctx, fmt, err)                                         \
+  RedisModule_ReplyWithError(                                                  \
+      ctx, RedisModule_StringPtrLen(                                           \
+               RedisModule_CreateStringPrintf(ctx, fmt, err), NULL));
+
 static RedisModuleType *rediSQL;
 
 typedef sqlite3 redisSQL;
@@ -61,13 +66,11 @@ int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   
 
   if (SQLITE_OK != result_code){
-    int size_err = snprintf(NULL, 0, "ERR - %s | Query: %s", sqlite3_errmsg(db), query);
-    char *error = RedisModule_Alloc(sizeof(char) * (size_err + 1));
-    snprintf(error, size_err + 1, "ERR - %s | Query: %s", sqlite3_errmsg(db), query);
-    RedisModule_ReplyWithError(ctx, error);
-    RedisModule_Free(error);
+    RedisModuleString *e = RedisModule_CreateStringPrintf(ctx, 
+		    "ERR - %s | Query: %s", sqlite3_errmsg(db), query);
     sqlite3_finalize(stm);
-    return REDISMODULE_OK;
+    return RedisModule_ReplyWithError(ctx, 
+		    RedisModule_StringPtrLen(e, NULL));
   }
 
   result_code = sqlite3_step(stm);
@@ -127,13 +130,11 @@ int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
       return RedisModule_ReplyWithSimpleString(ctx, "OK");
   }
   else {
-    int size_err = snprintf(NULL, 0, "ERR - %s | Query: %s", sqlite3_errmsg(db), query);
-    char *error = RedisModule_Alloc(sizeof(char) * (size_err + 1));
-    snprintf(error, size_err + 1, "ERR - %s | Query: %s", sqlite3_errmsg(db), query);
-    RedisModule_ReplyWithError(ctx, error);
-    RedisModule_Free(error);
+    RedisModuleString *e = RedisModule_CreateStringPrintf(ctx, 
+		    "ERR - %s | Query: %s", sqlite3_errmsg(db), query);
     sqlite3_finalize(stm);
-    return REDISMODULE_OK;
+    return RedisModule_ReplyWithError(ctx, 
+		    RedisModule_StringPtrLen(e, NULL));
   }
     
   sqlite3_finalize(stm);
