@@ -7,11 +7,6 @@
 #include "rmutil/strings.h"
 #include "rmutil/test_util.h"
 
-#define malloc RedisModule_Alloc
-#define realloc RedisModule_Realloc
-#define free RedisModule_Free
-#define strdup RedisModule_Strdup
-
 #define rediSQL_ENCODING_VERSION 0
 
 static RedisModuleType *rediSQL;
