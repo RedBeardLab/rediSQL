@@ -153,19 +153,6 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
   if (rc != SQLITE_OK)
     return REDISMODULE_ERR;
 
-  sqlite3_exec(db, "CREATE TABLE test (a INT, b INT);", NULL, NULL, NULL);
-  sqlite3_stmt *stm;
-  sqlite3_prepare(db, "INSERT INTO test VALUES(?1, ?2)", -1, &stm, 0);
-  int i = 0;
-  for(i = 0; i < 100; i++){
-    sqlite3_bind_int(stm, 1, i );
-    sqlite3_bind_int(stm, 2, i + 1);
-    sqlite3_step(stm);
-    sqlite3_reset(stm);
-  }
-
-  sqlite3_finalize(stm);
-
   if (RedisModule_CreateCommand(ctx, "rediSQL.exec", ExecCommand, 
 	"deny-oom random no-cluster", 1, 1, 1) == REDISMODULE_ERR){
     return REDISMODULE_ERR;
