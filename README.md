@@ -32,6 +32,7 @@ From the root of the project you should be able to compile and link the module.
 Assuming you have both gcc and ld installed should be sufficient to run:
 
 ``` bash
+make sqlite
 make
 ```
 
@@ -62,3 +63,12 @@ A lot of possible functionality are not yet implemented, by now it is suppose to
 ## Need incentives
 
 I am not sure, myself, that this modules should exists at all, if you find utility or potential in this little module please star the project or open issues requiring functionality.
+
+## License
+
+This software is licensed under the AGPL-v3, it is possible to buy more permissive licenses.
+
+<RediSQL, SQL capabilities to redis.>
+Copyright (C) 2016  Simone Mosciatti
+
+
