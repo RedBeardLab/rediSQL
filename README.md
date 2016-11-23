@@ -4,9 +4,9 @@ RediSQL is a redis module that embeded SQLite.
 
 _With great powers comes great responsability_ (cit. Uncle Ben)
 
-Redis is born as a NoSQL database, this same module is already bordeline with the respect of the **common sense** that we, as community, should have. 
+Redis is born as a NoSQL database. This same module is already bordeline with the respect of the **common sense** that we, as community, should have. 
 
-Use but do not abuse RediSQL please.
+Please, use but do not abuse RediSQL.
 
 ## Motivation
 
@@ -18,9 +18,9 @@ Between all the SQL implementation, the one that best fitted the need for this m
 
 ## OpenSource and the necessity of real support and charge for my time.
 
-[How to Charge for your Open Source](http://www.mikeperham.com/2015/11/23/how-to-charge-for-your-open-source/) by Mike Perham brings well argumented thoughts on the necessity to charge for work done by developers, even in the Open Source world.
+[How to Charge for your Open Source](http://www.mikeperham.com/2015/11/23/how-to-charge-for-your-open-source/) by Mike Perham brings good arguments on the necessity to charge for work done by developers, even in the Open Source world.
 
-I have started myself a lot of Open Source project that, eventually, are all death because I wasn't able to dedicate the right ammount of time to them.
+I myself have started a lot of Open Source project that, eventually, are all dead because I wasn't able to dedicate the right amount of time to them.
 
 I am hoping to find the necessary funds to keep maintain this project.
 
@@ -36,15 +36,15 @@ make sqlite
 make
 ```
 
-Now a rediSQL.so object should have been generate, and you simply load the module inside Redis.
+Now a rediSQL.so object should have been generate, and you can simply load the module inside Redis.
 
-Note that you need the last unstable redis branch in order of modules to work. 
+Note that you need the last unstable redis branch for the module to work. 
 
 ```bash
 ./redis-server --loadmodule ~/rediSQL/rediSQL.so
 ```
 
-Now, your Redis instance has loaded the module and it is capable of accept SQL queries and execution.
+Now, your Redis instance has loaded the module and it is capable of accept SQL queries and executions.
 
 ```bash
 ./redis-cli
@@ -56,9 +56,11 @@ Now you can create tables, insert data on those tables, make queries, remove ele
 
 ## Alpha code
 
-This is extremelly alpha code, there will be definitely some rough edges and some plain bugs, I really appreciate if you take your time to report those bugs.
+This is extremelly alpha code, there will be definitely some rough edges and some plain bugs.
 
-A lot of possible functionality are not yet implemented, by now it is suppose to work on a single redis instance, in a future will be possible to distributed some functionality of the modules.
+I really appreciate if you take your time to report those bugs.
+
+A lot of possible functionalities are not yet implemented. By now it is suppose to work on a single redis instance In a future it will be possible to distributed some functionalities of the modules.
 
 ## Contributing
 
@@ -70,7 +72,7 @@ A pull request template is in place.
 
 ## Need incentives
 
-I am not sure, myself, that this modules should exists at all, if you find utility or potential in this little module please star the project or open issues requiring functionality.
+I am not sure, myself, that this module should exist at all. If you find this little module useful or you think that it has some potential, please star the project or open issues requiring functionalities.
 
 ## License
 
