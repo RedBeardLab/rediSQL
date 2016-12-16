@@ -134,7 +134,35 @@ OK
 127.0.0.1:6379> 
 ```
 
-Of course also errors are managed:
+Also the `LIKE` operator is included:
+
+```
+127.0.0.1:6379> REDISQL.EXEC "CREATE TABLE text_search(t TEXT);"
+OK
+127.0.0.1:6379> REDISQL.EXEC "INSERT INTO text_search VALUES('hello');"
+OK
+127.0.0.1:6379> REDISQL.EXEC "INSERT INTO text_search VALUES('banana');"
+OK
+127.0.0.1:6379> REDISQL.EXEC "INSERT INTO text_search VALUES('apple');"
+OK
+127.0.0.1:6379> 
+127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM text_search WHERE t LIKE 'h_llo';"
+1) 1) "hello"
+127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM text_search WHERE t LIKE '%anana';"
+1) 1) "banana"
+127.0.0.1:6379> REDISQL.EXEC "INSERT INTO text_search VALUES('anana');"
+OK
+127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM text_search;"
+1) 1) "hello"
+2) 1) "banana"
+3) 1) "apple"
+4) 1) "anana"
+127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM text_search WHERE t LIKE 'a%';"
+1) 1) "apple"
+2) 1) "anana"
+``` 
+
+And, of course, also errors are managed:
 
 ```
 127.0.0.1:6379> REDISQL.EXEC "INSERT INTO baz VALUES("aaa", "bbb");"
