@@ -2,22 +2,27 @@ import redis
 import random
 import string
 
-from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool
+from multiprocessing import Value
+import itertools
+import threading
+from time import time
+import collections
 
 def prepare_tables(r):
-    tables = ["""CREATE TABLE triple_int(
+    tables = ["""CREATE TABLE IF NOT EXISTS triple_int(
                     aInt INT, 
                     bInt INT, 
                     cInt INT);""",
-              """CREATE TABLE triple_float(
+              """CREATE TABLE IF NOT EXISTS triple_float(
                     aF FLOAT, 
                     bF FLOAT, 
                     cF FLOAT);""",
-              """CREATE TABLE triple_string(
+              """CREATE TABLE IF NOT EXISTS triple_string(
                     aStr STRING,
                     bStr STRING,
                     cStr STRING);""",
-              """CREATE TABLE relation(
+              """CREATE TABLE IF NOT EXISTS relation(
                     aRel INT,
                     bRel FLOAT,
                     cRel STRING);"""
@@ -32,7 +37,7 @@ def generate_floats():
     return "{0:.2f}".format(random.uniform(0, 10000), 2)
 
 def generate_string():
-    return "'" + ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(random.randrange(200)))+"'"
+    return '"' + ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(random.randrange(200)))+'"'
 
 def generate_select():
     options = [
@@ -108,33 +113,71 @@ def generate_queries():
     for _ in xrange(1000):
         pass
 
-def run_command_in_parallel(pool):
-
-    def exec_q(query):
-        client = redis_pool.get_connection()
-        client.execute_command("REDISQL.EXEC", query)
-        redis_pool.release(client)
-    
-    return exec_q
+   
 
 if __name__ == '__main__':
     print "Starting performance test"
-    thread_pool = Pool(10)
-    redis_pool = redis.Redis(
-            connection_pool=redis.BlockingConnectionPool(
-                max_connection = 20))
-    print "Creating tables"
-    client = redis_pool.get_connection()
-    prepare_tables(client)
-    redis_pool.release(client)
-    print "Tables created"
-    in_parallel = run_command_in_parallel(redis_pool)
-    thread_pool.map(
-            lambda _: in_parallel(generate_insert()),
-            xrange(100))
     
-    #for i in xrange(1000):
-    #    command = random.choice([generate_join, generate_delete, generate_insert, generate_select])
-    #    print i, command
-    #    r.execute_command("REDISQL.EXEC", command())
+    redis_pool = redis.StrictRedis(connection_pool = 
+            redis.BlockingConnectionPool(
+                max_connections = 15,
+                timeout = 10))
+    
+    total = Value('i', 0)
+    errors = Value('i', 0)
 
+    stats = collections.deque()
+    stats_lock = threading.Lock()
+
+    def f(i):
+        command = generate_insert()
+        # print i, command, "\n"
+        try:
+            redis_pool.execute_command("REDISQL.EXEC", command)
+        except Exception as e:
+            print i, command
+            print str(e)
+
+    def g(i):
+        # command = random.choice([generate_join, generate_insert, generate_select])()
+        command = generate_insert()
+        #print i, command, "\n"
+        try:
+            with total.get_lock():
+                total.value += 1
+            start = time()
+            redis_pool.execute_command("REDISQL.EXEC", command)
+            total_time = time() - start
+            with stats_lock:
+                stats.append((total_time, command))
+        except Exception as e:
+            with errors.get_lock():
+                errors.value += 1
+            print i, command
+            print str(e)
+
+    thread_pool = ThreadPool(10)
+      
+    print "Creating tables"
+    prepare_tables(redis_pool)
+    
+    print "Tables created"
+    
+    
+    thread_pool.map(f, xrange(100))
+    
+    start = time()
+
+    thread_pool.map(g, xrange(1000))
+
+    end = time()
+
+    stats = list(stats)
+    stats.sort(key = lambda x: x[0])
+
+    print "Total: ", total.value
+    print "Error: ", errors.value
+    print "Total time sec: ", end - start
+
+    for time, query in stats[-50:]:
+        print time, query
