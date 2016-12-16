@@ -26,18 +26,7 @@
 #include "rmutil/strings.h"
 #include "rmutil/test_util.h"
 
-#define rediSQL_ENCODING_VERSION 0
-
-#define REPLY_ERROR_FMT(ctx, fmt, err)                                         \
-  RedisModule_ReplyWithError(                                                  \
-      ctx, RedisModule_StringPtrLen(                                           \
-               RedisModule_CreateStringPrintf(ctx, fmt, err), NULL));
-
-static RedisModuleType *rediSQL;
-
-typedef sqlite3 redisSQL;
-
-redisSQL *db;
+sqlite3 *db;
 
 typedef void (*ReadAndReturn_type)(RedisModuleCtx *, sqlite3_stmt*, int);
 
@@ -160,6 +149,13 @@ int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   return REDISMODULE_OK;
 }
 
+int SQLiteVersion(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+  if (argc != 1)
+    return RedisModule_WrongArity(ctx);
+
+  return RedisModule_ReplyWithSimpleString(ctx, sqlite3_version);
+}
+
 int RedisModule_OnLoad(RedisModuleCtx *ctx) {
   if (RedisModule_Init(ctx, "rediSQL__", 1, REDISMODULE_APIVER_1) ==
       REDISMODULE_ERR) {
@@ -174,6 +170,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
 
   if (RedisModule_CreateCommand(ctx, "rediSQL.exec", ExecCommand, 
 	"deny-oom random no-cluster", 1, 1, 1) == REDISMODULE_ERR){
+    return REDISMODULE_ERR;
+  }
+
+  if (RedisModule_CreateCommand(ctx, "rediSQL.SQLITE_VERSION", SQLiteVersion, "readonly", 1, 1, 1) == REDISMODULE_ERR){
     return REDISMODULE_ERR;
   }
 
