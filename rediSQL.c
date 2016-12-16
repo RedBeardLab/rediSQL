@@ -160,6 +160,15 @@ int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   return REDISMODULE_OK;
 }
 
+
+int sqlVersion (RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc != 1) return RedisModule_WrongArity (ctx);
+  const char *version = sqlite3_libversion ();
+  RedisModuleString *retval = RedisModule_CreateString (ctx, version, strlen (version));
+  return RedisModule_ReplyWithString (ctx, retval);
+}
+
+
 int RedisModule_OnLoad(RedisModuleCtx *ctx) {
   if (RedisModule_Init(ctx, "rediSQL__", 1, REDISMODULE_APIVER_1) ==
       REDISMODULE_ERR) {
@@ -174,6 +183,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
 
   if (RedisModule_CreateCommand(ctx, "rediSQL.exec", ExecCommand, 
 	"deny-oom random no-cluster", 1, 1, 1) == REDISMODULE_ERR){
+    return REDISMODULE_ERR;
+  }
+  
+  if (RedisModule_CreateCommand (ctx, "rediSQL.version", sqlVersion, 
+    "readonly", 1, 1, 1) == REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 
