@@ -172,8 +172,19 @@ Invalid argument(s)
 (error) ERR - table baz already exists | Query: CREATE TABLE baz(f INT, k TEXT);
 ```
 
-
 Now you can create tables, insert data on those tables, make queries, remove elements, everything.
+
+## Benchmark
+
+Benchmarks are a little tricky, there are a lot of factor that may alter them, especially in this particular case.
+
+However just to have an idea of the order of magnitude of insert per second I wrote a [little test](https://github.com/RedBeardLab/rediSQL/blob/381e3796ad31c231719380afb92352c54b244b8c/test/performance/rediSQL_bench.py).
+
+On my machine I got 1000 insert (each one in its own transaction) in 0.6 seconds which let me claim 1000 / 0.6 => 1600 insert per second.
+
+I believe that there are A LOT of possibilities to improvements this numbers but I also thinks that they are good enough for most workload.
+
+If you need something faster, please take the time to open an issues and describe your use case.
 
 ## RoadMap
 
