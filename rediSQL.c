@@ -26,7 +26,18 @@
 #include "rmutil/strings.h"
 #include "rmutil/test_util.h"
 
+#define PERSISTENTSQLITEDB_ENCODING_VERSION 1
+
+static RedisModuleType *PersistentSQLiteDB;
+
+typedef struct {
+  char *name;
+  sqlite3 *connection;
+} PhyPersistentSQLiteDB;
+
 sqlite3 *db;
+
+int RediSQL_ExecOnConnection(RedisModuleCtx *ctx, sqlite3 *connection, const char *query, size_t query_len);
 
 typedef void (*ReadAndReturn_type)(RedisModuleCtx *, sqlite3_stmt*, int);
 
@@ -55,27 +66,104 @@ void ReadAndReturn_Text(RedisModuleCtx *ctx, sqlite3_stmt *stmt, int i){
 }
 
 
-int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
-  RedisModule_AutoMemory(ctx);
-  if (argc != 2){
-    return RedisModule_WrongArity(ctx);
+
+
+int createDB(RedisModuleCtx *ctx, RedisModuleString *key_name, const char *path){
+  int rc;
+  RedisModuleKey *key = RedisModule_OpenKey(ctx, key_name, REDISMODULE_WRITE);
+
+  if (REDISMODULE_KEYTYPE_EMPTY != RedisModule_KeyType(key)){
+    RedisModule_CloseKey(key);
+    return RedisModule_ReplyWithError(ctx, "KEY_USED The key used is already bind");
+  }
+  
+  PhyPersistentSQLiteDB *PhySQLiteDB = RedisModule_Alloc(sizeof(PhyPersistentSQLiteDB));
+  PhySQLiteDB->name = RedisModule_Alloc(sizeof(char) * 100);
+  if (NULL == path){
+    PhySQLiteDB->name = NULL;
+    rc = sqlite3_open(":memory:", &PhySQLiteDB->connection);
+  } else {
+    strcpy(PhySQLiteDB->name, path);
+    rc = sqlite3_open(path,       &PhySQLiteDB->connection);
   }
 
+  if (SQLITE_OK != rc){
+    RedisModule_CloseKey(key);
+    return RedisModule_ReplyWithError(ctx, "ERR - Problem opening the database");
+  }
+  
+  RedisModule_CloseKey(key);
+  if (REDISMODULE_OK == RedisModule_ModuleTypeSetValue(
+	key, PersistentSQLiteDB, PhySQLiteDB)){
+    return RedisModule_ReplyWithSimpleString(ctx, "OK");
+  } else {
+    return RedisModule_ReplyWithError(ctx, "ERR - Impossible to set the key");
+  }
+}
+
+int CreateDB(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+  const char *path;
+  if (2 == argc){
+    return createDB(ctx, argv[1], NULL);
+  }
+  if (3 == argc){
+    path = RedisModule_StringPtrLen(argv[2], NULL); 
+    return createDB(ctx, argv[1], path);
+  }
+  return RedisModule_WrongArity(ctx);
+}
+
+int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+  RedisModule_AutoMemory(ctx);
+  sqlite3 *connection;
+  size_t query_len;
+  const char* query;
+  RedisModuleKey *key;
+  int key_type;
+  PhyPersistentSQLiteDB *key_value;
+  
+  if (argc == 3){
+    key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ | REDISMODULE_WRITE);
+    key_type = RedisModule_KeyType(key);  
+    
+    if (REDISMODULE_KEYTYPE_EMPTY          == key_type ||
+	RedisModule_ModuleTypeGetType(key) != PersistentSQLiteDB ){
+      
+      return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    }
+
+    key_value = RedisModule_ModuleTypeGetValue(key);
+    
+    connection = key_value->connection;
+    query = RedisModule_StringPtrLen(argv[2], &query_len); 
+    
+    return RediSQL_ExecOnConnection(ctx, connection, query, query_len);
+  }
+  if (argc == 2){
+    connection = db;
+    query = RedisModule_StringPtrLen(argv[1], &query_len);
+
+    return RediSQL_ExecOnConnection(ctx, connection, query, query_len);
+  }
+  else {
+    return RedisModule_WrongArity(ctx);
+  }
+}
+
+int RediSQL_ExecOnConnection(RedisModuleCtx *ctx, sqlite3 *connection, const char *query, size_t query_len){
+  
   sqlite3_stmt *stm;
   int result_code = 0;
   int num_results = 0;
   int num_of_columns = 0;
   int i = 0;
 
-  size_t query_len;
-  const char* query = RedisModule_StringPtrLen(argv[1], &query_len);
-  
-  result_code = sqlite3_prepare_v2(db, query, query_len, &stm, NULL);
+  result_code = sqlite3_prepare_v2(connection, query, query_len, &stm, NULL);
   
 
   if (SQLITE_OK != result_code){
     RedisModuleString *e = RedisModule_CreateStringPrintf(ctx, 
-		    "ERR - %s | Query: %s", sqlite3_errmsg(db), query);
+		    "ERR - %s | Query: %s", sqlite3_errmsg(connection), query);
     sqlite3_finalize(stm);
     return RedisModule_ReplyWithError(ctx, 
 		    RedisModule_StringPtrLen(e, NULL));
@@ -139,7 +227,7 @@ int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   }
   else {
     RedisModuleString *e = RedisModule_CreateStringPrintf(ctx, 
-		    "ERR - %s | Query: %s", sqlite3_errmsg(db), query);
+		    "ERR - %s | Query: %s", sqlite3_errmsg(connection), query);
     sqlite3_finalize(stm);
     return RedisModule_ReplyWithError(ctx, 
 		    RedisModule_StringPtrLen(e, NULL));
@@ -162,11 +250,25 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     return REDISMODULE_ERR;
   }
 
+  RedisModuleTypeMethods tm = {
+	.version = PERSISTENTSQLITEDB_ENCODING_VERSION,
+	.rdb_load = NULL,
+	.rdb_save = NULL,
+	.aof_rewrite = NULL,
+	.free = NULL};
+
+  PersistentSQLiteDB = RedisModule_CreateDataType(
+	ctx, "Per_DB_Co", 
+	PERSISTENTSQLITEDB_ENCODING_VERSION, &tm);
+
+  if (PersistentSQLiteDB == NULL) return REDISMODULE_ERR;
+
   int rc;
   const char* database_name;
 
   if (1 == argc){
     database_name = RedisModule_StringPtrLen(argv[0], NULL);
+
     rc = sqlite3_open(database_name, &db);
   } else {
     rc = sqlite3_open(":memory:", &db);
@@ -175,12 +277,16 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   if (rc != SQLITE_OK)
     return REDISMODULE_ERR;
 
-  if (RedisModule_CreateCommand(ctx, "rediSQL.exec", ExecCommand, 
+  if (RedisModule_CreateCommand(ctx, "rediSQL.EXEC", ExecCommand, 
 	"deny-oom random no-cluster", 1, 1, 1) == REDISMODULE_ERR){
     return REDISMODULE_ERR;
   }
 
   if (RedisModule_CreateCommand(ctx, "rediSQL.SQLITE_VERSION", SQLiteVersion, "readonly", 1, 1, 1) == REDISMODULE_ERR){
+    return REDISMODULE_ERR;
+  }
+
+  if (RedisModule_CreateCommand(ctx, "rediSQL.CREATE_DB", CreateDB, "write deny-oom no-cluster", 1, 1, 1) == REDISMODULE_ERR){
     return REDISMODULE_ERR;
   }
 
