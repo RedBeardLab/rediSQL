@@ -156,15 +156,22 @@ int SQLiteVersion(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   return RedisModule_ReplyWithSimpleString(ctx, sqlite3_version);
 }
 
-int RedisModule_OnLoad(RedisModuleCtx *ctx) {
+int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (RedisModule_Init(ctx, "rediSQL__", 1, REDISMODULE_APIVER_1) ==
       REDISMODULE_ERR) {
     return REDISMODULE_ERR;
   }
 
   int rc;
-  
-  rc = sqlite3_open(":memory:", &db);
+  const char* database_name;
+
+  if (1 == argc){
+    database_name = RedisModule_StringPtrLen(argv[0], NULL);
+    rc = sqlite3_open(database_name, &db);
+  } else {
+    rc = sqlite3_open(":memory:", &db);
+  }
+
   if (rc != SQLITE_OK)
     return REDISMODULE_ERR;
 
