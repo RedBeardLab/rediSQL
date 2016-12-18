@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-c -Wpedantic -fPIC
+CFLAGS=-c -Wpedantic -Wall -fPIC
 LD=ld
 
 all:
