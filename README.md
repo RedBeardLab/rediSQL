@@ -54,7 +54,7 @@ ld -o rediSQL.so rediSQL.o sqlite3.o RedisModulesSDK/rmutil/librmutil.a -shared 
 At this point you can launch your redis instance loading the module:
 
 ```
-$ ~/redis-4.0-rc1/src/redis-server --loadmodule ./rediSQL.so 
+$ ~/redis-4.0-rc1/src/redis-server --loadmodule ./rediSQL.so file_path.sqlite
 6833:M 15 Dec 16:25:53.195 * Increased maximum number of open files to 10032 (it was originally set to 1024).
                 _._                                                  
            _.-``__ ''-._                                             
@@ -74,15 +74,44 @@ $ ~/redis-4.0-rc1/src/redis-server --loadmodule ./rediSQL.so
           `-._        _.-'                                           
               `-.__.-'                                               
 
-6833:M 15 Dec 16:25:53.196 # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
-6833:M 15 Dec 16:25:53.196 # Server started, Redis version 3.9.101
-6833:M 15 Dec 16:25:53.196 # WARNING overcommit_memory is set to 0! Background save may fail under low memory condition. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
-6833:M 15 Dec 16:25:53.196 # WARNING you have Transparent Huge Pages (THP) support enabled in your kernel. This will create latency and memory usage issues with Redis. To fix this issue run the command 'echo never > /sys/kernel/mm/transparent_hugepage/enabled' as root, and add it to your /etc/rc.local in order to retain the setting after a reboot. Redis must be restarted after THP is disabled.
 6833:M 15 Dec 16:25:53.197 * Module 'rediSQL__' loaded from ./rediSQL.so
 6833:M 15 Dec 16:25:53.197 * The server is now ready to accept connections on port 6379
 ```
 
-Now the redis instance will be just the redis you learn to love:
+## Default DB
+
+When you start a redis instance loading the module, the module itself create a SQLite default database, this DB will be the one used when you do not specify what database to use.
+
+If you load the module passing as argument a valid path name, rediSQL will open such database or it will create a new one.
+
+If you do not pass any argument while loading the module, rediSQL will still create a new database but it will be an in-memory one.
+
+## API
+
+### REDISQL.SQLITE_VERSION
+
+This function reply with the version of SQLite that is actually in use.
+
+### REDISQL.CREATE_DB key [file_path]
+
+This function will create a new SQLite database that will be bound to `key`.
+
+If you do not provide a `file_path` the new database will be an in-memory one, if you provide a file_path, that would be where your database will reside.
+
+### REDISQL.DELETE_DB key
+
+This function will remove the database bound to `key`, if the database is on disk you will find all your data saved, if the database is in-memory your data will be lost.
+
+This function is equivalent to `DELL key` however it won't let you delete keys that are not DBs.
+
+### REDISQL.EXEC [key] statement
+
+This command will execute the statement against the database bound to `key`, if you do not specify a key the statement will be executed against the standard DB.
+
+## Walkthrough
+
+
+After starting redis with the module rediSQL it will be just the redis you learn to love:
 
 ```
 $ ~/redis-4.0-rc1/src/redis-cli 
@@ -93,11 +122,11 @@ OK
 "3"
 ```
 
-But it will also able to accept SQL statements:
+But you will also able to use all the API described above
 
 ```
 127.0.0.1:6379> 
-# Start creating a table
+# Start creating a table on the default DB
 127.0.0.1:6379> REDISQL.EXEC "CREATE TABLE foo(A INT, B TEXT);"
 OK
 # Insert some data into the table
@@ -174,6 +203,8 @@ Invalid argument(s)
 
 Now you can create tables, insert data on those tables, make queries, remove elements, everything.
 
+Finally all the above features can be applied to the default DB or to a databases bound to a specif key. 
+
 ## Benchmark
 
 Benchmarks are a little tricky, there are a lot of factor that may alter them, especially in this particular case.
@@ -188,9 +219,7 @@ If you need something faster, please take the time to open an issues and describ
 
 ## RoadMap
 
-The very first step will be to add data persistency that we believe to be fundamental even if option for some use cases optional.
-
-Then we would like to move following the necessity of the community, so ideas and use cases are extremely welcome.
+We would like to move following the necessity of the community, so ideas and use cases are extremely welcome.
 
 We do have already a couple of ideas: 
 
