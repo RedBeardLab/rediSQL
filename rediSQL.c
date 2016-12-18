@@ -243,7 +243,7 @@ int RediSQL_ExecOnConnection(RedisModuleCtx *ctx, sqlite3 *connection, const cha
   }
   else if (SQLITE_DONE == result_code) {
       sqlite3_finalize(stm);
-      return RedisModule_ReplyWithSimpleString(ctx, "OK");
+      return RedisModule_ReplyWithSimpleString(ctx, "DONE");
   }
   else {
     RedisModuleString *e = RedisModule_CreateStringPrintf(ctx, 
