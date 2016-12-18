@@ -92,11 +92,53 @@ If you do not pass any argument while loading the module, rediSQL will still cre
 
 This function reply with the version of SQLite that is actually in use.
 
+```
+127.0.0.1:6379> REDISQL.SQLITE_VERSION
+3.15.1                               
+```
+
 ### REDISQL.CREATE_DB key [file_path]
 
 This function will create a new SQLite database that will be bound to `key`.
 
 If you do not provide a `file_path` the new database will be an in-memory one, if you provide a file_path, that would be where your database will reside.
+
+```
+127.0.0.1:6379> REDISQL.CREATE_DB user /tmp/user.sqlite
+OK                                                    
+$ ls /tmp/ | grep user 
+user.sqlite
+```
+
+### REDISQL.EXEC [key] statement
+
+This command will execute the statement against the database bound to `key`, if you do not specify a key the statement will be executed against the standard DB.
+
+```
+$ ./redis-cli
+127.0.0.1:6379> REDISQL.CREATE_DB user /tmp/user.sqlite
+OK
+
+$ ll /tmp/ | grep user 
+-rw-r--r--  1 simo simo    0 dic 18 12:55 user.sqlite 
+
+$ ./redis-cli
+127.0.0.1:6379> REDISQL.EXEC user "CREATE TABLE user(email TEXT, password TEXT)"
+OK 
+127.0.0.1:6379> REDISQL.EXEC user "INSERT INTO user VALUES('test@test.it','very secret')"
+OK
+127.0.0.1:6379> REDISQL.EXEC user "INSERT INTO user VALUES('noob@security.io', 'password')"
+OK  
+127.0.0.1:6379> REDISQL.EXEC user "SELECT * FROM user;"   
+1) 1) "test@test.it" 
+   2) "very secret" 
+2) 1) "noob@security.io" 
+   2) "password" 
+127.0.0.1:6379> 
+
+$ ll /tmp/ | grep user 
+-rw-r--r--  1 simo simo 8192 dic 18 12:56 user.sqlite
+```
 
 ### REDISQL.DELETE_DB key
 
@@ -104,9 +146,12 @@ This function will remove the database bound to `key`, if the database is on dis
 
 This function is equivalent to `DELL key` however it won't let you delete keys that are not DBs.
 
-### REDISQL.EXEC [key] statement
-
-This command will execute the statement against the database bound to `key`, if you do not specify a key the statement will be executed against the standard DB.
+```
+127.0.0.1:6379> REDISQL.DELETE_DB user
+OK                                   
+127.0.0.1:6379> REDISQL.EXEC user "SELECT * FROM user;" 
+(error) WRONGTYPE Operation against a key holding the wrong kind of value  
+```
 
 ## Walkthrough
 
