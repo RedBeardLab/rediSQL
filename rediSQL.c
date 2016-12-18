@@ -66,8 +66,6 @@ void ReadAndReturn_Text(RedisModuleCtx *ctx, sqlite3_stmt *stmt, int i){
 }
 
 
-
-
 int createDB(RedisModuleCtx *ctx, RedisModuleString *key_name, const char *path){
   int rc;
   RedisModuleKey *key = RedisModule_OpenKey(ctx, key_name, REDISMODULE_WRITE);
@@ -111,6 +109,28 @@ int CreateDB(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
     return createDB(ctx, argv[1], path);
   }
   return RedisModule_WrongArity(ctx);
+}
+
+int DeleteDB(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+  if (2 != argc){
+    return RedisModule_WrongArity(ctx);
+  }
+  RedisModuleKey *key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_WRITE);
+  
+  if (REDISMODULE_KEYTYPE_EMPTY == RedisModule_KeyType(key)){
+    RedisModule_CloseKey(key);
+    return RedisModule_ReplyWithError(ctx, "KEY_EMPTY The key used is empty");
+  }
+ 
+  if (PersistentSQLiteDB !=  RedisModule_ModuleTypeGetType(key)){
+    RedisModule_CloseKey(key);
+    return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+  }
+
+  RedisModule_DeleteKey(key);
+
+  return RedisModule_ReplyWithSimpleString(ctx, "OK");
+
 }
 
 int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
@@ -244,6 +264,14 @@ int SQLiteVersion(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   return RedisModule_ReplyWithSimpleString(ctx, sqlite3_version);
 }
 
+void FreePhySQLiteDB(void *PSQLiteDB){
+  PhyPersistentSQLiteDB *PhySQLiteDB = (PhyPersistentSQLiteDB*)PSQLiteDB;
+
+  RedisModule_Free(PhySQLiteDB->name);
+  sqlite3_close(PhySQLiteDB->connection);
+
+}
+
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   if (RedisModule_Init(ctx, "rediSQL__", 1, REDISMODULE_APIVER_1) ==
       REDISMODULE_ERR) {
@@ -255,7 +283,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 	.rdb_load = NULL,
 	.rdb_save = NULL,
 	.aof_rewrite = NULL,
-	.free = NULL};
+	.free = FreePhySQLiteDB};
 
   PersistentSQLiteDB = RedisModule_CreateDataType(
 	ctx, "Per_DB_Co", 
@@ -287,6 +315,10 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   }
 
   if (RedisModule_CreateCommand(ctx, "rediSQL.CREATE_DB", CreateDB, "write deny-oom no-cluster", 1, 1, 1) == REDISMODULE_ERR){
+    return REDISMODULE_ERR;
+  }
+
+  if (RedisModule_CreateCommand(ctx, "rediSQL.DELETE_DB", DeleteDB, "write no-cluster", 1, 1, 1) == REDISMODULE_ERR){
     return REDISMODULE_ERR;
   }
 
