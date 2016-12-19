@@ -321,6 +321,19 @@ This means that your in memory database is completely transient.
 
 However, if your database is save on disk also in case of catastrophic failure, each committed statemet will be present on the SQLite file.
 
+Also in this case, fortunately, I am already working on a feasible design to permit both AOF and RDB persistency in both OO and PRO version.
+
+
+#### Sharding
+
+Right now the module is intended to be used on a sigle machine.
+
+SQL doesn't works flawless in case of tuple distributed in several different host.
+
+The module is not going to distribute tuple over different host, however it may distributed databases.
+
+So, each database must be in one and only one host. Multiple databases could be distributed in different host.
+
 ## Alpha code
 
 This is extremelly alpha code, there will be definitely some rough edges and some plain bugs.
