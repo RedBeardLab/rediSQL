@@ -328,7 +328,7 @@ Also in this case, fortunately, I am already working on a feasible design to per
 
 Right now the module is intended to be used on a sigle machine.
 
-SQL doesn't works flawless in case of tuple distributed in several different host.
+SQL doesn't works flawless in case of tuple distributed in several different host, for a variety of reason.
 
 The module is not going to distribute tuple over different host, however it may distributed databases.
 
