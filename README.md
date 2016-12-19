@@ -99,6 +99,8 @@ This function will create a new SQLite database that will be bound to `key`.
 
 If you do not provide a `file_path` the new database will be an in-memory one, if you provide a file_path, that would be where your database will reside.
 
+Use an on disk database means that you may hit the disk from time to time during SELECT and pretty often during writes, this should not be a major concerns since moder operative system are extremely smart and efficient 
+
 ```
 127.0.0.1:6379> REDISQL.CREATE_DB user /tmp/user.sqlite
 OK                                                    
@@ -272,7 +274,7 @@ We do have already a couple of ideas:
 
 But please share your thoughts.
 
-## Limit
+## Limits
 
 This module is based on SQLite so it has all the SQLite strenghts and limitations.
 
@@ -295,7 +297,7 @@ However, it should not be an issues for most uses cases, if your specific use ca
 
 Because its internal SQLite can handle only up to 140TB of data, ideally this will also apply to this same module, supposing you know where to host the database.
 
-However when the dimension of the dataset start to approach the terabyte you may be better of looking for other alternatives.
+However when the dimension of the dataset start to approach a terabyte you may be better of looking for other alternatives.
 
 Of course if you use SQLite as in memory database the limiting factor will be the memory of your machine.
 
@@ -305,17 +307,17 @@ Right now there are some limit on the module implementation, these limitation ar
 
 #### Single thread
 
-Right now the module is single thread and it use the same thread of Redis.
+Right now the module is single thread and it uses the same thread of Redis.
 
 This means that during long computation, mainly BIG `SELECT`s, your redis instance will be un-responsive serving the data.
 
-This limitation will be definitely remove in a couple of week in Open Source version and more aggresively in the PRO version
+This limitation will be definitely removed in a couple of week in Open Source version and more aggresively in the PRO version
 
 Fortunately I already have a working prototype and I only need to time to refine the design and make simple to add futher improvement to the module.
 
 #### Persistency
 
-No form of persistency are provide, right now, by the module.
+No form of persistency are provided, right now, by the module.
 
 This means that your in memory database is completely transient.
 
