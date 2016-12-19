@@ -4,10 +4,6 @@ RediSQL is a redis module that embeded SQLite.
 
 _With great powers comes great responsability_ (cit. Uncle Ben)
 
-Redis is born as a NoSQL database. This same module is already bordeline with the respect of the **common sense** that we, as community, should have. 
-
-Please, use but do not abuse RediSQL.
-
 ## Motivation
 
 I love the agility provided by Redis, however, several times, I wished I had a little more structure in my in-memory database.
@@ -101,7 +97,13 @@ This function reply with the version of SQLite that is actually in use.
 
 This function will create a new SQLite database that will be bound to `key`.
 
-If you do not provide a `file_path` the new database will be an in-memory one, if you provide a file_path, that would be where your database will reside.
+If you do not provide a `file_path` the new database will be an in-memory one, if you provide a file_path, then you will use an on disk database and the path you provided will be where your database will reside.
+
+Use an on disk database means that you may hit the disk from time to time during SELECT and pretty often during writes. 
+This should not be a major concerns since modern operative system are extremely smart and efficient about page cache.
+Moreover SQLite itself has an internal, in memory cache. 
+
+However, please be aware that there may be some performance penalities.
 
 ```
 127.0.0.1:6379> REDISQL.CREATE_DB user /tmp/user.sqlite
@@ -275,6 +277,68 @@ We do have already a couple of ideas:
 3. A cache system to store the result of the more complex select.
 
 But please share your thoughts.
+
+## Limits
+
+This module is based on SQLite so it has all the SQLite strenghts and limitations.
+
+The appropriate use cases for SQLite are described in [this document](https://sqlite.org/whentouse.html).
+
+With this module we remove the network limitation and so the use of this module is not suggested in only two cases:
+
+#### Many concurrent writers.
+
+SQLite does hold a table level lock on write while "standard" database can hold a row, or even value level lock.
+
+This means that concurrent client will never be able to write at the same time on the same table and one will always need to wait for the other to finish.
+
+At the moment this limiting factor is only secondary with the respect of this module.
+Indeed, the module, is not multithread (it will be soon, though), so before to blame SQLite for slow concurrent write you must blame me, the author.
+
+However, it should not be an issues for most uses cases, if your specific use case require a lot of concurent read I would suggest you to still try and benchmark this implementation.
+
+#### BIG dataset
+
+Because its internal SQLite can handle only up to 140TB of data, ideally this will also apply to this same module, supposing you know where to host the database.
+
+However when the dimension of the dataset start to approach a terabyte you may be better of looking for other alternatives.
+
+Of course if you use SQLite as in memory database the limiting factor will be the memory of your machine.
+
+## Limit of the module
+
+Right now there are some limit on the module implementation, these limitation are because my lack of time.
+
+#### Single thread
+
+Right now the module is single thread and it uses the same thread of Redis.
+
+This means that during long computation, mainly BIG `SELECT`s, your redis instance will be un-responsive serving the data.
+
+This limitation will be definitely removed in a couple of week in Open Source version and more aggresively in the PRO version
+
+Fortunately I already have a working prototype and I only need to time to refine the design and make simple to add futher improvement to the module.
+
+#### Persistency
+
+No form of persistency are provided, right now, by the module.
+
+This means that your in memory database is completely transient.
+
+However, if your database is save on disk also in case of catastrophic failure, each committed statemet will be present on the SQLite file.
+
+Also in this case, fortunately, I am already working on a feasible design to permit both AOF and RDB persistency in both OO and PRO version.
+
+
+#### Sharding
+
+Right now the module is intended to be used on a sigle machine.
+
+SQL doesn't works flawless in case of tuple distributed in several different host, for a variety of reason.
+
+The module is not going to distribute tuple over different host, however it may distributed databases.
+
+So, each database must be in one and only one host. Multiple databases could be distributed in different host.
 
 ## Alpha code
 
