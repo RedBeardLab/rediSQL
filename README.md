@@ -97,9 +97,13 @@ This function reply with the version of SQLite that is actually in use.
 
 This function will create a new SQLite database that will be bound to `key`.
 
-If you do not provide a `file_path` the new database will be an in-memory one, if you provide a file_path, that would be where your database will reside.
+If you do not provide a `file_path` the new database will be an in-memory one, if you provide a file_path, then you will use an on disk database and the path you provided will be where your database will reside.
 
-Use an on disk database means that you may hit the disk from time to time during SELECT and pretty often during writes, this should not be a major concerns since moder operative system are extremely smart and efficient 
+Use an on disk database means that you may hit the disk from time to time during SELECT and pretty often during writes. 
+This should not be a major concerns since modern operative system are extremely smart and efficient about page cache.
+Moreover SQLite itself has an internal, in memory cache. 
+
+However, please be aware that there may be some performance penalities.
 
 ```
 127.0.0.1:6379> REDISQL.CREATE_DB user /tmp/user.sqlite
