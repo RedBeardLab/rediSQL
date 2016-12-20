@@ -141,33 +141,26 @@ int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   RedisModuleKey *key;
   int key_type;
   PhyPersistentSQLiteDB *key_value;
+ 
+  if (3 != argc){
+    return RedisModule_WrongArity(ctx); 
+  }
   
-  if (argc == 3){
-    key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ | REDISMODULE_WRITE);
-    key_type = RedisModule_KeyType(key);  
+  key = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ | REDISMODULE_WRITE);
+  key_type = RedisModule_KeyType(key);  
     
-    if (REDISMODULE_KEYTYPE_EMPTY          == key_type ||
-	RedisModule_ModuleTypeGetType(key) != PersistentSQLiteDB ){
+  if (REDISMODULE_KEYTYPE_EMPTY          == key_type ||
+      RedisModule_ModuleTypeGetType(key) != PersistentSQLiteDB ){
       
-      return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
-    }
+    return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+  }
 
-    key_value = RedisModule_ModuleTypeGetValue(key);
+  key_value = RedisModule_ModuleTypeGetValue(key);
     
-    connection = key_value->connection;
-    query = RedisModule_StringPtrLen(argv[2], &query_len); 
+  connection = key_value->connection;
+  query = RedisModule_StringPtrLen(argv[2], &query_len); 
     
-    return RediSQL_ExecOnConnection(ctx, connection, query, query_len);
-  }
-  if (argc == 2){
-    connection = db;
-    query = RedisModule_StringPtrLen(argv[1], &query_len);
-
-    return RediSQL_ExecOnConnection(ctx, connection, query, query_len);
-  }
-  else {
-    return RedisModule_WrongArity(ctx);
-  }
+  return RediSQL_ExecOnConnection(ctx, connection, query, query_len);
 }
 
 int RediSQL_ExecOnConnection(RedisModuleCtx *ctx, sqlite3 *connection, const char *query, size_t query_len){
@@ -290,20 +283,6 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 	PERSISTENTSQLITEDB_ENCODING_VERSION, &tm);
 
   if (PersistentSQLiteDB == NULL) return REDISMODULE_ERR;
-
-  int rc;
-  const char* database_name;
-
-  if (1 == argc){
-    database_name = RedisModule_StringPtrLen(argv[0], NULL);
-
-    rc = sqlite3_open(database_name, &db);
-  } else {
-    rc = sqlite3_open(":memory:", &db);
-  }
-
-  if (rc != SQLITE_OK)
-    return REDISMODULE_ERR;
 
   if (RedisModule_CreateCommand(ctx, "rediSQL.EXEC", ExecCommand, 
 	"deny-oom random no-cluster", 1, 1, 1) == REDISMODULE_ERR){
