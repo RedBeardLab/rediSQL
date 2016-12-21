@@ -28,12 +28,12 @@
 
 #define PERSISTENTSQLITEDB_ENCODING_VERSION 1
 
-static RedisModuleType *PersistentSQLiteDB;
+static RedisModuleType *RediSQL_SQLiteDB;
 
 typedef struct {
   char *name;
   sqlite3 *connection;
-} PhyPersistentSQLiteDB;
+} Phy_RediSQL_SQLiteDB;
 
 sqlite3 *db;
 
@@ -75,7 +75,7 @@ int createDB(RedisModuleCtx *ctx, RedisModuleString *key_name, const char *path)
     return RedisModule_ReplyWithError(ctx, "KEY_USED The key used is already bind");
   }
   
-  PhyPersistentSQLiteDB *PhySQLiteDB = RedisModule_Alloc(sizeof(PhyPersistentSQLiteDB));
+  Phy_RediSQL_SQLiteDB *PhySQLiteDB = RedisModule_Alloc(sizeof(Phy_RediSQL_SQLiteDB));
   PhySQLiteDB->name = RedisModule_Alloc(sizeof(char) * 100);
   if (NULL == path){
     PhySQLiteDB->name = NULL;
@@ -92,7 +92,7 @@ int createDB(RedisModuleCtx *ctx, RedisModuleString *key_name, const char *path)
   
   RedisModule_CloseKey(key);
   if (REDISMODULE_OK == RedisModule_ModuleTypeSetValue(
-	key, PersistentSQLiteDB, PhySQLiteDB)){
+	key, RediSQL_SQLiteDB, PhySQLiteDB)){
     return RedisModule_ReplyWithSimpleString(ctx, "OK");
   } else {
     return RedisModule_ReplyWithError(ctx, "ERR - Impossible to set the key");
@@ -122,7 +122,7 @@ int DeleteDB(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
     return RedisModule_ReplyWithError(ctx, "KEY_EMPTY The key used is empty");
   }
  
-  if (PersistentSQLiteDB !=  RedisModule_ModuleTypeGetType(key)){
+  if (RediSQL_SQLiteDB !=  RedisModule_ModuleTypeGetType(key)){
     RedisModule_CloseKey(key);
     return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
   }
@@ -140,7 +140,7 @@ int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   const char* query;
   RedisModuleKey *key;
   int key_type;
-  PhyPersistentSQLiteDB *key_value;
+  Phy_RediSQL_SQLiteDB *key_value;
  
   if (3 != argc){
     return RedisModule_WrongArity(ctx); 
@@ -150,7 +150,7 @@ int ExecCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
   key_type = RedisModule_KeyType(key);  
     
   if (REDISMODULE_KEYTYPE_EMPTY          == key_type ||
-      RedisModule_ModuleTypeGetType(key) != PersistentSQLiteDB ){
+      RedisModule_ModuleTypeGetType(key) != RediSQL_SQLiteDB ){
       
     return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
   }
@@ -258,7 +258,7 @@ int SQLiteVersion(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
 }
 
 void FreePhySQLiteDB(void *PSQLiteDB){
-  PhyPersistentSQLiteDB *PhySQLiteDB = (PhyPersistentSQLiteDB*)PSQLiteDB;
+  Phy_RediSQL_SQLiteDB *PhySQLiteDB = (Phy_RediSQL_SQLiteDB*)PSQLiteDB;
 
   RedisModule_Free(PhySQLiteDB->name);
   sqlite3_close(PhySQLiteDB->connection);
@@ -278,11 +278,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 	.aof_rewrite = NULL,
 	.free = FreePhySQLiteDB};
 
-  PersistentSQLiteDB = RedisModule_CreateDataType(
+  RediSQL_SQLiteDB = RedisModule_CreateDataType(
 	ctx, "Per_DB_Co", 
 	PERSISTENTSQLITEDB_ENCODING_VERSION, &tm);
 
-  if (PersistentSQLiteDB == NULL) return REDISMODULE_ERR;
+  if (RediSQL_SQLiteDB == NULL) return REDISMODULE_ERR;
 
   if (RedisModule_CreateCommand(ctx, "rediSQL.EXEC", ExecCommand, 
 	"deny-oom random no-cluster", 1, 1, 1) == REDISMODULE_ERR){
