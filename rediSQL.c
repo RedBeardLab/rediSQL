@@ -15,8 +15,6 @@
  *
  * */
 
-
-
 #include <stdio.h>
 #include <string.h>
 
@@ -26,16 +24,14 @@
 #include "rmutil/strings.h"
 #include "rmutil/test_util.h"
 
+#include "rediSQL.h"
+#include "projection.h"
+
 #define PERSISTENTSQLITEDB_ENCODING_VERSION 1
 
-static RedisModuleType *RediSQL_SQLiteDB;
-
-typedef struct {
-  char *name;
-  sqlite3 *connection;
-} Phy_RediSQL_SQLiteDB;
-
 sqlite3 *db;
+
+RedisModuleType *RediSQL_SQLiteDB;
 
 int RediSQL_ExecOnConnection(RedisModuleCtx *ctx, sqlite3 *connection, const char *query, size_t query_len);
 
@@ -90,11 +86,12 @@ int createDB(RedisModuleCtx *ctx, RedisModuleString *key_name, const char *path)
     return RedisModule_ReplyWithError(ctx, "ERR - Problem opening the database");
   }
   
-  RedisModule_CloseKey(key);
   if (REDISMODULE_OK == RedisModule_ModuleTypeSetValue(
 	key, RediSQL_SQLiteDB, PhySQLiteDB)){
+    RedisModule_CloseKey(key);
     return RedisModule_ReplyWithSimpleString(ctx, "OK");
   } else {
+    RedisModule_CloseKey(key);
     return RedisModule_ReplyWithError(ctx, "ERR - Impossible to set the key");
   }
 }
@@ -271,7 +268,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     return REDISMODULE_ERR;
   }
 
-  RedisModuleTypeMethods tm = {
+  RedisModuleTypeMethods tmDB = {
 	.version = PERSISTENTSQLITEDB_ENCODING_VERSION,
 	.rdb_load = NULL,
 	.rdb_save = NULL,
@@ -280,9 +277,23 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
 
   RediSQL_SQLiteDB = RedisModule_CreateDataType(
 	ctx, "Per_DB_Co", 
-	PERSISTENTSQLITEDB_ENCODING_VERSION, &tm);
+	PERSISTENTSQLITEDB_ENCODING_VERSION, &tmDB);
 
   if (RediSQL_SQLiteDB == NULL) return REDISMODULE_ERR;
+
+  
+  RedisModuleTypeMethods tmPJ = {
+  	.version = PERSISTENTSQLITEDB_ENCODING_VERSION,
+	.rdb_load = NULL,
+	.rdb_save = NULL,
+	.aof_rewrite = NULL,
+	.free = FreeProjection};
+
+  RediSQL_Projection = RedisModule_CreateDataType(
+	ctx, "PJrediSQL",	  
+	PERSISTENTSQLITEDB_ENCODING_VERSION, &tmPJ);
+
+  if (RediSQL_Projection == NULL) return REDISMODULE_ERR;
 
   if (RedisModule_CreateCommand(ctx, "rediSQL.EXEC", ExecCommand, 
 	"deny-oom random no-cluster", 1, 1, 1) == REDISMODULE_ERR){
@@ -296,8 +307,24 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
   if (RedisModule_CreateCommand(ctx, "rediSQL.CREATE_DB", CreateDB, "write deny-oom no-cluster", 1, 1, 1) == REDISMODULE_ERR){
     return REDISMODULE_ERR;
   }
+  
+  if (RedisModule_CreateCommand(ctx, "rediSQL.DELETE_DB", DeleteDB, "no-cluster", 1, 1, 1) == REDISMODULE_ERR){
+    return REDISMODULE_ERR;
+  }
 
-  if (RedisModule_CreateCommand(ctx, "rediSQL.DELETE_DB", DeleteDB, "write no-cluster", 1, 1, 1) == REDISMODULE_ERR){
+  if (RedisModule_CreateCommand(ctx, "rediSQL.PROJECT", Project, "write no-cluster", 1, 1, 1) == REDISMODULE_ERR){
+    return REDISMODULE_ERR;
+  }
+  
+  if (RedisModule_CreateCommand(ctx, "rediSQL.REMOVE_PROJECTION", RemoveProjection, "write no-cluster", 1, 1, 1) == REDISMODULE_ERR){
+    return REDISMODULE_ERR;
+  }
+
+  if (RedisModule_CreateCommand(ctx, "rediSQL.GET", RediSQL_Get, "write no-cluster", 1, 1, 1) == REDISMODULE_ERR){
+    return REDISMODULE_ERR;
+  }
+
+  if (RedisModule_CreateCommand(ctx, "rediSQL.SET", RediSQL_Set, "write no-cluster", 1, 1, 1) == REDISMODULE_ERR){
     return REDISMODULE_ERR;
   }
 
