@@ -25,6 +25,37 @@ void FreeProjection(void *Pj){
 }
 
 int Project(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+  if (3 != argc){
+    return RedisModule_WrongArity(ctx);
+  }
+  
+  RedisModule *DBKey = RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ | REDISMODULE_WRITE);
+  Phy_RediSQL_SQLiteDB *DB;
+ 
+  if (REDISMODULE_KEYTYPE_MODULE != RedisModule_KeyType(DBKey) ||
+      RediSQL_SQLiteDB != RedisModule_ModuleTypeGetType(DBKey)){
+    RedisModule_CloseKey(DBKey);
+    return RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+  }
+
+  DB = RedisModule_ModuleTypeGetValue(DBKey);
+
+  RedisModule *PJKey = RedisModule_OpenKey(ctx, argv[2], REDISMODULE_READ | REDISMODULE_WRITE);
+
+  if (REDISMODULE_KEYTYPE_EMPTY != RedisModule_KeyType(PJKey)){
+    RedisModule_CloseKey(PJKey);
+    return RedisModule_ReplyWithError(ctx, "KEY_USED They key you are trying to project is already bind.");
+  }
+
+  Projection* PJ = RedisModule_Alloc(sizeof(Projection));
+
+  if (REDISMODULE_OK == RedisModule_ModuleTypeSetValue(
+	PJKey, Projection, PJ)){
+    RedisModule_CloseKey(PJKey);
+    RedisModule_CloseKey(DBKey);
+    return RedisModule_ReplyWithSImpleString(ctx, "OK");
+  }
+
   return RedisModule_ReplyWithSimpleString(ctx, "Projection "); 
 }
 
