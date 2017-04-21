@@ -1,10 +1,11 @@
 [package]
-name = "rediSQL-rst"
+name = "rediSQL"
 version = "0.1.0"
 authors = ["Simone Mosciatti <simone@redbeardlab.tech>"]
 build = "build.rs"
 
 [lib]
+name = "rediSQL"
 crate-type = ["cdylib"]
 
 [build-dependencies]

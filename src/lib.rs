@@ -1,5 +1,4 @@
 extern crate libc;
-extern crate chrono;
 
 use std::ffi::{CString, CStr};
 use std::string;

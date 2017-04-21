@@ -39,18 +39,13 @@ Checking connectivity... done.
 Then move inside the directory and compile the module:
 
 ```
-$ cd rediSQL/
-$ make sqlite 
-gcc -fPIC -c -o sqlite3.o sqlite3.c
-$ make
-gcc -c -Wpedantic -fPIC -IRedisModulesSDK/ -Bstatic rediSQL.c -o rediSQL.o
-ld -o rediSQL.so rediSQL.o sqlite3.o RedisModulesSDK/rmutil/librmutil.a -shared -lc
+$ cargo build --release
 ```
 
 At this point you can launch your redis instance loading the module:
 
 ```
-$ ~/redis-4.0-rc1/src/redis-server --loadmodule ./rediSQL.so file_path.sqlite
+$ ~/redis-4.0-rc1/src/redis-server --loadmodule ./target/release/librediSQL.so 
 6833:M 15 Dec 16:25:53.195 * Increased maximum number of open files to 10032 (it was originally set to 1024).
                 _._                                                  
            _.-``__ ''-._                                             
@@ -74,14 +69,6 @@ $ ~/redis-4.0-rc1/src/redis-server --loadmodule ./rediSQL.so file_path.sqlite
 6833:M 15 Dec 16:25:53.197 * The server is now ready to accept connections on port 6379
 ```
 
-## Default DB
-
-When you start a redis instance loading the module, the module itself create a SQLite default database, this DB will be the one used when you do not specify what database to use.
-
-If you load the module passing as argument a valid path name, rediSQL will open such database or it will create a new one.
-
-If you do not pass any argument while loading the module, rediSQL will still create a new database but it will be an in-memory one.
-
 ## API
 
 ### REDISQL.SQLITE_VERSION
@@ -93,36 +80,23 @@ This function reply with the version of SQLite that is actually in use.
 3.15.1                               
 ```
 
-### REDISQL.CREATE_DB key [file_path]
+### REDISQL.CREATE_DB key
 
 This function will create a new SQLite database that will be bound to `key`.
 
-If you do not provide a `file_path` the new database will be an in-memory one, if you provide a file_path, then you will use an on disk database and the path you provided will be where your database will reside.
-
-Use an on disk database means that you may hit the disk from time to time during SELECT and pretty often during writes. 
-This should not be a major concerns since modern operative system are extremely smart and efficient about page cache.
-Moreover SQLite itself has an internal, in memory cache. 
-
-However, please be aware that there may be some performance penalities.
-
 ```
-127.0.0.1:6379> REDISQL.CREATE_DB user /tmp/user.sqlite
+127.0.0.1:6379> REDISQL.CREATE_DB user 
 OK                                                    
-$ ls /tmp/ | grep user 
-user.sqlite
 ```
 
-### REDISQL.EXEC [key] statement
+### REDISQL.EXEC key statement
 
-This command will execute the statement against the database bound to `key`, if you do not specify a key the statement will be executed against the standard DB.
+This command will execute the statement against the database bound to `key`. 
 
 ```
 $ ./redis-cli
-127.0.0.1:6379> REDISQL.CREATE_DB user /tmp/user.sqlite
+127.0.0.1:6379> REDISQL.CREATE_DB user 
 OK
-
-$ ll /tmp/ | grep user 
--rw-r--r--  1 simo simo    0 dic 18 12:55 user.sqlite 
 
 $ ./redis-cli
 127.0.0.1:6379> REDISQL.EXEC user "CREATE TABLE user(email TEXT, password TEXT)"
@@ -138,13 +112,11 @@ OK
    2) "password" 
 127.0.0.1:6379> 
 
-$ ll /tmp/ | grep user 
--rw-r--r--  1 simo simo 8192 dic 18 12:56 user.sqlite
 ```
 
 ### REDISQL.DELETE_DB key
 
-This function will remove the database bound to `key`, if the database is on disk you will find all your data saved, if the database is in-memory your data will be lost.
+This function will remove the database bound to `key`, for now the database will be completely lost after this operation.
 
 This function is equivalent to `DELL key` however it won't let you delete keys that are not DBs.
 
@@ -172,28 +144,29 @@ OK
 But you will also able to use all the API described above
 
 ```
-127.0.0.1:6379> 
-# Start creating a table on the default DB
-127.0.0.1:6379> REDISQL.EXEC "CREATE TABLE foo(A INT, B TEXT);"
+127.0.0.1:6379> REDISQL.CREATE_DB DB
 OK
+# Start creating a table on the default DB
+127.0.0.1:6379> REDISQL.EXEC DB "CREATE TABLE foo(A INT, B TEXT);"
+DONE
 # Insert some data into the table
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO foo VALUES(3, 'bar');"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO foo VALUES(3, 'bar');"
 OK
 # Retrieve the data you just inserted
-127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM foo;"
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM foo;"
 1) 1) (integer) 3
    2) "bar"
 # Of course you can make multiple tables
-127.0.0.1:6379> REDISQL.EXEC "CREATE TABLE baz(C INT, B TEXT);"
+127.0.0.1:6379> REDISQL.EXEC DB "CREATE TABLE baz(C INT, B TEXT);"
 OK
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO baz VALUES(3, 'aaa');"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO baz VALUES(3, 'aaa');"
 OK
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO baz VALUES(3, 'bbb');"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO baz VALUES(3, 'bbb');"
 OK
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO baz VALUES(3, 'ccc');"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO baz VALUES(3, 'ccc');"
 OK
 # And of course you can use joins
-127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM foo, baz WHERE foo.A = baz.C;"
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM foo, baz WHERE foo.A = baz.C;"
 
 1) 1) (integer) 3
    2) "bar"
@@ -213,40 +186,33 @@ OK
 Also the `LIKE` operator is included:
 
 ```
-127.0.0.1:6379> REDISQL.EXEC "CREATE TABLE text_search(t TEXT);"
+127.0.0.1:6379> REDISQL.EXEC DB "CREATE TABLE text_search(t TEXT);"
 OK
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO text_search VALUES('hello');"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO text_search VALUES('hello');"
 OK
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO text_search VALUES('banana');"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO text_search VALUES('banana');"
 OK
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO text_search VALUES('apple');"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO text_search VALUES('apple');"
 OK
 127.0.0.1:6379> 
-127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM text_search WHERE t LIKE 'h_llo';"
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM text_search WHERE t LIKE 'h_llo';"
 1) 1) "hello"
-127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM text_search WHERE t LIKE '%anana';"
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM text_search WHERE t LIKE '%anana';"
 1) 1) "banana"
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO text_search VALUES('anana');"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO text_search VALUES('anana');"
 OK
-127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM text_search;"
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM text_search;"
 1) 1) "hello"
 2) 1) "banana"
 3) 1) "apple"
 4) 1) "anana"
-127.0.0.1:6379> REDISQL.EXEC "SELECT * FROM text_search WHERE t LIKE 'a%';"
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM text_search WHERE t LIKE 'a%';"
 1) 1) "apple"
 2) 1) "anana"
 ``` 
 
-And, of course, also errors are managed:
+Errors are not yet well managed as they should be.
 
-```
-127.0.0.1:6379> REDISQL.EXEC "INSERT INTO baz VALUES("aaa", "bbb");"
-Invalid argument(s)
-127.0.0.1:6379> 
-127.0.0.1:6379> REDISQL.EXEC "CREATE TABLE baz(f INT, k TEXT);"
-(error) ERR - table baz already exists | Query: CREATE TABLE baz(f INT, k TEXT);
-```
 
 Now you can create tables, insert data on those tables, make queries, remove elements, everything.
 
@@ -311,34 +277,8 @@ Right now there are some limit on the module implementation, these limitation ar
 
 #### Single thread
 
-Right now the module is single thread and it uses the same thread of Redis.
+Right now the module use a single thread, the good news is that the thread is a different one that the Redis thread, this means that even during long operation your redis instance will be responsive.
 
-This means that during long computation, mainly BIG `SELECT`s, your redis instance will be un-responsive serving the data.
-
-This limitation will be definitely removed in a couple of week in Open Source version and more aggresively in the PRO version
-
-Fortunately I already have a working prototype and I only need to time to refine the design and make simple to add futher improvement to the module.
-
-#### Persistency
-
-No form of persistency are provided, right now, by the module.
-
-This means that your in memory database is completely transient.
-
-However, if your database is save on disk also in case of catastrophic failure, each committed statemet will be present on the SQLite file.
-
-Also in this case, fortunately, I am already working on a feasible design to permit both AOF and RDB persistency in both OO and PRO version.
-
-
-#### Sharding
-
-Right now the module is intended to be used on a sigle machine.
-
-SQL doesn't works flawless in case of tuple distributed in several different host, for a variety of reason.
-
-The module is not going to distribute tuple over different host, however it may distributed databases.
-
-So, each database must be in one and only one host. Multiple databases could be distributed in different host.
 
 ## Alpha code
 
