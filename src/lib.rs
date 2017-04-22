@@ -126,71 +126,6 @@ impl Drop for RedisKey {
     }
 }
 
-#[allow(non_snake_case)]
-extern "C" fn DeleteDB(ctx: *mut ffi::RedisModuleCtx,
-                       argv: *mut *mut ffi::RedisModuleString,
-                       argc: ::std::os::raw::c_int)
-                       -> i32 {
-    let (_context, argvector) = create_argument(ctx, argv, argc);
-    match argvector.len() {
-        2 => {
-            let key_name = create_rm_string(ctx, argvector[1].clone());
-            let key = unsafe {
-                ffi::Export_RedisModule_OpenKey(ctx,
-                                                key_name.rm_string,
-                                                ffi::REDISMODULE_WRITE)
-            };
-            let safe_key = RedisKey { key: key };
-            let key_type = unsafe { ffi::RedisModule_KeyType.unwrap()(key) };
-            if unsafe {
-                ffi::DBType ==
-                ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key) &&
-                key_type != ffi::REDISMODULE_KEYTYPE_EMPTY
-            } {
-
-                let db_ptr = unsafe {
-                    ffi::RedisModule_ModuleTypeGetValue.unwrap()(safe_key.key) as *mut DBKey
-                };
-
-
-                let db: Box<DBKey> = unsafe { Box::from_raw(db_ptr) };
-
-                match db.tx.send(Command::Stop) {
-                    _ => {
-                        unsafe {
-                            ffi::RedisModule_DeleteKey.unwrap()(safe_key.key);
-                        }
-                        reply_with_ok(ctx)
-                    }
-                }
-
-            } else {
-                match key_type {
-                    ffi::REDISMODULE_KEYTYPE_EMPTY => {
-                        let error = CString::new("ERR - Error the key is \
-                                                  empty")
-                            .unwrap();
-                        unsafe {
-                        ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
-                    }
-                    }
-                    _ => {
-                        let error = CStr::from_bytes_with_nul(ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
-                        unsafe {
-                        ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
-                    }
-                    }
-
-                }
-
-            }
-
-        }
-        _ => unsafe { ffi::RedisModule_WrongArity.unwrap()(ctx) },
-    }
-}
-
-
 enum Command {
     Stop,
     Exec {
@@ -599,31 +534,6 @@ pub extern "C" fn RedisModule_OnLoad(ctx: *mut ffi::RedisModuleCtx,
     } == ffi::REDISMODULE_ERR {
         return ffi::REDISMODULE_ERR;
     }
-
-
-    let remove_db: ffi::RedisModuleCmdFunc = Some(DeleteDB);
-
-    let command_c_name = CString::new("REDISQL.Delete_DB").unwrap();
-    let command_ptr_name = command_c_name.as_ptr();
-
-    let flag_c_name = CString::new("write").unwrap();
-    let flag_ptr_name = flag_c_name.as_ptr();
-
-    if unsafe {
-        ffi::RedisModule_CreateCommand.unwrap()(ctx,
-                                                command_ptr_name,
-                                                remove_db,
-                                                flag_ptr_name,
-                                                0,
-                                                0,
-                                                0)
-    } == ffi::REDISMODULE_ERR {
-        return ffi::REDISMODULE_ERR;
-    }
-
-
-
-
 
     let exec: ffi::RedisModuleCmdFunc = Some(Exec);
 
