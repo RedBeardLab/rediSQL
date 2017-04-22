@@ -344,7 +344,6 @@ extern "C" fn Exec(ctx: *mut ffi::RedisModuleCtx,
 
                 let db: Box<DBKey> = unsafe { Box::from_raw(db_ptr) };
 
-
                 let ch = db.tx.clone();
 
                 std::mem::forget(db);
@@ -359,7 +358,6 @@ extern "C" fn Exec(ctx: *mut ffi::RedisModuleCtx,
                                                               10000)
                     },
                 };
-
 
                 let cmd = Command::Exec {
                     query: argvector[2].clone(),
@@ -525,7 +523,15 @@ pub fn string_ptr_len(str: *mut ffi::RedisModuleString) -> String {
     }
 }
 
-unsafe extern "C" fn free_db(_: *mut ::std::os::raw::c_void) {}
+unsafe extern "C" fn free_db(db_ptr: *mut ::std::os::raw::c_void) {
+
+    let db: Box<DBKey> = Box::from_raw(db_ptr as *mut DBKey);
+    let tx = db.tx.clone();
+
+    match tx.send(Command::Stop) {
+        _ => (),
+    }
+}
 
 #[allow(non_snake_case)]
 #[no_mangle]
