@@ -72,27 +72,11 @@ fn reply_with_string(ctx: *mut ffi::RedisModuleCtx, s: String) -> i32 {
 
 impl RedisReply for sql::SQLite3Error {
     fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
-        match *self {
-            sql::SQLite3Error::OpenError => {
-                reply_with_string(ctx,
-                                  String::from("Error in opening the \
-                                                database"))
-            }
-            sql::SQLite3Error::StatementError => {
-                reply_with_string(ctx,
-                                  String::from("Error during the creation \
-                                                of the statement"))
-            }
-            sql::SQLite3Error::ExecuteError => {
-                reply_with_string(ctx,
-                                  String::from("Error during the execution"))
-            }
-            sql::SQLite3Error::SharedConnection => {
-                reply_with_string(ctx,
-                                  String::from("Error for shared connection \
-                                                between thread"))
-            }
-        }
+        let error = format!("ERR - Error Code: {} => {} | {}",
+                            self.code,
+                            self.error_string,
+                            self.error_message);
+        reply_with_string(ctx, error)
     }
 }
 
@@ -169,16 +153,17 @@ extern "C" fn DeleteDB(ctx: *mut ffi::RedisModuleCtx,
                 };
 
 
-                let _db: Box<DBKey> = unsafe { Box::from_raw(db_ptr) };
+                let db: Box<DBKey> = unsafe { Box::from_raw(db_ptr) };
 
-                unsafe {
-                    ffi::RedisModule_DeleteKey.unwrap()(safe_key.key);
+                match db.tx.send(Command::Stop) {
+                    _ => {
+                        unsafe {
+                            ffi::RedisModule_DeleteKey.unwrap()(safe_key.key);
+                        }
+                        reply_with_ok(ctx)
+                    }
                 }
 
-                let ok = CString::new("OK").unwrap();
-                unsafe {
-                    ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, ok.as_ptr())
-                }
             } else {
                 match key_type {
                     ffi::REDISMODULE_KEYTYPE_EMPTY => {
@@ -381,10 +366,10 @@ extern "C" fn Exec(ctx: *mut ffi::RedisModuleCtx,
                     client: blocked_client,
                 };
 
-                ch.send(cmd);
-
-
-                ffi::REDISMODULE_OK
+                match ch.send(cmd) {
+                    Ok(()) => ffi::REDISMODULE_OK,
+                    Err(_) => ffi::REDISMODULE_OK,
+                }
 
             } else {
                 match key_type {
@@ -430,7 +415,7 @@ extern "C" fn CreateDB(ctx: *mut ffi::RedisModuleCtx,
     let (_context, argvector) = create_argument(ctx, argv, argc);
 
     match argvector.len() {
-        2 => {
+        2 | 3 => {
             let key_name = create_rm_string(ctx, argvector[1].clone());
             let key = unsafe {
                 ffi::Export_RedisModule_OpenKey(ctx,
@@ -441,7 +426,11 @@ extern "C" fn CreateDB(ctx: *mut ffi::RedisModuleCtx,
             match unsafe { ffi::RedisModule_KeyType.unwrap()(safe_key.key) } {
 
                 ffi::REDISMODULE_KEYTYPE_EMPTY => {
-                    match sql::open_connection(String::from(":memory:")) {
+                    let path = match argvector.len() {
+                        3 => String::from(argvector[2].clone()),
+                        _ => String::from(":memory:"),
+                    };
+                    match sql::open_connection(path) {
                         Ok(rc) => {
 
                             let (tx, rx) = channel();
@@ -451,14 +440,12 @@ extern "C" fn CreateDB(ctx: *mut ffi::RedisModuleCtx,
                                 listen_and_execute(rc, rx);
                             });
 
-
                             let ptr = Box::into_raw(Box::new(db));
                             let type_set = unsafe {
                                 ffi::RedisModule_ModuleTypeSetValue.unwrap()(safe_key.key, ffi::DBType, ptr as *mut std::os::raw::c_void)
                             };
                             match type_set {
                                 ffi::REDISMODULE_OK => {
-
 
                                     let ok = CString::new("OK").unwrap();
                                     unsafe {
@@ -509,7 +496,7 @@ extern "C" fn CreateDB(ctx: *mut ffi::RedisModuleCtx,
         }
         _ => {
             let error = CString::new("Wrong number of arguments, it accepts \
-                                      2")
+                                      2 or 3")
                 .unwrap();
             unsafe {
                 ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())

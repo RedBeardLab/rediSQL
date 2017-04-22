@@ -11,11 +11,29 @@ mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
-pub enum SQLite3Error {
-    OpenError,
-    StatementError,
-    ExecuteError,
-    SharedConnection,
+pub struct SQLite3Error {
+    pub code: i32,
+    pub error_message: String,
+    pub error_string: String,
+}
+
+fn generate_sqlite3_error(conn: *mut ffi::sqlite3) -> SQLite3Error {
+    let error_code = unsafe { ffi::sqlite3_extended_errcode(conn) };
+    let error_message = unsafe {
+        CStr::from_ptr(ffi::sqlite3_errmsg(conn))
+            .to_string_lossy()
+            .into_owned()
+    };
+    let error_string = unsafe {
+        CStr::from_ptr(ffi::sqlite3_errstr(error_code))
+            .to_string_lossy()
+            .into_owned()
+    };
+    SQLite3Error {
+        code: error_code,
+        error_message: error_message,
+        error_string: error_string,
+    }
 }
 
 #[derive(Clone)]
@@ -50,7 +68,6 @@ pub fn create_statement(conn: &RawConnection,
                         query: String)
                         -> Result<Statement, SQLite3Error> {
 
-
     let raw_query = CString::new(query).unwrap();
 
     let mut stmt: *mut ffi::sqlite3_stmt = unsafe { mem::uninitialized() };
@@ -64,9 +81,8 @@ pub fn create_statement(conn: &RawConnection,
     };
     match r {
         ffi::SQLITE_OK => Ok(Statement { stmt: stmt }),
-        _ => Err(SQLite3Error::StatementError),
+        _ => Err(generate_sqlite3_error(conn.db)),
     }
-
 }
 
 pub fn open_connection(path: String) -> Result<RawConnection, SQLite3Error> {
@@ -83,7 +99,7 @@ pub fn open_connection(path: String) -> Result<RawConnection, SQLite3Error> {
     match r {
         ffi::SQLITE_OK => Ok(RawConnection { db: db }),
         _ => {
-            return Err(SQLite3Error::OpenError);
+            return Err(generate_sqlite3_error(db));
         }
     }
 }
@@ -128,7 +144,9 @@ pub fn execute_statement(stmt: Statement) -> Result<Cursor, SQLite3Error> {
             })
         }
         _ => {
-            return Err(SQLite3Error::ExecuteError);
+            return Err(generate_sqlite3_error(unsafe {
+                ffi::sqlite3_db_handle(stmt.stmt)
+            }));
         }
     }
 
