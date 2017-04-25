@@ -1,6 +1,6 @@
-
 use std::mem;
 use std::ptr;
+use std::fmt;
 use std::ffi::{CString, CStr};
 
 #[allow(dead_code)]
@@ -33,6 +33,16 @@ fn generate_sqlite3_error(conn: *mut ffi::sqlite3) -> SQLite3Error {
         code: error_code,
         error_message: error_message,
         error_string: error_string,
+    }
+}
+
+impl fmt::Display for SQLite3Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f,
+               "ERR - Error Code: {} => {} | {}",
+               self.code,
+               self.error_string,
+               self.error_message)
     }
 }
 
@@ -70,7 +80,8 @@ pub fn create_statement(conn: &RawConnection,
 
     let raw_query = CString::new(query).unwrap();
 
-    let mut stmt: *mut ffi::sqlite3_stmt = unsafe { mem::uninitialized() };
+    let mut stmt: *mut ffi::sqlite3_stmt =
+        unsafe { mem::uninitialized() };
     // let mut db = conn.db;
     let r = unsafe {
         ffi::sqlite3_prepare_v2(conn.db,
@@ -85,7 +96,8 @@ pub fn create_statement(conn: &RawConnection,
     }
 }
 
-pub fn open_connection(path: String) -> Result<RawConnection, SQLite3Error> {
+pub fn open_connection(path: String)
+                       -> Result<RawConnection, SQLite3Error> {
     let mut db: *mut ffi::sqlite3 = unsafe { mem::uninitialized() };
     let c_path = CString::new(path).unwrap();
     let r = unsafe {
@@ -115,7 +127,8 @@ pub enum Cursor {
     },
 }
 
-pub fn execute_statement(stmt: Statement) -> Result<Cursor, SQLite3Error> {
+pub fn execute_statement(stmt: Statement)
+                         -> Result<Cursor, SQLite3Error> {
 
     match unsafe { ffi::sqlite3_step(stmt.stmt) } {
         ffi::SQLITE_OK => Ok(Cursor::OKCursor),
@@ -189,39 +202,39 @@ impl Iterator for Cursor {
                     ffi::SQLITE_ROW => {
                         let mut result = vec![];
                         for i in 0..num_columns {
-                            let entity_value =
-                                match types[i as usize] {
-                                    EntityType::Integer => {
-                                        let value =
-                                            unsafe {
-                                                ffi::sqlite3_column_int(stmt.stmt, i)
-                                            };
-                                        Entity::Integer { int: value }
-                                    }
-                                    EntityType::Float => {
-                                        let value = unsafe { ffi::sqlite3_column_double(stmt.stmt, i) };
-                                        Entity::Float { float: value }
-                                    }
-                                    EntityType::Text => {
-                                        let value =
+                            let entity_value = match types[i as usize] {
+                                EntityType::Integer => {
+                                    let value =
+                                        unsafe {
+                                            ffi::sqlite3_column_int(stmt.stmt, i)
+                                        };
+                                    Entity::Integer { int: value }
+                                }
+                                EntityType::Float => {
+                                    let value = unsafe { ffi::sqlite3_column_double(stmt.stmt, i) };
+                                    Entity::Float { float: value }
+                                }
+                                EntityType::Text => {
+                                    let value =
                                 unsafe {
                                     CStr::from_ptr(ffi::sqlite3_column_text(stmt.stmt, i) as *const i8).to_string_lossy().into_owned()
                                 };
-                                        Entity::Text { text: value }
-                                    }
-                                    EntityType::Blob => {
-                                        let value = 
+                                    Entity::Text { text: value }
+                                }
+                                EntityType::Blob => {
+                                    let value = 
                                 unsafe { 
                                     CStr::from_ptr(ffi::sqlite3_column_blob(stmt.stmt, i) as *const i8).to_string_lossy().into_owned() 
                                 };
-                                        Entity::Blob { blob: value }
-                                    }
-                                    EntityType::Null => Entity::Null {},
-                                };
+                                    Entity::Blob { blob: value }
+                                }
+                                EntityType::Null => Entity::Null {},
+                            };
                             result.push(entity_value);
                         }
                         unsafe {
-                            *previous_status = ffi::sqlite3_step(stmt.stmt);
+                            *previous_status =
+                                ffi::sqlite3_step(stmt.stmt);
                         };
                         Some(result)
                     }
@@ -230,4 +243,50 @@ impl Iterator for Cursor {
             }
         }
     }
+}
+
+pub fn create_backup
+    (src: &RawConnection,
+     dest: &RawConnection)
+     -> Result<*mut ffi::sqlite3_backup, SQLite3Error> {
+    let dest_name = CString::new("main").unwrap();
+    let src_name = CString::new("main").unwrap();
+    let result = unsafe {
+        ffi::sqlite3_backup_init(dest.db,
+                                 dest_name.as_ptr(),
+                                 src.db,
+                                 src_name.as_ptr())
+    };
+    match result {
+        null if null.is_null() => Err(generate_sqlite3_error(dest.db)),
+        ptr => Ok(ptr),
+    }
+}
+
+pub fn errcode(conn: RawConnection) -> i32 {
+    unsafe { ffi::sqlite3_errcode(conn.db) }
+}
+
+pub fn backup_step(bk: *mut ffi::sqlite3_backup, steps: i32) -> i32 {
+    unsafe { ffi::sqlite3_backup_step(bk, steps) }
+}
+
+pub fn backup_finish(bk: *mut ffi::sqlite3_backup) -> i32 {
+    unsafe { ffi::sqlite3_backup_finish(bk) }
+}
+
+pub fn backup_step_is_ok(result: i32) -> bool {
+    result == ffi::SQLITE_OK
+}
+
+pub fn backup_step_should_retry(result: i32) -> bool {
+    result == ffi::SQLITE_BUSY || result == ffi::SQLITE_LOCKED
+}
+
+pub fn backup_should_step_again(result: i32) -> bool {
+    backup_step_is_ok(result) || backup_step_should_retry(result)
+}
+
+pub fn backup_complete_with_done(result: i32) -> bool {
+    result == ffi::SQLITE_DONE
 }
