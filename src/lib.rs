@@ -5,10 +5,10 @@ use std::ffi::{CString, CStr};
 use std::string;
 use std::mem;
 use std::ptr;
-use std::fs::File;
+use std::fs::{remove_file, File};
 use std::io::BufReader;
 
-use std::io::Read;
+use std::io::{Read, Write};
 
 use std::thread;
 use std::sync::mpsc::{Receiver, RecvError, channel, Sender};
@@ -354,6 +354,56 @@ extern "C" fn Exec(ctx: *mut ffi::RedisModuleCtx,
 struct DBKey {
     tx: Sender<Command>,
     db: sqlite::RawConnection,
+    in_memory: bool,
+}
+
+fn create_metadata_table(db: &sql::RawConnection)
+                         -> Result<(), sql::SQLite3Error> {
+    let statement = String::from("CREATE TABLE \
+                                 RediSQLMetadata(data_type TEXT, key \
+                                 TEXT, value TEXT);");
+
+    match sql::create_statement(&db, statement) {
+        Err(e) => Err(e),
+        Ok(stmt) => {
+            match sql::execute_statement(stmt) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e),
+            }
+        }
+    }
+}
+
+fn insert_metadata(db: &sql::RawConnection,
+                   data_type: String,
+                   key: String,
+                   value: String)
+                   -> Result<(), sql::SQLite3Error> {
+    let statement = String::from("INSERT INTO RediSQLMetadata \
+                                  VALUES(?, ?, ?);");
+
+    match sql::create_statement(&db, statement) {
+        Err(e) => Err(e),
+        Ok(stmt) => {
+            match sql::bind_text(&db, &stmt, 1, data_type) {
+                Err(e) => Err(e),
+                Ok(()) => match sql::bind_text(&db, &stmt, 2, key) {
+                    Err(e) => Err(e),
+                    Ok(()) => match sql::bind_text(&db, &stmt, 3, value) {
+                        Err(e) => Err(e),
+                        Ok(()) => {
+                            match sql::execute_statement(stmt) {
+                                Ok(_) => {
+                                    Ok(())
+                                },
+                                Err(e) => Err(e),
+                            }
+                        }
+                    }    
+                },
+            }
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -362,6 +412,7 @@ extern "C" fn CreateDB(ctx: *mut ffi::RedisModuleCtx,
                        argc: ::std::os::raw::c_int)
                        -> i32 {
 
+
     let (_context, argvector) = create_argument(ctx, argv, argc);
 
     match argvector.len() {
@@ -369,63 +420,55 @@ extern "C" fn CreateDB(ctx: *mut ffi::RedisModuleCtx,
             let key_name = create_rm_string(ctx, argvector[1].clone());
             let key =
                 unsafe {
-                    ffi::Export_RedisModule_OpenKey(ctx,
-                                                key_name.rm_string,
-                                                ffi::REDISMODULE_WRITE)
+                    ffi::Export_RedisModule_OpenKey(ctx, key_name.rm_string, ffi::REDISMODULE_WRITE)
                 };
             let safe_key = RedisKey { key: key };
             match unsafe {
                 ffi::RedisModule_KeyType.unwrap()(safe_key.key)
             } {
-
                 ffi::REDISMODULE_KEYTYPE_EMPTY => {
-                    let path = match argvector.len() {
-                        3 => String::from(argvector[2].clone()),
-                        _ => String::from(":memory:"),
+                    let (path, in_memory) = match argvector.len() {
+                        3 => (String::from(argvector[2].clone()), false),
+                        _ => (String::from(":memory:"), true),
                     };
-                    match sql::open_connection(path) {
+                    match sql::open_connection(path.clone()) {
                         Ok(rc) => {
-
-                            let (tx, rx) = channel();
-                            let db = DBKey {
-                                tx: tx,
-                                db: rc.clone(),
-                            };
-
-                            thread::spawn(move || {
-                                listen_and_execute(rc, rx);
-                            });
-
-                            let ptr = Box::into_raw(Box::new(db));
-                            let type_set = unsafe {
-                                ffi::RedisModule_ModuleTypeSetValue.unwrap()(safe_key.key, ffi::DBType, ptr as *mut std::os::raw::c_void)
-                            };
-                            match type_set {
-                                ffi::REDISMODULE_OK => {
-
-                                    let ok = CString::new("OK").unwrap();
-                                    unsafe {
-                                        ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, ok.as_ptr())
-                                    }
-                                }
-                                ffi::REDISMODULE_ERR => {
-                                    let err = CString::new("ERR - Error \
-                                                            in saving \
-                                                            the database \
-                                                            inside Redis")
-                                        .unwrap();
-
-                                    unsafe {
-                                        ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr())
-                                    }
-                                }
-                                _ => {
-                                    let err = CString::new("ERR - Error \
-                                                            unknow")
-                                        .unwrap();
-
-                                    unsafe {
-                                        ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr())
+                            match create_metadata_table(&rc)
+                                .and_then(|_| {
+                                    insert_metadata(&rc,
+                                                    "setup".to_owned(),
+                                                    "path".to_owned(),
+                                                    path)
+                                }) {
+                                Err(e) => e.reply(ctx),
+                                Ok(()) => {
+                                    let (tx, rx) = channel();
+                                    let db = DBKey {
+                                        tx: tx,
+                                        db: rc.clone(),
+                                        in_memory: in_memory,
+                                    };
+                                    thread::spawn(move || {
+                                        listen_and_execute(rc, rx);
+                                    });
+                                    let ptr = Box::into_raw(Box::new(db));
+                                    let type_set = unsafe {
+                                        ffi::RedisModule_ModuleTypeSetValue.unwrap()(safe_key.key, ffi::DBType, ptr as *mut std::os::raw::c_void)
+                                    };
+                                        
+                                    match type_set {
+                                        ffi::REDISMODULE_OK => {
+                                            let ok = CString::new("OK").unwrap();
+                                            unsafe { ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, ok.as_ptr()) }
+                                        }
+                                        ffi::REDISMODULE_ERR => {
+                                            let err = CString::new("ERR - Error in saving the database inside Redis").unwrap();
+                                            unsafe { ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr()) }
+                                        }
+                                        _ => {
+                                            let err = CString::new("ERR - Error unknow").unwrap();
+                                            unsafe { ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr()) }
+                                        }
                                     }
                                 }
                             }
@@ -439,16 +482,11 @@ extern "C" fn CreateDB(ctx: *mut ffi::RedisModuleCtx,
                         }
                     }
                 }
-
                 _ => {
-                    let error = CStr::from_bytes_with_nul(ffi::REDISMODULE_ERRORMSG_WRONGTYPE)
-                        .unwrap();
-                    unsafe {
-                        ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
-                    }
+                    let error = CStr::from_bytes_with_nul(ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
+                    unsafe { ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr()) }
                 }
             }
-
         }
         _ => {
             let error = CString::new("Wrong number of arguments, it \
@@ -460,7 +498,6 @@ extern "C" fn CreateDB(ctx: *mut ffi::RedisModuleCtx,
             }
         }
     }
-
 }
 
 fn parse_args(argv: *mut *mut ffi::RedisModuleString,
@@ -492,75 +529,212 @@ unsafe extern "C" fn free_db(db_ptr: *mut ::std::os::raw::c_void) {
     }
 }
 
+fn make_backup(conn1: &sql::RawConnection,
+               conn2: &sql::RawConnection)
+               -> Result<i32, sql::SQLite3Error> {
+    match sql::create_backup(conn1, conn2) {
+        Err(e) => Err(e),
+        Ok(bk) => {
+            let mut result = sql::backup_step(bk, 1);
+            while sql::backup_should_step_again(result) {
+                result = sql::backup_step(bk, 1);
+            }
+            sql::backup_finish(bk);
+            Ok(result)
+        }
+    }
+}
+
 fn create_backup(conn: &sql::RawConnection,
                  path: String)
                  -> Result<i32, sql::SQLite3Error> {
     match sql::open_connection(path) {
         Err(e) => Err(e),
-        Ok(new_db) => {
-            match sql::create_backup(conn, &new_db) {
-                Err(err) => Err(err),
-                Ok(bk) => {
-                    let mut result = sql::backup_step(bk, 1);
-                    while sql::backup_should_step_again(result) {
-                        result = sql::backup_step(bk, 1);
-                    }
-                    sql::backup_finish(bk);
-                    Ok(result)
-                }
+        Ok(new_db) => make_backup(conn, &new_db),
+    }
+}
+
+fn write_file_to_rdb(f: File,
+                     rdb: *mut ffi::RedisModuleIO)
+                     -> Result<(), std::io::Error> {
+
+    let block_size = 1024 * 4 as i64;
+    let lenght = f.metadata().unwrap().len();
+    let blocks = lenght / block_size as u64;
+
+    println!("Dimension file: {}\n Blocks: {}", lenght, blocks);
+
+    unsafe {
+        ffi::RedisModule_SaveSigned.unwrap()(rdb, blocks as i64);
+    }
+
+    let to_write: Vec<u8> = vec![0; block_size as usize];
+    let mut buffer = BufReader::with_capacity(block_size as usize, f);
+    loop {
+        let mut tw = to_write.clone();
+        match buffer.read(tw.as_mut_slice()) {
+            Ok(0) => {
+                return Ok(());
             }
+            Ok(n) => unsafe {
+                // let cs = CString::from_vec_unchecked(tw);
+                println!("Number of bytes written: {}", n);
+                ffi::RedisModule_SaveStringBuffer.unwrap()(rdb,
+                                                           tw.as_slice().as_ptr() as *const i8,
+                                                           n)
+
+            },
+            Err(e) => return Err(e),
         }
     }
+
 }
 
 unsafe extern "C" fn rdb_save(rdb: *mut ffi::RedisModuleIO,
                               value: *mut std::os::raw::c_void) {
 
-
     let db: *mut DBKey =
         unsafe { Box::into_raw(Box::from_raw(value as *mut DBKey)) };
 
-    // create a new db physical db and start the backup
-    // then use the rdb api to copy the new db into redis
-    // delete the old db
+    if (*db).in_memory {
 
-    let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
+        let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
 
-    match create_backup(&(*db).db, path.clone()) {
-        Err(e) => println!("{}", e),
-        Ok(not_done) if !sql::backup_complete_with_done(not_done) => {
-            println!("Return NOT DONE: {}", not_done)
-        }
-        Ok(done) => {
-            match File::open(path) {
-                Err(e) => println!("{}", e),
-                Ok(f) => {
-                    let mut to_write: Vec<u8> = vec![0, 1024 * 4];
-                    let buffer = BufReader::with_capacity(1024 * 4, f);
-                    let mut keep_going = true;
-                    while continue {
-                        match buffer.read(to_write.as_mut_slice()) {
-                            Ok(0) => {
-                                keep_going = false;
+        match create_backup(&(*db).db, path.clone()) {
+            Err(e) => println!("{}", e),
+            Ok(not_done) if !sql::backup_complete_with_done(not_done) => {
+                println!("Return NOT DONE: {}", not_done)
+            }
+            Ok(_) => {
+                match File::open(path.clone()) {
+                    Err(e) => println!("{}", e),
+                    Ok(f) => {
+                        match write_file_to_rdb(f, rdb) {
+                            Ok(()) => {
+                            remove_file(path);
+                        }
+                            Err(_) => {
+                                println!("Impossible to write the file \
+                                          in the rdb file");
                             }
-                            Ok(n) => {
-                                keep_going = true;
-                                ffi::RedisModule_SaveStringBuffer.unwrap()(rdb, to_write.as_ptr() as *const i8, n)
-                            }
-                            Err(_) => keep_going = false,
                         }
                     }
                 }
             }
         }
     }
+}
 
+// TODO make sure of the deallocation
+
+struct Save_RedisModule_String {
+    ptr: *mut std::os::raw::c_char,
+}
+
+impl Drop for Save_RedisModule_String {
+    fn drop(&mut self) {
+        unsafe { ffi::RedisModule_Free.unwrap()(self.ptr as *mut std::os::raw::c_void) }
+    }
+}
+
+fn write_rdb_to_file(f: &mut File,
+                     rdb: *mut ffi::RedisModuleIO)
+                     -> Result<(), std::io::Error> {
+
+    let blocks =
+        unsafe { ffi::RedisModule_LoadSigned.unwrap()(rdb) as i64 };
+
+    for _ in 0..blocks {
+        let mut dimension: libc::size_t = 0;
+        println!("About to load the string");
+        let c_str_ptr = Save_RedisModule_String {
+            ptr:
+                unsafe {
+                ffi::RedisModule_LoadStringBuffer.unwrap()(rdb,
+                                                           &mut dimension)
+            },
+        };
+
+        println!("Dimension: {}", dimension);
+        if dimension == 0 {
+            break;
+        }
+        let buffer: Vec<u8> =
+            unsafe {
+                Vec::from_raw_parts(c_str_ptr.ptr as *mut u8,
+                                    dimension,
+                                    dimension)
+            };
+        println!("Buffer dimension: {}, {:?}",
+                 buffer.len(),
+                 c_str_ptr.ptr);
+
+        let y = f.write_all(buffer.as_slice());
+        ::mem::forget(buffer);
+        match y {
+            Err(e) => return Err(e),
+            _ => (),
+        }
+    }
+    Ok(())
 }
 
 unsafe extern "C" fn rdb_load(rdb: *mut ffi::RedisModuleIO,
-                              encoding_version: i32)
+                              _encoding_version: i32)
                               -> *mut std::os::raw::c_void {
-    ptr::null_mut()
+
+    let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
+    match File::create(path.clone()) {
+        Err(_) => {
+            println!("Was impossible to create a file!");
+            ptr::null_mut()
+        }
+        Ok(ref mut f) => {
+            match write_rdb_to_file(f, rdb) {
+                Err(_) => {
+                    println!("Was impossible to write the rdb file!");
+                    ptr::null_mut()
+                }
+                Ok(()) => {
+                    match sql::open_connection(":memory:".to_owned()) {
+                        Err(_) => {
+                            println!("Was impossible to open the in memory db!");
+                            ptr::null_mut()
+                        },
+                        Ok(in_mem) => {
+                            match sql::open_connection(path) {
+                                Err(_) => {
+                                    println!("Error in opening the rdb database");
+                                    ptr::null_mut()
+                                }
+                                Ok(on_disk) => {
+                                    match make_backup(&on_disk, &in_mem) {
+                                        Err(e) => {
+                                            println!("{}", e);
+                                            ptr::null_mut()
+                                        }
+                                        Ok(_) => {
+                                            let (tx, rx) = channel();
+                                            let db = DBKey {
+                                                tx: tx,
+                                                db: in_mem.clone(),
+                                                in_memory: true,
+                                            };
+
+                                            thread::spawn(move || { 
+                                                listen_and_execute(in_mem, rx)});
+
+                                            Box::into_raw(Box::new(db)) as *mut std::os::raw::c_void
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[allow(non_snake_case)]

@@ -3,6 +3,8 @@ use std::ptr;
 use std::fmt;
 use std::ffi::{CString, CStr};
 
+use std::os::raw::c_void;
+
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -53,12 +55,15 @@ pub struct RawConnection {
 
 unsafe impl Send for RawConnection {}
 
+#[derive(Clone)]
 pub struct Statement {
     stmt: *mut ffi::sqlite3_stmt,
 }
 
 impl Drop for Statement {
     fn drop(&mut self) {
+        let sql = unsafe { CStr::from_ptr(ffi::sqlite3_sql(self.stmt)) };
+        println!("DROPPED STATETMENT: {:?}", sql);
         unsafe {
             ffi::sqlite3_finalize(self.stmt);
         }
@@ -125,6 +130,34 @@ pub enum Cursor {
         types: Vec<EntityType>,
         previous_status: i32,
     },
+}
+
+unsafe extern "C" fn aaa(_: *mut c_void) {
+    println!("zzz");
+}
+
+pub fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
+    Some(unsafe { mem::transmute(-1isize) })
+}
+
+pub fn bind_text(db: &RawConnection,
+                 stmt: &Statement,
+                 index: i32,
+                 value: String)
+                 -> Result<(), SQLite3Error> {
+
+    let value_c = CString::new(value).unwrap();
+
+    match unsafe {
+        ffi::sqlite3_bind_text(stmt.stmt,
+                               index,
+                               value_c.as_ptr(),
+                               -1,
+                               SQLITE_TRANSIENT())
+    } {
+        ffi::SQLITE_OK => Ok(()),
+        _ => Err(generate_sqlite3_error(db.db)),
+    }
 }
 
 pub fn execute_statement(stmt: Statement)
