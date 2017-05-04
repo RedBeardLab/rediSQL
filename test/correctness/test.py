@@ -33,7 +33,7 @@ class DB():
     self.redis.execute_command("REDISQL.CREATE_DB", self.key)
 
   def __exit__(self, type, value, traceback):
-    self.redis.execute_command("REDISQL.DELETE_DB", self.key)
+    self.redis.execute_command("DEL", self.key)
 
 
 class TestRediSQLWithExec(unittest.TestCase):
@@ -48,7 +48,7 @@ class TestRediSQLWithExec(unittest.TestCase):
     return self.redis.execute_command("REDISQL.CREATE_DB", key)
 
   def delete_db(self, key):
-    return self.redis.execute_command("REDISQL.DELETE_DB", key)
+    return self.redis.execute_command("DEL", key)
 
 class TestRediSQLExec(TestRediSQLWithExec):
   def setUp(self):
