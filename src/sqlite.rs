@@ -3,8 +3,6 @@ use std::ptr;
 use std::fmt;
 use std::ffi::{CString, CStr};
 
-use std::os::raw::c_void;
-
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -132,10 +130,7 @@ pub enum Cursor {
     },
 }
 
-unsafe extern "C" fn aaa(_: *mut c_void) {
-    println!("zzz");
-}
-
+#[allow(non_snake_case)]
 pub fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
     Some(unsafe { mem::transmute(-1isize) })
 }
@@ -295,10 +290,6 @@ pub fn create_backup
         null if null.is_null() => Err(generate_sqlite3_error(dest.db)),
         ptr => Ok(ptr),
     }
-}
-
-pub fn errcode(conn: RawConnection) -> i32 {
-    unsafe { ffi::sqlite3_errcode(conn.db) }
 }
 
 pub fn backup_step(bk: *mut ffi::sqlite3_backup, steps: i32) -> i32 {
