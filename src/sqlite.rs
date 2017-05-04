@@ -87,7 +87,7 @@ pub fn create_statement(conn: &RawConnection,
 
     let mut stmt: *mut ffi::sqlite3_stmt =
         unsafe { mem::uninitialized() };
-    // let mut db = conn.db;
+
     let r = unsafe {
         ffi::sqlite3_prepare_v2(conn.db,
                                 raw_query.as_ptr(),
@@ -190,10 +190,11 @@ pub fn execute_statement(stmt: Statement)
             })
         }
         _ => {
-            return Err(generate_sqlite3_error(unsafe {
+            Err(generate_sqlite3_error(unsafe {
                 ffi::sqlite3_db_handle(stmt.stmt)
-            }));
+            }))
         }
+
     }
 
 }

@@ -157,25 +157,17 @@ enum QueryResult {
 fn execute_query(db: &sqlite::RawConnection,
                  query: String)
                  -> Result<QueryResult, sql::SQLite3Error> {
-    match sql::create_statement(&db, query) {
-        Ok(stmt) => {
-            match sql::execute_statement(stmt) {
-                Ok(cursor) => {
-                    match cursor {
-                        sql::Cursor::OKCursor => Ok(QueryResult::OK),
-                        sql::Cursor::DONECursor => Ok(QueryResult::DONE),
 
-                        sql::Cursor::RowsCursor { .. } => {
-                            Ok(QueryResult::Array {
-                                array: cursor.collect::<Vec<sql::Row>>(),
-                            })
-                        }
-                    }
-                }
-                Err(e) => Err(e),
-            }
+    let stmt = sql::create_statement(&db, query.clone())?;
+    let cursor = sql::execute_statement(stmt)?;
+    match cursor {
+        sql::Cursor::OKCursor => Ok(QueryResult::OK),
+        sql::Cursor::DONECursor => Ok(QueryResult::DONE),
+        sql::Cursor::RowsCursor { .. } => {
+            Ok(QueryResult::Array {
+                array: cursor.collect::<Vec<sql::Row>>(),
+            })
         }
-        Err(e) => Err(e),
     }
 }
 
@@ -577,7 +569,6 @@ fn write_file_to_rdb(f: File,
                 return Ok(());
             }
             Ok(n) => unsafe {
-                // let cs = CString::from_vec_unchecked(tw);
                 println!("Number of bytes written: {}", n);
                 ffi::RedisModule_SaveStringBuffer.unwrap()(rdb,
                                                            tw.as_slice().as_ptr() as *const i8,
