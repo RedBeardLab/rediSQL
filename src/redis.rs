@@ -402,3 +402,22 @@ pub fn write_rdb_to_file(f: &mut File,
     }
     Ok(())
 }
+
+
+/*
+ * Create a statement
+ *
+ * Input: A DB a Statement identifier and a Statement string
+ *
+ * Check that the DB exist
+ * Compile the statement
+ * Add the statement to an hash map Identifier => Compiled Statement
+ *
+ * /
+
+
+
+
+
+
+
