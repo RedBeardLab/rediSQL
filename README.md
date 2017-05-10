@@ -12,16 +12,6 @@ Even basic SQL is very powerful and years upon years of experience on several SQ
 
 Between all the SQL implementation, the one that best fitted the need for this module is definitely SQLite, for its velocity, portability, simplicity and capability to work in memory.
 
-## OpenSource and the necessity of real support and charge for my time.
-
-[How to Charge for your Open Source](http://www.mikeperham.com/2015/11/23/how-to-charge-for-your-open-source/) by Mike Perham brings good arguments on the necessity to charge for work done by developers, even in the Open Source world.
-
-I myself have started a lot of Open Source project that, eventually, are all dead because I wasn't able to dedicate the right amount of time to them.
-
-I am hoping to find the necessary funds to keep maintain this project.
-
-I am starting with only an Open Source version, and then move to an enterprise version adding the necessary features.
-
 ## Usage
 
 You can get started simply downloading the git repo:
@@ -299,6 +289,17 @@ A pull request template is in place.
 ## Need incentives
 
 I am not sure, myself, that this module should exist at all. If you find this little module useful or you think that it has some potential, please star the project or open issues requiring functionalities.
+
+## OpenSource and the necessity of real support and charge for my time.
+
+[How to Charge for your Open Source](http://www.mikeperham.com/2015/11/23/how-to-charge-for-your-open-source/) by Mike Perham brings good arguments on the necessity to charge for work done by developers, even in the Open Source world.
+
+I myself have started a lot of Open Source project that, eventually, are all dead because I wasn't able to dedicate the right amount of time to them.
+
+I am hoping to find the necessary funds to keep maintain this project.
+
+I am starting with only an Open Source version, and then move to an enterprise version adding the necessary features.
+
 
 ## License
 
