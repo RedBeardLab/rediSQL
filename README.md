@@ -12,9 +12,19 @@ Even basic SQL is very powerful and years upon years of experience on several SQ
 
 Between all the SQL implementation, the one that best fitted the need for this module is definitely SQLite, for its velocity, portability, simplicity and capability to work in memory.
 
-## Usage
+## Getting start
 
-You can get started simply downloading the git repo:
+You can download the `.so` directly from github following the [release link](https://github.com/RedBeardLab/rediSQL/releases)
+
+With the `.so` you can start redis passing the object as argument like so:
+
+```
+./redis-server --loadmodule librediSQL.so 
+```
+
+## Compiling and contributing
+
+If you want to compile the module yourself or contribute to the project you can simply clone the repo
 
 ```
 $ git clone http://github.com/RedBeardLab/rediSQL/
@@ -32,7 +42,9 @@ Then move inside the directory and compile the module:
 $ cargo build --release
 ```
 
-At this point you can launch your redis instance loading the module:
+At this point you should have the `.so` inside the `target/release/` directory.
+
+Now launch Redis with the module load will looks similarly to this:
 
 ```
 $ ~/redis-4.0-rc1/src/redis-server --loadmodule ./target/release/librediSQL.so 
@@ -59,66 +71,7 @@ $ ~/redis-4.0-rc1/src/redis-server --loadmodule ./target/release/librediSQL.so
 6833:M 15 Dec 16:25:53.197 * The server is now ready to accept connections on port 6379
 ```
 
-## API
-
-### REDISQL.SQLITE_VERSION
-
-This function reply with the version of SQLite that is actually in use.
-
-```
-127.0.0.1:6379> REDISQL.SQLITE_VERSION
-3.15.1                               
-```
-
-### REDISQL.CREATE_DB key
-
-This function will create a new SQLite database that will be bound to `key`.
-
-```
-127.0.0.1:6379> REDISQL.CREATE_DB user 
-OK                                                    
-```
-
-### REDISQL.EXEC key statement
-
-This command will execute the statement against the database bound to `key`. 
-
-```
-$ ./redis-cli
-127.0.0.1:6379> REDISQL.CREATE_DB user 
-OK
-
-$ ./redis-cli
-127.0.0.1:6379> REDISQL.EXEC user "CREATE TABLE user(email TEXT, password TEXT)"
-OK 
-127.0.0.1:6379> REDISQL.EXEC user "INSERT INTO user VALUES('test@test.it','very secret')"
-OK
-127.0.0.1:6379> REDISQL.EXEC user "INSERT INTO user VALUES('noob@security.io', 'password')"
-OK  
-127.0.0.1:6379> REDISQL.EXEC user "SELECT * FROM user;"   
-1) 1) "test@test.it" 
-   2) "very secret" 
-2) 1) "noob@security.io" 
-   2) "password" 
-127.0.0.1:6379> 
-
-```
-
-### REDISQL.DELETE_DB key
-
-This function will remove the database bound to `key`, for now the database will be completely lost after this operation.
-
-This function is equivalent to `DELL key` however it won't let you delete keys that are not DBs.
-
-```
-127.0.0.1:6379> REDISQL.DELETE_DB user
-OK                                   
-127.0.0.1:6379> REDISQL.EXEC user "SELECT * FROM user;" 
-(error) WRONGTYPE Operation against a key holding the wrong kind of value  
-```
-
 ## Walkthrough
-
 
 After starting redis with the module rediSQL it will be just the redis you learn to love:
 
@@ -131,7 +84,7 @@ OK
 "3"
 ```
 
-But you will also able to use all the API described above
+But you will also able to use all the API described below:
 
 ```
 127.0.0.1:6379> REDISQL.CREATE_DB DB
@@ -201,24 +154,121 @@ OK
 2) 1) "anana"
 ``` 
 
-Errors are not yet well managed as they should be.
-
-
 Now you can create tables, insert data on those tables, make queries, remove elements, everything.
 
-Finally all the above features can be applied to the default DB or to a databases bound to a specif key. 
+## API
 
-## Benchmark
+### REDISQL.CREATE_DB key
 
-Benchmarks are a little tricky, there are a lot of factor that may alter them, especially in this particular case.
+This function will create a new SQLite database that will be bound to `key`.
 
-However just to have an idea of the order of magnitude of insert per second I wrote a [little test](https://github.com/RedBeardLab/rediSQL/blob/381e3796ad31c231719380afb92352c54b244b8c/test/performance/rediSQL_bench.py).
+```
+127.0.0.1:6379> REDISQL.CREATE_DB user 
+OK                                                    
+```
 
-On my machine I got 1000 insert (each one in its own transaction) in 0.6 seconds which let me claim 1000 / 0.6 => 1600 insert per second.
+### REDISQL.EXEC key statement
 
-I believe that there are A LOT of possibilities to improvements this numbers but I also thinks that they are good enough for most workload.
+This command will execute the statement against the database bound to `key`. 
 
-If you need something faster, please take the time to open an issues and describe your use case.
+```
+$ ./redis-cli
+127.0.0.1:6379> REDISQL.CREATE_DB user 
+OK
+
+$ ./redis-cli
+127.0.0.1:6379> REDISQL.EXEC user "CREATE TABLE user(email TEXT, password TEXT)"
+OK 
+127.0.0.1:6379> REDISQL.EXEC user "INSERT INTO user VALUES('test@test.it','very secret')"
+OK
+127.0.0.1:6379> REDISQL.EXEC user "INSERT INTO user VALUES('noob@security.io', 'password')"
+OK  
+127.0.0.1:6379> REDISQL.EXEC user "SELECT * FROM user;"   
+1) 1) "test@test.it" 
+   2) "very secret" 
+2) 1) "noob@security.io" 
+   2) "password" 
+127.0.0.1:6379> 
+
+```
+
+## Benchmarks
+
+Benchmarks are always tricky and it definitely depends on your use case, however I can provide some number at least for `INSERT` operations.
+
+I ran a simple benchmark where I insert a tuple of 3 integers.
+
+I start establishing a baseline:
+
+```
+$ ./redis-benchmark -e -c 50 -n 500000 -r 100000 PING
+====== PING ======
+  500000 requests completed in 7.30 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+
+99.76% <= 1 milliseconds
+100.00% <= 2 milliseconds
+100.00% <= 2 milliseconds
+68483.77 requests per second
+```
+
+Now I ran my benchmark:
+
+```
+$ ./redis-benchmark -e -c 50 -n 500000 -r 100000 REDISQL.EXEC A "INSERT INTO test VALUES(__rand_int__,__rand_int__,__rand_int__);"
+====== REDISQL.EXEC A INSERT INTO test VALUES(__rand_int__,__rand_int__,__rand_int__); ======
+  500000 requests completed in 10.44 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+
+84.19% <= 1 milliseconds
+99.38% <= 2 milliseconds
+99.92% <= 3 milliseconds
+99.93% <= 9 milliseconds
+99.94% <= 10 milliseconds
+99.95% <= 11 milliseconds
+99.95% <= 13 milliseconds
+99.95% <= 14 milliseconds
+99.96% <= 15 milliseconds
+99.96% <= 78 milliseconds
+99.96% <= 79 milliseconds
+99.97% <= 80 milliseconds
+99.97% <= 89 milliseconds
+99.97% <= 90 milliseconds
+99.98% <= 91 milliseconds
+99.98% <= 94 milliseconds
+99.98% <= 95 milliseconds
+99.99% <= 96 milliseconds
+99.99% <= 98 milliseconds
+99.99% <= 99 milliseconds
+100.00% <= 100 milliseconds
+100.00% <= 101 milliseconds
+100.00% <= 101 milliseconds
+47915.67 requests per second
+```
+
+### Result
+
+Overall Redis was able to manage ~70K PING per second and the module ~50K SQL inserts per seconds.
+
+This is a very narrow test and if you care about performance, you should perform your own test; I would love if you could share your result.
+
+Overall there are a lot of opportunity to optimize the SQL.
+
+Also, keep in mind, that I am running those test in an old machine and your numbers may be different.
+
+
+## Safeness vs. Performance
+
+The tradeoff between safeness and performace is always crucial in all applications.
+
+Since Redis is born as am in-memory database, as default, also the RediSQL modules works with in memory databases, however you can create a standard, file backed, database.
+
+Also, you can adjust all the PRAGMA settings to fit your uses case.
+
 
 ## RoadMap
 
@@ -226,11 +276,11 @@ We would like to move following the necessity of the community, so ideas and use
 
 We do have already a couple of ideas: 
 
-1. Introducing concurrency and non-blocking queries. 
+[x] Introducing concurrency and non-blocking queries. 
 
-2. Stream all the statements that modify the data, everything but `SELECT`s.
+[ ] Supports for prepared statements
 
-3. A cache system to store the result of the more complex select.
+[ ] A cache system to store the result of the more complex select.
 
 But please share your thoughts.
 
@@ -261,18 +311,17 @@ However when the dimension of the dataset start to approach a terabyte you may b
 
 Of course if you use SQLite as in memory database the limiting factor will be the memory of your machine.
 
-## Limit of the module
+## Single thread
 
-Right now there are some limit on the module implementation, these limitation are because my lack of time.
+When you create a new database a new thread is started, all the operations on the database will be performed by only that thread.
 
-#### Single thread
+The choice of using a single thread, in my tests, yielded overall better performaces.
 
-Right now the module use a single thread, the good news is that the thread is a different one that the Redis thread, this means that even during long operation your redis instance will be responsive.
-
+Clearly, if the load is mainly reads, this choice will not be optimal.
 
 ## Alpha code
 
-This is extremelly alpha code, there will be definitely some rough edges and some plain bugs.
+This is alpha code, there will be definitely some rough edges and some plain bugs.
 
 I really appreciate if you take your time to report those bugs.
 
