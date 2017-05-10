@@ -60,8 +60,6 @@ pub struct Statement {
 
 impl Drop for Statement {
     fn drop(&mut self) {
-        let sql = unsafe { CStr::from_ptr(ffi::sqlite3_sql(self.stmt)) };
-        println!("DROPPED STATETMENT: {:?}", sql);
         unsafe {
             ffi::sqlite3_finalize(self.stmt);
         }

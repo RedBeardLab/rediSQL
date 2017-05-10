@@ -12,17 +12,6 @@ use std::sync::mpsc::channel;
 
 use uuid::Uuid;
 
-/*
-#[allow(dead_code)]
-#[allow(non_snake_case)]
-#[allow(non_camel_case_types)]
-#[allow(non_upper_case_globals)]
-#[allow(improper_ctypes)]
-mod ffi {
-    include!(concat!(env!("OUT_DIR"), "/bindings_redis.rs"));
-}
-*/
-
 mod sqlite;
 use sqlite as sql;
 

@@ -322,8 +322,6 @@ pub fn write_file_to_rdb(f: File,
     let lenght = f.metadata().unwrap().len();
     let blocks = lenght / block_size as u64;
 
-    println!("Dimension file: {}\n Blocks: {}", lenght, blocks);
-
     unsafe {
         ffi::RedisModule_SaveSigned.unwrap()(rdb, blocks as i64);
     }
@@ -337,7 +335,6 @@ pub fn write_file_to_rdb(f: File,
                 return Ok(());
             }
             Ok(n) => unsafe {
-                println!("Number of bytes written: {}", n);
                 ffi::RedisModule_SaveStringBuffer.unwrap()(rdb,
                                                            tw.as_slice().as_ptr() as *const i8,
                                                            n)
@@ -370,7 +367,6 @@ pub fn write_rdb_to_file(f: &mut File,
 
     for _ in 0..blocks {
         let mut dimension: libc::size_t = 0;
-        println!("About to load the string");
         let c_str_ptr = SafeRedisModuleString {
             ptr:
                 unsafe {
@@ -379,7 +375,6 @@ pub fn write_rdb_to_file(f: &mut File,
             },
         };
 
-        println!("Dimension: {}", dimension);
         if dimension == 0 {
             break;
         }
@@ -389,10 +384,6 @@ pub fn write_rdb_to_file(f: &mut File,
                                     dimension,
                                     dimension)
             };
-        println!("Buffer dimension: {}, {:?}",
-                 buffer.len(),
-                 c_str_ptr.ptr);
-
         let y = f.write_all(buffer.as_slice());
         ::mem::forget(buffer);
         match y {
