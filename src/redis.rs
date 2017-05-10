@@ -11,6 +11,8 @@ use std::io::{Read, Write};
 
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 
+use std::collections::HashMap;
+
 use std;
 
 #[allow(dead_code)]
@@ -127,6 +129,12 @@ pub enum Command {
         query: String,
         client: BlockedClient,
     },
+    CompileStatement {
+        identifier: String,
+        statement: String,
+        client: BlockedClient,
+    },
+    ExecStatement,
 }
 
 pub struct BlockedClient {
@@ -162,6 +170,8 @@ fn execute_query(db: &sql::RawConnection,
 pub fn listen_and_execute(db: sql::RawConnection,
                           rx: Receiver<Command>) {
 
+    let mut statements_cache: HashMap<String, sql::Statement> =
+        HashMap::new();
     loop {
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
@@ -173,6 +183,28 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 };
 
             }
+            Ok(Command::CompileStatement { identifier,
+                                           statement,
+                                           client }) => {
+                let result = match create_statement(&db,
+                                                    identifier.clone(),
+                                                    statement) {
+                    Ok(stmt) => {
+                        match statements_cache.insert(identifier, stmt) {
+                            Some(old_stmt) => Ok(StatementPresent::Yes {stmt: sql::get_string_from_statement(old_stmt)}),
+                            None => Ok(StatementPresent::No),
+                        }
+                    }
+                    Err(e) => Err(e),
+                };
+                let to_pass = Box::into_raw(Box::new(result));
+
+                unsafe {
+                    ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
+                };
+            }
+
+            Ok(Command::ExecStatement) => {}
             Ok(Command::Stop) => return,
             Err(RecvError) => return,
         }
@@ -219,6 +251,7 @@ pub struct DBKey {
     pub tx: Sender<Command>,
     pub db: sql::RawConnection,
     pub in_memory: bool,
+    pub statements: HashMap<String, sql::Statement>,
 }
 
 pub fn create_metadata_table(db: &sql::RawConnection)
@@ -403,21 +436,20 @@ pub fn write_rdb_to_file(f: &mut File,
     Ok(())
 }
 
+enum StatementPresent {
+    No,
+    Yes { stmt: String },
+}
 
-/*
- * Create a statement
- *
- * Input: A DB a Statement identifier and a Statement string
- *
- * Check that the DB exist
- * Compile the statement
- * Add the statement to an hash map Identifier => Compiled Statement
- *
- * /
+fn create_statement(db: &sql::RawConnection,
+                    identifier: String,
+                    statement: String)
+                    -> Result<sql::Statement, sql::SQLite3Error> {
 
-
-
-
-
-
-
+    let stmt = sql::create_statement(db, statement.clone())?;
+    insert_metadata(db,
+                    String::from("statement"),
+                    identifier.clone(),
+                    statement)?;
+    Ok(stmt)
+}

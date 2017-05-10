@@ -6,9 +6,10 @@ use std::mem;
 use std::ptr;
 use std::fs::{remove_file, File};
 
-
 use std::thread;
 use std::sync::mpsc::channel;
+
+use std::collections::HashMap;
 
 use uuid::Uuid;
 
@@ -29,8 +30,6 @@ use sqlite as sql;
 mod redis;
 use redis as r;
 use redis::RedisReply;
-
-
 
 extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::ffi::RedisModuleString,
@@ -192,6 +191,7 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                         tx: tx,
                                         db: rc.clone(),
                                         in_memory: in_memory,
+                                        statements: HashMap::new(),
                                     };
                                     thread::spawn(move || {
                                         r::listen_and_execute(rc, rx);
@@ -336,6 +336,7 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
                                                 tx: tx,
                                                 db: in_mem.clone(),
                                                 in_memory: true,
+                                                statements: HashMap::new(),
                                             };
 
                                             thread::spawn(move || { 

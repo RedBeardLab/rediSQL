@@ -60,11 +60,20 @@ pub struct Statement {
 
 impl Drop for Statement {
     fn drop(&mut self) {
-        let sql = unsafe { CStr::from_ptr(ffi::sqlite3_sql(self.stmt)) };
-        println!("DROPPED STATETMENT: {:?}", sql);
         unsafe {
             ffi::sqlite3_finalize(self.stmt);
         }
+    }
+}
+
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let sql = unsafe {
+            CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
+                .to_string_lossy()
+                .into_owned()
+        };
+        write!(f, "{}", sql)
     }
 }
 
@@ -75,7 +84,6 @@ impl Drop for RawConnection {
         }
     }
 }
-
 
 pub fn create_statement(conn: &RawConnection,
                         query: String)
@@ -212,7 +220,6 @@ pub enum Entity {
     DONE,
 }
 
-
 pub type Row = Vec<Entity>;
 
 impl Iterator for Cursor {
@@ -314,4 +321,12 @@ pub fn backup_should_step_again(result: i32) -> bool {
 
 pub fn backup_complete_with_done(result: i32) -> bool {
     result == ffi::SQLITE_DONE
+}
+
+pub fn get_string_from_statement(stmt: Statement) -> String {
+    unsafe {
+        CStr::from_ptr(ffi::sqlite3_sql(stmt.stmt))
+            .to_string_lossy()
+            .into_owned()
+    }
 }
