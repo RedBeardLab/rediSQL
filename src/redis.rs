@@ -134,7 +134,11 @@ pub enum Command {
         statement: String,
         client: BlockedClient,
     },
-    ExecStatement,
+    ExecStatement {
+        identifier: String,
+        arguments: Vec<String>,
+        client: BlockedClient,
+    },
 }
 
 pub struct BlockedClient {
@@ -149,23 +153,45 @@ pub enum QueryResult {
     Array { array: Vec<sql::Row> },
 }
 
+fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
+    match cursor {
+        sql::Cursor::OKCursor => QueryResult::OK,
+        sql::Cursor::DONECursor => QueryResult::DONE,
+        sql::Cursor::RowsCursor { .. } => {
+            let y = QueryResult::Array {
+                array: cursor.collect::<Vec<sql::Row>>(),
+            };
+            return y;
+        }
+    }
+}
+
 fn execute_query(db: &sql::RawConnection,
                  query: String)
                  -> Result<QueryResult, sql::SQLite3Error> {
 
     let stmt = sql::create_statement(&db, query.clone())?;
-    let cursor = sql::execute_statement(stmt)?;
-    match cursor {
-        sql::Cursor::OKCursor => Ok(QueryResult::OK),
-        sql::Cursor::DONECursor => Ok(QueryResult::DONE),
-        sql::Cursor::RowsCursor { .. } => {
-            Ok(QueryResult::Array {
-                array: cursor.collect::<Vec<sql::Row>>(),
-            })
-        }
-    }
+    let cursor = sql::execute_statement(&stmt)?;
+    Ok(cursor_to_query_result(cursor))
 }
 
+fn bind_statement<'a>
+    (db: &sql::RawConnection,
+     stmt: &'a sql::Statement,
+     arguments: Vec<String>)
+     -> Result<&'a sql::Statement, sql::SQLite3Error> {
+
+    let bind: Result<Vec<()>, _> = arguments.iter()
+        .enumerate()
+        .map(|(i, argument)| {
+            sql::bind_text(&db, &stmt, (i as i32 + 1), argument.clone())
+        })
+        .collect();
+    match bind {
+        Err(e) => Err(e),
+        _ => Ok(stmt),
+    }
+}
 
 pub fn listen_and_execute(db: sql::RawConnection,
                           rx: Receiver<Command>) {
@@ -191,7 +217,9 @@ pub fn listen_and_execute(db: sql::RawConnection,
                                                     statement) {
                     Ok(stmt) => {
                         match statements_cache.insert(identifier, stmt) {
-                            Some(old_stmt) => Ok(StatementPresent::Yes {stmt: sql::get_string_from_statement(old_stmt)}),
+                            Some(old_stmt) => {
+                                Ok(StatementPresent::Yes {stmt: sql::get_string_from_statement(old_stmt)})
+                            }
                             None => Ok(StatementPresent::No),
                         }
                     }
@@ -204,16 +232,43 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 };
             }
 
-            Ok(Command::ExecStatement) => {}
+            Ok(Command::ExecStatement { identifier,
+                                        arguments,
+                                        client }) => {
+                let result = match statements_cache.get(&identifier) {
+                    None => Err(None),
+                    Some(stmt) => {
+                        let bind = bind_statement(&db, stmt, arguments);
+                        match bind {
+                            Ok(stmt) => {
+                                let cursor = sql::execute_statement(stmt);
+                                match cursor {
+                                    Err(e) => Err(Some(e)),
+                                    Ok(cursor) => {
+                                        Ok(cursor_to_query_result(cursor))
+                                    }
+                                }
+                            }
+                            Err(e) => Err(Some(e)),
+                        }
+                    }
+                };
+                let to_pass = Box::into_raw(Box::new(result));
+
+                unsafe {
+                    ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
+                };
+
+            }
             Ok(Command::Stop) => return,
             Err(RecvError) => return,
         }
     }
 }
 
-fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
-                            s: String)
-                            -> i32 {
+pub fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
+                                s: String)
+                                -> i32 {
     let s = CString::new(s).unwrap();
     unsafe {
         ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, s.as_ptr())
@@ -263,7 +318,7 @@ pub fn create_metadata_table(db: &sql::RawConnection)
     match sql::create_statement(&db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
-            match sql::execute_statement(stmt) {
+            match sql::execute_statement(&stmt) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(e),
             }
@@ -289,7 +344,7 @@ pub fn insert_metadata(db: &sql::RawConnection,
                     Ok(()) => match sql::bind_text(&db, &stmt, 3, value) {
                         Err(e) => Err(e),
                         Ok(()) => {
-                            match sql::execute_statement(stmt) {
+                            match sql::execute_statement(&stmt) {
                                 Ok(_) => {
                                     Ok(())
                                 },
@@ -436,7 +491,7 @@ pub fn write_rdb_to_file(f: &mut File,
     Ok(())
 }
 
-enum StatementPresent {
+pub enum StatementPresent {
     No,
     Yes { stmt: String },
 }

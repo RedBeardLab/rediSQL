@@ -2,6 +2,7 @@ use std::mem;
 use std::ptr;
 use std::fmt;
 use std::ffi::{CString, CStr};
+use std::sync::{Mutex, MutexGuard};
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -53,19 +54,6 @@ pub struct RawConnection {
 
 unsafe impl Send for RawConnection {}
 
-#[derive(Clone)]
-pub struct Statement {
-    stmt: *mut ffi::sqlite3_stmt,
-}
-
-impl Drop for Statement {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::sqlite3_finalize(self.stmt);
-        }
-    }
-}
-
 impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let sql = unsafe {
@@ -74,6 +62,27 @@ impl fmt::Display for Statement {
                 .into_owned()
         };
         write!(f, "{}", sql)
+    }
+}
+
+pub struct Statement {
+    stmt: *mut ffi::sqlite3_stmt,
+    lock: Mutex<()>,
+}
+
+impl Statement {
+    fn new(s: *mut ffi::sqlite3_stmt) -> Statement {
+        Statement {
+            stmt: s,
+            lock: Mutex::new(()),
+        }
+    }
+}
+impl Drop for Statement {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::sqlite3_finalize(self.stmt);
+        }
     }
 }
 
@@ -102,8 +111,15 @@ pub fn create_statement(conn: &RawConnection,
                                 ptr::null_mut())
     };
     match r {
-        ffi::SQLITE_OK => Ok(Statement { stmt: stmt }),
+        ffi::SQLITE_OK => Ok(Statement::new(stmt)),
         _ => Err(generate_sqlite3_error(conn.db)),
+    }
+}
+
+pub fn reset_statement(stmt: &Statement) {
+    unsafe {
+        ffi::sqlite3_reset(stmt.stmt);
+        ffi::sqlite3_clear_bindings(stmt.stmt);
     }
 }
 
@@ -127,14 +143,14 @@ pub fn open_connection(path: String)
     }
 }
 
-pub enum Cursor {
+pub enum Cursor<'a> {
     OKCursor,
     DONECursor,
     RowsCursor {
-        stmt: Statement,
         num_columns: i32,
         types: Vec<EntityType>,
         previous_status: i32,
+        stmt: &'a Statement,
     },
 }
 
@@ -163,7 +179,7 @@ pub fn bind_text(db: &RawConnection,
     }
 }
 
-pub fn execute_statement(stmt: Statement)
+pub fn execute_statement(stmt: &Statement)
                          -> Result<Cursor, SQLite3Error> {
 
     match unsafe { ffi::sqlite3_step(stmt.stmt) } {
@@ -197,9 +213,7 @@ pub fn execute_statement(stmt: Statement)
                 ffi::sqlite3_db_handle(stmt.stmt)
             }))
         }
-
     }
-
 }
 
 pub enum EntityType {
@@ -222,7 +236,7 @@ pub enum Entity {
 
 pub type Row = Vec<Entity>;
 
-impl Iterator for Cursor {
+impl<'a> Iterator for Cursor<'a> {
     type Item = Row;
 
     fn next(&mut self) -> Option<Self::Item> {
