@@ -2,7 +2,9 @@ use std::mem;
 use std::ptr;
 use std::fmt;
 use std::ffi::{CString, CStr};
-use std::sync::{Mutex, MutexGuard};
+use std::error;
+
+use redisql_error as err;
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -12,6 +14,7 @@ mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
+#[derive(Clone)]
 pub struct SQLite3Error {
     pub code: i32,
     pub error_message: String,
@@ -47,6 +50,20 @@ impl fmt::Display for SQLite3Error {
     }
 }
 
+impl fmt::Debug for SQLite3Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl error::Error for SQLite3Error {
+    fn description(&self) -> &str {
+        self.error_message.as_str()
+    }
+}
+
+impl err::RediSQLErrorTrait for SQLite3Error {}
+
 #[derive(Clone)]
 pub struct RawConnection {
     db: *mut ffi::sqlite3,
@@ -67,15 +84,11 @@ impl fmt::Display for Statement {
 
 pub struct Statement {
     stmt: *mut ffi::sqlite3_stmt,
-    lock: Mutex<()>,
 }
 
 impl Statement {
     fn new(s: *mut ffi::sqlite3_stmt) -> Statement {
-        Statement {
-            stmt: s,
-            lock: Mutex::new(()),
-        }
+        Statement { stmt: s }
     }
 }
 impl Drop for Statement {

@@ -1,6 +1,7 @@
 
 extern crate libc;
 extern crate uuid;
+extern crate fnv;
 
 use std::ffi::{CString, CStr};
 use std::string;
@@ -12,8 +13,14 @@ use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+use self::fnv::FnvHashMap;
 
 use std;
+use std::fmt;
+use std::error;
+
+use redisql_error as err;
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -139,6 +146,11 @@ pub enum Command {
         arguments: Vec<String>,
         client: BlockedClient,
     },
+    UpdateStatement {
+        identifier: String,
+        statement: String,
+        client: BlockedClient,
+    },
 }
 
 pub struct BlockedClient {
@@ -193,11 +205,32 @@ fn bind_statement<'a>
     }
 }
 
+pub struct RedisError {
+    pub msg: String,
+}
+
+impl fmt::Display for RedisError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ERR - {}", self.msg)
+    }
+}
+
+impl fmt::Debug for RedisError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl error::Error for RedisError {
+    fn description(&self) -> &str {
+        self.msg.as_str()
+    }
+}
+
 pub fn listen_and_execute(db: sql::RawConnection,
                           rx: Receiver<Command>) {
 
-    let mut statements_cache: HashMap<String, sql::Statement> =
-        HashMap::new();
+    let mut statements_cache = FnvHashMap::default();
     loop {
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
@@ -209,22 +242,68 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 };
 
             }
+            Ok(Command::UpdateStatement { identifier,
+                                          statement,
+                                          client }) => {
+                let result =
+                    match statements_cache.entry(identifier.clone()) {
+                        Entry::Vacant(_) => {
+                            let err = RedisError {
+                                msg: String::from("Statement does not \
+                                                   exists yet, \
+                                                   impossible to \
+                                                   update."),
+                            };
+                            Err(err::RediSQLError::from(err))
+                        }
+                        Entry::Occupied(mut o) => {
+                            match create_statement(&db,
+                                                   identifier.clone(),
+                                                   statement) {
+                                Ok(stmt) => {
+                                    o.insert(stmt);
+                                    Ok(())
+                                }
+                                Err(e) => Err(e),
+                            }
+                        }
+                    };
+
+                let to_pass = Box::into_raw(Box::new(result));
+                unsafe {
+                    ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
+                };
+
+            }
             Ok(Command::CompileStatement { identifier,
                                            statement,
                                            client }) => {
-                let result = match create_statement(&db,
-                                                    identifier.clone(),
-                                                    statement) {
-                    Ok(stmt) => {
-                        match statements_cache.insert(identifier, stmt) {
-                            Some(old_stmt) => {
-                                Ok(StatementPresent::Yes {stmt: sql::get_string_from_statement(old_stmt)})
+
+                let result =
+                    match statements_cache.entry(identifier.clone()) {
+                        Entry::Vacant(v) => {
+                            match create_statement(&db,
+                                                   identifier.clone(),
+                                                   statement) {
+                                Ok(stmt) => {
+                                    v.insert(stmt);
+                                    Ok(())
+                                }
+                                Err(e) => Err(e),
                             }
-                            None => Ok(StatementPresent::No),
                         }
-                    }
-                    Err(e) => Err(e),
-                };
+                        Entry::Occupied(_) => {
+                            let err = RedisError {
+                                msg: String::from("Statement already \
+                                                   existsm, impossible \
+                                                   to overwrite it \
+                                                   with this command, \
+                                                   try with UPDATE_STATEMENT"),
+                            };
+                            Err(err::RediSQLError::from(err))
+                        }
+                    };
+
                 let to_pass = Box::into_raw(Box::new(result));
 
                 unsafe {
@@ -238,6 +317,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 let result = match statements_cache.get(&identifier) {
                     None => Err(None),
                     Some(stmt) => {
+                        sql::reset_statement(stmt);
                         let bind = bind_statement(&db, stmt, arguments);
                         match bind {
                             Ok(stmt) => {
@@ -499,7 +579,7 @@ pub enum StatementPresent {
 fn create_statement(db: &sql::RawConnection,
                     identifier: String,
                     statement: String)
-                    -> Result<sql::Statement, sql::SQLite3Error> {
+                    -> Result<sql::Statement, err::RediSQLError> {
 
     let stmt = sql::create_statement(db, statement.clone())?;
     insert_metadata(db,
