@@ -451,6 +451,96 @@ extern "C" fn UpdateStatement(ctx: *mut r::ffi::RedisModuleCtx,
 }
 
 #[allow(non_snake_case)]
+extern "C" fn DeleteStatement(ctx: *mut r::ffi::RedisModuleCtx,
+                              argv: *mut *mut r::ffi::RedisModuleString,
+                              argc: ::std::os::raw::c_int)
+                              -> i32 {
+    let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
+    match argvector.len() {
+        3 => {
+
+            let key_name = r::create_rm_string(ctx, argvector[1].clone());
+            let key = unsafe {
+                r::ffi::Export_RedisModule_OpenKey(ctx,
+                                              key_name,
+                                              r::ffi::REDISMODULE_WRITE)
+            };
+            let safe_key = r::RedisKey { key: key };
+            let key_type =
+                unsafe {
+                    r::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
+                };
+
+            if unsafe {
+                r::ffi::DBType ==
+                r::ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key)
+            } {
+
+                let db_ptr = unsafe {
+                    r::ffi::RedisModule_ModuleTypeGetValue.unwrap()(safe_key.key) as *mut r::DBKey
+                };
+
+
+                let db: Box<r::DBKey> = unsafe { Box::from_raw(db_ptr) };
+
+                let ch = db.tx.clone();
+
+                std::mem::forget(db);
+
+                let blocked_client = r::BlockedClient {
+                    client:
+                        unsafe {
+                        r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                                              Some(reply_create_statement),
+                                                              Some(timeout),
+                                                              Some(free_privdata),
+                                                              10000)
+                    },
+                };
+
+                let cmd = r::Command::DeleteStatement {
+                    identifier: argvector[2].clone(),
+                    client: blocked_client,
+                };
+
+                match ch.send(cmd) {
+                    Ok(()) => r::ffi::REDISMODULE_OK,
+                    Err(_) => r::ffi::REDISMODULE_OK,
+                }
+
+            } else {
+                match key_type {
+                    r::ffi::REDISMODULE_KEYTYPE_EMPTY => {
+                        let error = CString::new("ERR - Error the key \
+                                                  is empty")
+                            .unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                    _ => {
+                        let error = CStr::from_bytes_with_nul(r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                }
+            }
+        }
+        _ => {
+            let error = CString::new("Wrong number of arguments, it \
+                                      accepts 3")
+                .unwrap();
+            unsafe {
+                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
+                                                       error.as_ptr())
+            }
+        } 
+    }
+}
+
+
+#[allow(non_snake_case)]
 extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                        argv: *mut *mut r::ffi::RedisModuleString,
                        argc: ::std::os::raw::c_int)
@@ -765,6 +855,13 @@ pub extern "C" fn RedisModule_OnLoad(ctx: *mut r::ffi::RedisModuleCtx,
     match register_function(ctx,
                             String::from("REDISQL.UPDATE_STATEMENT"),
                             UpdateStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function(ctx,
+                            String::from("REDISQL.DELETE_STATEMENT"),
+                            DeleteStatement) {
         Ok(()) => (),
         Err(e) => return e,
     }

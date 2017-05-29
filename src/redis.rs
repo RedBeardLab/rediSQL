@@ -151,6 +151,10 @@ pub enum Command {
         statement: String,
         client: BlockedClient,
     },
+    DeleteStatement {
+        identifier: String,
+        client: BlockedClient,
+    },
 }
 
 pub struct BlockedClient {
@@ -257,7 +261,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
                             Err(err::RediSQLError::from(err))
                         }
                         Entry::Occupied(mut o) => {
-                            match create_statement(&db,
+                            match update_statement(&db,
                                                    identifier.clone(),
                                                    statement) {
                                 Ok(stmt) => {
@@ -274,6 +278,33 @@ pub fn listen_and_execute(db: sql::RawConnection,
                     ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
                 };
 
+            }
+            Ok(Command::DeleteStatement { identifier, client }) => {
+                let result =
+                    match statements_cache.entry(identifier.clone()) {
+                        Entry::Vacant(_) => {
+                            let err = RedisError {
+                                msg: String::from("Statement does not \
+                                                   exists yet, \
+                                                   impossible to \
+                                                   delete."),
+                            };
+                            Err(err::RediSQLError::from(err))
+                        }
+                        Entry::Occupied(o) => {
+                            match remove_statement(&db, identifier) {
+                                Ok(()) => {
+                                o.remove_entry();
+                                Ok(())
+                            }
+                                Err(e) => Err(err::RediSQLError::from(e)),
+                            }
+                        }
+                    };
+                let to_pass = Box::into_raw(Box::new(result));
+                unsafe {
+                    ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
+                };
             }
             Ok(Command::CompileStatement { identifier,
                                            statement,
@@ -438,6 +469,34 @@ pub fn insert_metadata(db: &sql::RawConnection,
     }
 }
 
+pub fn update_statement_metadata(db: &sql::RawConnection,
+                                 key: String,
+                                 value: String)
+                                 -> Result<(), sql::SQLite3Error> {
+    let statement = String::from("UPDATE RediSQLMetadata SET value = ? \
+                                  WHERE data_type = 'statement' AND \
+                                  key = ?");
+
+    let stmt = sql::create_statement(&db, statement)?;
+    sql::bind_text(&db, &stmt, 1, value)?;
+    sql::bind_text(&db, &stmt, 2, key)?;
+    sql::execute_statement(&stmt)?;
+    Ok(())
+}
+
+pub fn remove_statement_metadata(db: &sql::RawConnection,
+                                 key: String)
+                                 -> Result<(), sql::SQLite3Error> {
+    let statement = String::from("DELETE FROM RediSQLMetadata WHERE \
+                                  data_type = 'statement' AND key = ?");
+
+    let stmt = sql::create_statement(&db, statement)?;
+    sql::bind_text(&db, &stmt, 2, key)?;
+    sql::execute_statement(&stmt)?;
+    Ok(())
+}
+
+
 fn parse_args(argv: *mut *mut ffi::RedisModuleString,
               argc: i32)
               -> Result<Vec<String>, string::FromUtf8Error> {
@@ -571,11 +630,6 @@ pub fn write_rdb_to_file(f: &mut File,
     Ok(())
 }
 
-pub enum StatementPresent {
-    No,
-    Yes { stmt: String },
-}
-
 fn create_statement(db: &sql::RawConnection,
                     identifier: String,
                     statement: String)
@@ -587,4 +641,21 @@ fn create_statement(db: &sql::RawConnection,
                     identifier.clone(),
                     statement)?;
     Ok(stmt)
+}
+
+fn update_statement(db: &sql::RawConnection,
+                    identifier: String,
+                    statement: String)
+                    -> Result<sql::Statement, err::RediSQLError> {
+
+    let stmt = sql::create_statement(db, statement.clone())?;
+    update_statement_metadata(db, identifier.clone(), statement)?;
+    Ok(stmt)
+}
+
+fn remove_statement(db: &sql::RawConnection,
+                    identifier: String)
+                    -> Result<(), err::RediSQLError> {
+    remove_statement_metadata(db, identifier.clone())?;
+    Ok(())
 }

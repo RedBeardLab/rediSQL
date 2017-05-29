@@ -349,11 +349,3 @@ pub fn backup_should_step_again(result: i32) -> bool {
 pub fn backup_complete_with_done(result: i32) -> bool {
     result == ffi::SQLITE_DONE
 }
-
-pub fn get_string_from_statement(stmt: Statement) -> String {
-    unsafe {
-        CStr::from_ptr(ffi::sqlite3_sql(stmt.stmt))
-            .to_string_lossy()
-            .into_owned()
-    }
-}
