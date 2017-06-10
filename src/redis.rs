@@ -235,6 +235,37 @@ pub fn listen_and_execute(db: sql::RawConnection,
                           rx: Receiver<Command>) {
 
     let mut statements_cache = FnvHashMap::default();
+
+    let saved_statements = get_statement_metadata(&db);
+
+    match saved_statements {
+        Ok(QueryResult::Array { array }) => {
+            for row in array {
+                let identifier = match row[1] {
+                    sql::Entity::Text { ref text } => text.clone(),
+                    _ => continue,
+                };
+                let statement = match row[2] {
+                    sql::Entity::Text { ref text } => text.clone(),
+                    _ => continue,
+                };
+
+                match compile_and_insert_statement(identifier,
+                                             statement,
+                                             &db,
+                                             &mut statements_cache) {
+                    Err(e) => println!("{}", e),
+                    _ => (),
+                }
+            }
+        }
+        Err(e) => {
+            println!("{}", e);
+        }
+        _ => (),
+    }
+
+
     loop {
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
@@ -311,29 +342,10 @@ pub fn listen_and_execute(db: sql::RawConnection,
                                            client }) => {
 
                 let result =
-                    match statements_cache.entry(identifier.clone()) {
-                        Entry::Vacant(v) => {
-                            match create_statement(&db,
-                                                   identifier.clone(),
-                                                   statement) {
-                                Ok(stmt) => {
-                                    v.insert(stmt);
-                                    Ok(())
-                                }
-                                Err(e) => Err(e),
-                            }
-                        }
-                        Entry::Occupied(_) => {
-                            let err = RedisError {
-                                msg: String::from("Statement already \
-                                                   existsm, impossible \
-                                                   to overwrite it \
-                                                   with this command, \
-                                                   try with UPDATE_STATEMENT"),
-                            };
-                            Err(err::RediSQLError::from(err))
-                        }
-                    };
+                    compile_and_insert_statement(identifier,
+                                                 statement,
+                                                 &db,
+                                                 &mut statements_cache);
 
                 let to_pass = Box::into_raw(Box::new(result));
 
@@ -373,6 +385,34 @@ pub fn listen_and_execute(db: sql::RawConnection,
             }
             Ok(Command::Stop) => return,
             Err(RecvError) => return,
+        }
+    }
+}
+
+
+fn compile_and_insert_statement(identifier: String,
+                                statement: String,
+                                db: &sql::RawConnection,
+                                statements_cache: &mut HashMap<String, sql::Statement, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
+                                -> Result<(), err::RediSQLError> {
+    match statements_cache.entry(identifier.clone()) {
+        Entry::Vacant(v) => {
+            match create_statement(db, identifier.clone(), statement) {
+                Ok(stmt) => {
+                    v.insert(stmt);
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            }
+        }
+        Entry::Occupied(_) => {
+            let err = RedisError {
+                msg: String::from("Statement already existsm, \
+                                   impossible to overwrite it with \
+                                   this command, try with \
+                                   UPDATE_STATEMENT"),
+            };
+            Err(err::RediSQLError::from(err))
         }
     }
 }
@@ -496,6 +536,17 @@ pub fn remove_statement_metadata(db: &sql::RawConnection,
     Ok(())
 }
 
+pub fn get_statement_metadata
+    (db: &sql::RawConnection)
+     -> Result<QueryResult, sql::SQLite3Error> {
+
+    let statement = String::from("SELECT * FROM RediSQLMetadata WHERE \
+                                  data_type = 'statement';");
+
+    let stmt = sql::create_statement(&db, statement)?;
+    let cursor = sql::execute_statement(&stmt)?;
+    Ok(cursor_to_query_result(cursor))
+}
 
 fn parse_args(argv: *mut *mut ffi::RedisModuleString,
               argc: i32)

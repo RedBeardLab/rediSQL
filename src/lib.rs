@@ -732,6 +732,8 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
 
                                             thread::spawn(move || { 
                                                 r::listen_and_execute(in_mem, rx)});
+                                        
+
 
                                             Box::into_raw(Box::new(db)) as *mut std::os::raw::c_void
                                         }
