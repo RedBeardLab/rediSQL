@@ -1,8 +1,12 @@
 import unittest
+import os
 
 import redis
-
-
+from rmtest import ModuleTestCase
+    
+os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/debug/libredis_sql.so"
+os.environ["REDIS_PATH"] = "/home/simo/redis-4.0-rc1/src/redis-server"
+ 
 class Table():
   def __init__(self, redis, name, values, key = ""):
     self.redis = redis
@@ -36,43 +40,47 @@ class DB():
     self.redis.execute_command("DEL", self.key)
 
 
-class TestRediSQLWithExec(unittest.TestCase):
-  @classmethod
-  def setUpClass(self):
-    self.redis = redis.StrictRedis()
-   
+class TestRediSQLWithExec(ModuleTestCase('')):
+  def setUp(self):
+    self.disposable_redis = self.redis()
+    self.client = self.disposable_redis.__enter__()
+
+  def tearDown(self):
+    self.disposable_redis.__exit__(None, None, None)
+    del self.client
+
+  def exec_naked(self, *command):
+    return self.client.execute_command(*command)
+
   def exec_cmd(self, *command):
-    return self.redis.execute_command("REDISQL.EXEC", *command)
+    return self.client.execute_command("REDISQL.EXEC", *command)
 
   def create_db(self, key):
-    return self.redis.execute_command("REDISQL.CREATE_DB", key)
+    return self.client.execute_command("REDISQL.CREATE_DB", key)
 
   def delete_db(self, key):
-    return self.redis.execute_command("DEL", key)
+    return self.client.execute_command("DEL", key)
 
 class TestRediSQLExec(TestRediSQLWithExec):
-  def setUp(self):
-    pass
-
   def test_ping(self):
-    self.assertTrue(self.redis.ping())
+    self.assertTrue(self.client.ping())
 
   def test_create_table(self):
-    with DB(self.redis, "A"):
+    with DB(self.client, "A"):
       done = self.exec_cmd("A", "CREATE TABLE test1 (A INTEGER);")
       self.assertEquals(done, "DONE")
       done = self.exec_cmd("A", "DROP TABLE test1")
       self.assertEquals(done, "DONE")
 
   def test_insert(self):
-    with DB(self.redis, "B"):
-      with Table(self.redis, "test2", "(A INTEGER)", key = "B"):
+    with DB(self.client, "B"):
+      with Table(self.client, "test2", "(A INTEGER)", key = "B"):
         done = self.exec_cmd("B", "INSERT INTO test2 VALUES(2);")
         self.assertEquals(done, "DONE")
 
   def test_select(self):
-    with DB(self.redis, "C"):
-      with Table(self.redis, "test3", "(A INTEGER)", key = "C"):
+    with DB(self.client, "C"):
+      with Table(self.client, "test3", "(A INTEGER)", key = "C"):
         done = self.exec_cmd("C", "INSERT INTO test3 VALUES(2);")
         self.assertEquals(done, "DONE")
       
@@ -88,8 +96,8 @@ class TestRediSQLExec(TestRediSQLWithExec):
         self.assertEquals(result, [[2], [3], [4]])
   
   def test_single_remove(self):
-    with DB(self.redis, "D"):
-      with Table(self.redis, "test4", "(A INTEGER)", key = "D"):
+    with DB(self.client, "D"):
+      with Table(self.client, "test4", "(A INTEGER)", key = "D"):
         self.exec_cmd("D", "INSERT INTO test4 VALUES(2);")
         self.exec_cmd("D", "INSERT INTO test4 VALUES(3);")
         self.exec_cmd("D", "INSERT INTO test4 VALUES(4);")
@@ -99,21 +107,22 @@ class TestRediSQLExec(TestRediSQLWithExec):
         result = self.exec_cmd("D", "SELECT * FROM test4 ORDER BY A")
         self.assertEquals(result, [[2], [4]])
  
+  @unittest.skip("Quite slow investigate")
   def test_big_select(self):
     elements = 50
-    with DB(self.redis, "E"):
-      with Table(self.redis, "test5", "(A INTERGER)", key = "E"):
-        pipe = self.redis.pipeline(transaction=False)
+    with DB(self.client, "E"):
+      with Table(self.client, "test5", "(A INTERGER)", key = "E"):
+        pipe = self.client.pipeline(transaction=False)
         for i in xrange(elements):
           pipe.execute_command("REDISQL.EXEC", "E", 
               "INSERT INTO test5 VALUES({})".format(i))
-          pipe.execute()
+        pipe.execute()
         result = self.exec_cmd("E", "SELECT * FROM test5 ORDER BY A")
         self.assertEquals(result, [[x] for x in xrange(elements)])
  
   def test_multiple_row(self):
-    with DB(self.redis, "F"):
-      with Table(self.redis, "test6", "(A INTEGER, B REAL, C TEXT)", key= "F"):
+    with DB(self.client, "F"):
+      with Table(self.client, "test6", "(A INTEGER, B REAL, C TEXT)", key= "F"):
         self.exec_cmd("F", "INSERT INTO test6 VALUES(1, 1.0, '1point1')")
         self.exec_cmd("F", "INSERT INTO test6 VALUES(2, 2.0, '2point2')")
         self.exec_cmd("F", "INSERT INTO test6 VALUES(3, 3.0, '3point3')")
@@ -128,9 +137,9 @@ class TestRediSQLExec(TestRediSQLWithExec):
              [5L, 5.0, '5point5']])
         
   def test_join(self):
-    with DB(self.redis, "G"):
-      with Table(self.redis, "testA", "(A INTEGER, B INTEGER)", key = "G"):
-        with Table(self.redis, "testB", "(C INTEGER, D INTEGER)", key = "G"):
+    with DB(self.client, "G"):
+      with Table(self.client, "testA", "(A INTEGER, B INTEGER)", key = "G"):
+        with Table(self.client, "testB", "(C INTEGER, D INTEGER)", key = "G"):
           self.exec_cmd("G", "INSERT INTO testA VALUES(1, 2)")
           self.exec_cmd("G", "INSERT INTO testA VALUES(3, 4)")
           self.exec_cmd("G", "INSERT INTO testB VALUES(1, 2)")
@@ -143,39 +152,83 @@ class TestRediSQLExec(TestRediSQLWithExec):
     pass
 
 class NoDefaultDB(TestRediSQLWithExec):
-
   def test_that_we_need_a_key(self):
     with self.assertRaises(redis.exceptions.ResponseError):
       self.exec_cmd("SELECT 'foo';")
 
 class TestRediSQLKeys(TestRediSQLWithExec):
-
   def test_create_and_destroy_key(self):
     ok = self.create_db("A_REDISQL")
     self.assertEquals(ok, "OK")
-    keys = self.redis.keys("A_REDISQL")
+    keys = self.client.keys("A_REDISQL")
     self.assertEquals(["A_REDISQL"], keys)
     ok = self.delete_db("A_REDISQL")
-    keys = self.redis.keys("A_REDISQL")
+    keys = self.client.keys("A_REDISQL")
     self.assertEquals([], keys)
 
   def test_create_table_inside_key(self):
-    with DB(self.redis, "A"):
+    with DB(self.client, "A"):
       done = self.exec_cmd("A", "CREATE TABLE t1 (A INTEGER);")
       self.assertEquals(done, "DONE")
       done = self.exec_cmd("A", "DROP TABLE t1")
       self.assertEquals(done, "DONE")
 
   def test_insert_into_table(self):
-    with DB(self.redis, "B"):
-      with Table(self.redis, "t2", "(A INTEGER, B INTEGER)", key = "B"):
+    with DB(self.client, "B"):
+      with Table(self.client, "t2", "(A INTEGER, B INTEGER)", key = "B"):
         done = self.exec_cmd("B", "INSERT INTO t2 VALUES(1,2)")
         self.assertEquals(done, "DONE")
         result = self.exec_cmd("B", "SELECT * FROM t2")
         self.assertEquals(result, [[1, 2]])
 
 
+class TestStatements(TestRediSQLWithExec):
+  def test_create_statement(self):
+    with DB(self.client, "A"):
+      with Table(self.client, "t1", "(A INTEGER)", key = "A"):
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
+        self.assertEquals(ok, "OK")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        self.assertEquals(done, "DONE")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
+        self.assertEquals(done, "DONE")
+        result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
+        self.assertEquals(result, [[3], [4]])
+
+  def test_update_statement(self):
+    with DB(self.client, "A"):
+      with Table(self.client, "t1", "(A INTEGER)", key = "A"):
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
+        self.assertEquals(ok, "OK")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        self.assertEquals(done, "DONE")
+        ok = self.exec_naked("REDISQL.UPDATE_STATEMENT", "A", "insert", "insert into t1 values(? + 10001);")
+        self.assertEquals(ok, "OK")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
+        self.assertEquals(done, "DONE")
+        result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
+        self.assertEquals(result, [[3], [10005]])
+
+  def test_rds_persistency(self):
+    with DB(self.client, "A"):
+      with Table(self.client, "t1", "(A INTEGER)", key = "A"):
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
+        self.assertEquals(ok, "OK")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        self.assertEquals(done, "DONE")
+        self.disposable_redis.dump_and_reload()
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
+        self.assertEquals(done, "DONE")
+        result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
+        self.assertEquals(result, [[3], [4]])
+
+
+
+
+
+
+
 if __name__ == '__main__':
-  unittest.main()
+   unittest.main()
 
 

@@ -6,11 +6,14 @@ use std::mem;
 use std::ptr;
 use std::fs::{remove_file, File};
 
-
 use std::thread;
 use std::sync::mpsc::channel;
 
+use std::collections::HashMap;
+
 use uuid::Uuid;
+
+mod redisql_error;
 
 mod sqlite;
 use sqlite as sql;
@@ -18,8 +21,6 @@ use sqlite as sql;
 mod redis;
 use redis as r;
 use redis::RedisReply;
-
-
 
 extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::ffi::RedisModuleString,
@@ -39,6 +40,44 @@ extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
     }
 }
 
+extern "C" fn reply_exec_statement(ctx: *mut r::ffi::RedisModuleCtx,
+                         _argv: *mut *mut r::ffi::RedisModuleString,
+                         _argc: ::std::os::raw::c_int)
+                         -> i32 {
+    let result =
+        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<r::QueryResult, Option<sql::SQLite3Error>>};
+    let result: Box<Result<r::QueryResult, Option<sql::SQLite3Error>>> =
+        unsafe { Box::from_raw(result) };
+    match *result {
+        Ok(r::QueryResult::OK) => r::reply_with_ok(ctx),
+        Ok(r::QueryResult::DONE) => r::reply_with_done(ctx),
+        Ok(r::QueryResult::Array { array }) => {
+            r::reply_with_array(ctx, array)
+        }
+        Err(Some(error)) => error.reply(ctx),
+        Err(None) => {
+            r::reply_with_simple_string(ctx,
+                                        String::from("Statement not \
+                                                      found!"))
+        }
+    }
+}
+
+extern "C" fn reply_create_statement(ctx: *mut r::ffi::RedisModuleCtx,
+                         _argv: *mut *mut r::ffi::RedisModuleString,
+                         _argc: ::std::os::raw::c_int)
+                         -> i32 {
+    let result =
+        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<(), sql::SQLite3Error>};
+    let result: Box<Result<(), sql::SQLite3Error>> =
+        unsafe { Box::from_raw(result) };
+    match *result {
+        Ok(()) => r::reply_with_ok(ctx),
+        Err(error) => error.reply(ctx),
+    }
+}
+
+
 extern "C" fn timeout(ctx: *mut r::ffi::RedisModuleCtx,
                       _argv: *mut *mut r::ffi::RedisModuleString,
                       _argc: ::std::os::raw::c_int)
@@ -48,6 +87,98 @@ extern "C" fn timeout(ctx: *mut r::ffi::RedisModuleCtx,
 
 
 extern "C" fn free_privdata(_arg: *mut ::std::os::raw::c_void) {}
+
+
+#[allow(non_snake_case)]
+extern "C" fn ExecStatement(ctx: *mut r::ffi::RedisModuleCtx,
+                            argv: *mut *mut r::ffi::RedisModuleString,
+                            argc: ::std::os::raw::c_int)
+                            -> i32 {
+    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+
+    match argvector.len() {
+        0...2 => {
+            let error = CString::new("Wrong number of arguments, it \
+                                      needs at least 3")
+                .unwrap();
+            unsafe {
+                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
+                                                       error.as_ptr())
+            }
+        }
+        _ => {
+            let key_name = r::create_rm_string(ctx, argvector[1].clone());
+            let key = unsafe {
+                r::ffi::Export_RedisModule_OpenKey(ctx,
+                                              key_name,
+                                              r::ffi::REDISMODULE_WRITE)
+            };
+            let safe_key = r::RedisKey { key: key };
+            let key_type =
+                unsafe {
+                    r::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
+                };
+            if unsafe {
+                r::ffi::DBType ==
+                r::ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key)
+            } {
+
+                let db_ptr = unsafe {
+                    r::ffi::RedisModule_ModuleTypeGetValue.unwrap()(safe_key.key) as *mut r::DBKey
+                };
+
+
+                let db: Box<r::DBKey> = unsafe { Box::from_raw(db_ptr) };
+
+                let ch = db.tx.clone();
+
+                std::mem::forget(db);
+
+                let blocked_client = r::BlockedClient {
+                    client:
+                        unsafe {
+                        r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                                              Some(reply_exec_statement),
+                                                              Some(timeout),
+                                                              Some(free_privdata),
+                                                              10000)
+                    },
+                };
+
+                let cmd = r::Command::ExecStatement {
+                    identifier: argvector[2].clone(),
+                    arguments: argvector[3 ..].to_vec(),
+                    client: blocked_client,
+                };
+
+                match ch.send(cmd) {
+                    Ok(()) => r::ffi::REDISMODULE_OK,
+                    Err(_) => r::ffi::REDISMODULE_OK,
+                }
+
+            } else {
+                match key_type {
+                    r::ffi::REDISMODULE_KEYTYPE_EMPTY => {
+                        let error = CString::new("ERR - Error the key \
+                                                  is empty")
+                            .unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                    _ => {
+                        let error = CStr::from_bytes_with_nul(r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                }
+
+            }
+        }
+    }
+}
+
 
 
 #[allow(non_snake_case)]
@@ -140,6 +271,276 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
 }
 
 #[allow(non_snake_case)]
+extern "C" fn CreateStatement(ctx: *mut r::ffi::RedisModuleCtx,
+                              argv: *mut *mut r::ffi::RedisModuleString,
+                              argc: ::std::os::raw::c_int)
+                              -> i32 {
+    let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
+    match argvector.len() {
+        4 => {
+
+            let key_name = r::create_rm_string(ctx, argvector[1].clone());
+            let key = unsafe {
+                r::ffi::Export_RedisModule_OpenKey(ctx,
+                                              key_name,
+                                              r::ffi::REDISMODULE_WRITE)
+            };
+            let safe_key = r::RedisKey { key: key };
+            let key_type =
+                unsafe {
+                    r::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
+                };
+
+            if unsafe {
+                r::ffi::DBType ==
+                r::ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key)
+            } {
+
+                let db_ptr = unsafe {
+                    r::ffi::RedisModule_ModuleTypeGetValue.unwrap()(safe_key.key) as *mut r::DBKey
+                };
+
+
+                let db: Box<r::DBKey> = unsafe { Box::from_raw(db_ptr) };
+
+                let ch = db.tx.clone();
+
+                std::mem::forget(db);
+
+                let blocked_client = r::BlockedClient {
+                    client:
+                        unsafe {
+                        r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                                              Some(reply_create_statement),
+                                                              Some(timeout),
+                                                              Some(free_privdata),
+                                                              10000)
+                    },
+                };
+
+                let cmd = r::Command::CompileStatement {
+                    identifier: argvector[2].clone(),
+                    statement: argvector[3].clone(),
+                    client: blocked_client,
+                };
+
+                match ch.send(cmd) {
+                    Ok(()) => r::ffi::REDISMODULE_OK,
+                    Err(_) => r::ffi::REDISMODULE_OK,
+                }
+
+            } else {
+                match key_type {
+                    r::ffi::REDISMODULE_KEYTYPE_EMPTY => {
+                        let error = CString::new("ERR - Error the key \
+                                                  is empty")
+                            .unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                    _ => {
+                        let error = CStr::from_bytes_with_nul(r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                }
+            }
+        }
+        _ => {
+            let error = CString::new("Wrong number of arguments, it \
+                                      accepts 4")
+                .unwrap();
+            unsafe {
+                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
+                                                       error.as_ptr())
+            }
+        } 
+    }
+}
+
+#[allow(non_snake_case)]
+extern "C" fn UpdateStatement(ctx: *mut r::ffi::RedisModuleCtx,
+                              argv: *mut *mut r::ffi::RedisModuleString,
+                              argc: ::std::os::raw::c_int)
+                              -> i32 {
+    let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
+    match argvector.len() {
+        4 => {
+
+            let key_name = r::create_rm_string(ctx, argvector[1].clone());
+            let key = unsafe {
+                r::ffi::Export_RedisModule_OpenKey(ctx,
+                                              key_name,
+                                              r::ffi::REDISMODULE_WRITE)
+            };
+            let safe_key = r::RedisKey { key: key };
+            let key_type =
+                unsafe {
+                    r::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
+                };
+
+            if unsafe {
+                r::ffi::DBType ==
+                r::ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key)
+            } {
+
+                let db_ptr = unsafe {
+                    r::ffi::RedisModule_ModuleTypeGetValue.unwrap()(safe_key.key) as *mut r::DBKey
+                };
+
+
+                let db: Box<r::DBKey> = unsafe { Box::from_raw(db_ptr) };
+
+                let ch = db.tx.clone();
+
+                std::mem::forget(db);
+
+                let blocked_client = r::BlockedClient {
+                    client:
+                        unsafe {
+                        r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                                              Some(reply_create_statement),
+                                                              Some(timeout),
+                                                              Some(free_privdata),
+                                                              10000)
+                    },
+                };
+
+                let cmd = r::Command::UpdateStatement {
+                    identifier: argvector[2].clone(),
+                    statement: argvector[3].clone(),
+                    client: blocked_client,
+                };
+
+                match ch.send(cmd) {
+                    Ok(()) => r::ffi::REDISMODULE_OK,
+                    Err(_) => r::ffi::REDISMODULE_OK,
+                }
+
+            } else {
+                match key_type {
+                    r::ffi::REDISMODULE_KEYTYPE_EMPTY => {
+                        let error = CString::new("ERR - Error the key \
+                                                  is empty")
+                            .unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                    _ => {
+                        let error = CStr::from_bytes_with_nul(r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                }
+            }
+        }
+        _ => {
+            let error = CString::new("Wrong number of arguments, it \
+                                      accepts 4")
+                .unwrap();
+            unsafe {
+                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
+                                                       error.as_ptr())
+            }
+        } 
+    }
+}
+
+#[allow(non_snake_case)]
+extern "C" fn DeleteStatement(ctx: *mut r::ffi::RedisModuleCtx,
+                              argv: *mut *mut r::ffi::RedisModuleString,
+                              argc: ::std::os::raw::c_int)
+                              -> i32 {
+    let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
+    match argvector.len() {
+        3 => {
+
+            let key_name = r::create_rm_string(ctx, argvector[1].clone());
+            let key = unsafe {
+                r::ffi::Export_RedisModule_OpenKey(ctx,
+                                              key_name,
+                                              r::ffi::REDISMODULE_WRITE)
+            };
+            let safe_key = r::RedisKey { key: key };
+            let key_type =
+                unsafe {
+                    r::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
+                };
+
+            if unsafe {
+                r::ffi::DBType ==
+                r::ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key)
+            } {
+
+                let db_ptr = unsafe {
+                    r::ffi::RedisModule_ModuleTypeGetValue.unwrap()(safe_key.key) as *mut r::DBKey
+                };
+
+
+                let db: Box<r::DBKey> = unsafe { Box::from_raw(db_ptr) };
+
+                let ch = db.tx.clone();
+
+                std::mem::forget(db);
+
+                let blocked_client = r::BlockedClient {
+                    client:
+                        unsafe {
+                        r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                                              Some(reply_create_statement),
+                                                              Some(timeout),
+                                                              Some(free_privdata),
+                                                              10000)
+                    },
+                };
+
+                let cmd = r::Command::DeleteStatement {
+                    identifier: argvector[2].clone(),
+                    client: blocked_client,
+                };
+
+                match ch.send(cmd) {
+                    Ok(()) => r::ffi::REDISMODULE_OK,
+                    Err(_) => r::ffi::REDISMODULE_OK,
+                }
+
+            } else {
+                match key_type {
+                    r::ffi::REDISMODULE_KEYTYPE_EMPTY => {
+                        let error = CString::new("ERR - Error the key \
+                                                  is empty")
+                            .unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                    _ => {
+                        let error = CStr::from_bytes_with_nul(r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
+                        unsafe {
+                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                    }
+                    }
+                }
+            }
+        }
+        _ => {
+            let error = CString::new("Wrong number of arguments, it \
+                                      accepts 3")
+                .unwrap();
+            unsafe {
+                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
+                                                       error.as_ptr())
+            }
+        } 
+    }
+}
+
+
+#[allow(non_snake_case)]
 extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                        argv: *mut *mut r::ffi::RedisModuleString,
                        argc: ::std::os::raw::c_int)
@@ -181,6 +582,7 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                         tx: tx,
                                         db: rc.clone(),
                                         in_memory: in_memory,
+                                        statements: HashMap::new(),
                                     };
                                     thread::spawn(move || {
                                         r::listen_and_execute(rc, rx);
@@ -325,10 +727,13 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
                                                 tx: tx,
                                                 db: in_mem.clone(),
                                                 in_memory: true,
+                                                statements: HashMap::new(),
                                             };
 
                                             thread::spawn(move || { 
                                                 r::listen_and_execute(in_mem, rx)});
+                                        
+
 
                                             Box::into_raw(Box::new(db)) as *mut std::os::raw::c_void
                                         }
@@ -434,6 +839,36 @@ pub extern "C" fn RedisModule_OnLoad(ctx: *mut r::ffi::RedisModuleCtx,
         Ok(()) => (),
         Err(e) => return e,
     }
+
+    match register_function(ctx,
+                            String::from("REDISQL.CREATE_STATEMENT"),
+                            CreateStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function(ctx,
+                            String::from("REDISQL.EXEC_STATEMENT"),
+                            ExecStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function(ctx,
+                            String::from("REDISQL.UPDATE_STATEMENT"),
+                            UpdateStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function(ctx,
+                            String::from("REDISQL.DELETE_STATEMENT"),
+                            DeleteStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+
 
     r::ffi::REDISMODULE_OK
 }

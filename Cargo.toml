@@ -15,3 +15,4 @@ gcc = "0.3.45"
 [dependencies]
 libc = "0.2.21"
 uuid = { version = "0.4", features = ["v4"] }
+fnv = "1.0.5"

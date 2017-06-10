@@ -2,6 +2,9 @@ use std::mem;
 use std::ptr;
 use std::fmt;
 use std::ffi::{CString, CStr};
+use std::error;
+
+use redisql_error as err;
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -11,6 +14,7 @@ mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
+#[derive(Clone)]
 pub struct SQLite3Error {
     pub code: i32,
     pub error_message: String,
@@ -46,6 +50,20 @@ impl fmt::Display for SQLite3Error {
     }
 }
 
+impl fmt::Debug for SQLite3Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl error::Error for SQLite3Error {
+    fn description(&self) -> &str {
+        self.error_message.as_str()
+    }
+}
+
+impl err::RediSQLErrorTrait for SQLite3Error {}
+
 #[derive(Clone)]
 pub struct RawConnection {
     db: *mut ffi::sqlite3,
@@ -53,11 +71,26 @@ pub struct RawConnection {
 
 unsafe impl Send for RawConnection {}
 
-#[derive(Clone)]
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let sql = unsafe {
+            CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
+                .to_string_lossy()
+                .into_owned()
+        };
+        write!(f, "{}", sql)
+    }
+}
+
 pub struct Statement {
     stmt: *mut ffi::sqlite3_stmt,
 }
 
+impl Statement {
+    fn new(s: *mut ffi::sqlite3_stmt) -> Statement {
+        Statement { stmt: s }
+    }
+}
 impl Drop for Statement {
     fn drop(&mut self) {
         unsafe {
@@ -73,7 +106,6 @@ impl Drop for RawConnection {
         }
     }
 }
-
 
 pub fn create_statement(conn: &RawConnection,
                         query: String)
@@ -92,8 +124,15 @@ pub fn create_statement(conn: &RawConnection,
                                 ptr::null_mut())
     };
     match r {
-        ffi::SQLITE_OK => Ok(Statement { stmt: stmt }),
+        ffi::SQLITE_OK => Ok(Statement::new(stmt)),
         _ => Err(generate_sqlite3_error(conn.db)),
+    }
+}
+
+pub fn reset_statement(stmt: &Statement) {
+    unsafe {
+        ffi::sqlite3_reset(stmt.stmt);
+        ffi::sqlite3_clear_bindings(stmt.stmt);
     }
 }
 
@@ -117,14 +156,14 @@ pub fn open_connection(path: String)
     }
 }
 
-pub enum Cursor {
+pub enum Cursor<'a> {
     OKCursor,
     DONECursor,
     RowsCursor {
-        stmt: Statement,
         num_columns: i32,
         types: Vec<EntityType>,
         previous_status: i32,
+        stmt: &'a Statement,
     },
 }
 
@@ -153,7 +192,7 @@ pub fn bind_text(db: &RawConnection,
     }
 }
 
-pub fn execute_statement(stmt: Statement)
+pub fn execute_statement(stmt: &Statement)
                          -> Result<Cursor, SQLite3Error> {
 
     match unsafe { ffi::sqlite3_step(stmt.stmt) } {
@@ -187,9 +226,7 @@ pub fn execute_statement(stmt: Statement)
                 ffi::sqlite3_db_handle(stmt.stmt)
             }))
         }
-
     }
-
 }
 
 pub enum EntityType {
@@ -210,10 +247,9 @@ pub enum Entity {
     DONE,
 }
 
-
 pub type Row = Vec<Entity>;
 
-impl Iterator for Cursor {
+impl<'a> Iterator for Cursor<'a> {
     type Item = Row;
 
     fn next(&mut self) -> Option<Self::Item> {
