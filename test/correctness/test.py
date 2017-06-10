@@ -1,3 +1,6 @@
+#!/usr/bin/python -tt
+# -*- coding: utf-8 -*-
+
 import unittest
 import os
 
@@ -222,6 +225,41 @@ class TestStatements(TestRediSQLWithExec):
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4]])
 
+  def test_rds_persistency_no_statements(self):
+    with DB(self.client, "A"):
+      with Table(self.client, "t1", "(A INTEGER)", key = "A"):
+        
+        done = self.exec_cmd("A", "INSERT INTO t1 VALUES(5)")
+        self.assertEquals(done, "DONE")
+
+        self.disposable_redis.dump_and_reload()
+        done = self.exec_cmd("A", "INSERT INTO t1 VALUES(6)")
+        self.assertEquals(done, "DONE")
+        
+        result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
+        self.assertEquals(result, [[5], [6]])
+
+  def test_rds_persistency_multiple_statements(self):
+    with DB(self.client, "A"):
+      with Table(self.client, "t1", "(A INTEGER)", key = "A"):
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
+        self.assertEquals(ok, "OK")
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert più cento", "insert into t1 values(? + 100);")
+        self.assertEquals(ok, "OK")
+
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        self.assertEquals(done, "DONE")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert più cento", "3")
+        self.assertEquals(done, "DONE")
+
+        self.disposable_redis.dump_and_reload()
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
+        self.assertEquals(done, "DONE")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert più cento", "4")
+        self.assertEquals(done, "DONE")
+        
+        result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
+        self.assertEquals(result, [[3], [4], [103], [104]])
 
 
 
