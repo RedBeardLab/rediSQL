@@ -14,6 +14,8 @@ mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
+
+
 #[derive(Clone)]
 pub struct SQLite3Error {
     pub code: i32,
@@ -64,6 +66,8 @@ impl error::Error for SQLite3Error {
 
 impl err::RediSQLErrorTrait for SQLite3Error {}
 
+
+
 #[derive(Clone)]
 pub struct RawConnection {
     db: *mut ffi::sqlite3,
@@ -71,68 +75,11 @@ pub struct RawConnection {
 
 unsafe impl Send for RawConnection {}
 
-impl fmt::Display for Statement {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let sql = unsafe {
-            CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
-                .to_string_lossy()
-                .into_owned()
-        };
-        write!(f, "{}", sql)
-    }
-}
-
-pub struct Statement {
-    stmt: *mut ffi::sqlite3_stmt,
-}
-
-impl Statement {
-    fn new(s: *mut ffi::sqlite3_stmt) -> Statement {
-        Statement { stmt: s }
-    }
-}
-impl Drop for Statement {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::sqlite3_finalize(self.stmt);
-        }
-    }
-}
-
 impl Drop for RawConnection {
     fn drop(&mut self) {
         unsafe {
             ffi::sqlite3_close(self.db);
         }
-    }
-}
-
-pub fn create_statement(conn: &RawConnection,
-                        query: String)
-                        -> Result<Statement, SQLite3Error> {
-
-    let raw_query = CString::new(query).unwrap();
-
-    let mut stmt: *mut ffi::sqlite3_stmt =
-        unsafe { mem::uninitialized() };
-
-    let r = unsafe {
-        ffi::sqlite3_prepare_v2(conn.db,
-                                raw_query.as_ptr(),
-                                -1,
-                                &mut stmt,
-                                ptr::null_mut())
-    };
-    match r {
-        ffi::SQLITE_OK => Ok(Statement::new(stmt)),
-        _ => Err(generate_sqlite3_error(conn.db)),
-    }
-}
-
-pub fn reset_statement(stmt: &Statement) {
-    unsafe {
-        ffi::sqlite3_reset(stmt.stmt);
-        ffi::sqlite3_clear_bindings(stmt.stmt);
     }
 }
 
@@ -156,39 +103,59 @@ pub fn open_connection(path: String)
     }
 }
 
-pub enum Cursor<'a> {
-    OKCursor,
-    DONECursor,
-    RowsCursor {
-        num_columns: i32,
-        types: Vec<EntityType>,
-        previous_status: i32,
-        stmt: &'a Statement,
-    },
+
+
+pub struct Statement {
+    stmt: *mut ffi::sqlite3_stmt,
 }
 
-#[allow(non_snake_case)]
-pub fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
-    Some(unsafe { mem::transmute(-1isize) })
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let sql = unsafe {
+            CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
+                .to_string_lossy()
+                .into_owned()
+        };
+        write!(f, "{}", sql)
+    }
 }
 
-pub fn bind_text(db: &RawConnection,
-                 stmt: &Statement,
-                 index: i32,
-                 value: String)
-                 -> Result<(), SQLite3Error> {
+impl Drop for Statement {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::sqlite3_finalize(self.stmt);
+        }
+    }
+}
 
-    let value_c = CString::new(value).unwrap();
+impl Statement {
+    pub fn new(conn: &RawConnection,
+               query: String)
+               -> Result<Statement, SQLite3Error> {
+        let raw_query = CString::new(query).unwrap();
 
-    match unsafe {
-        ffi::sqlite3_bind_text(stmt.stmt,
-                               index,
-                               value_c.as_ptr(),
-                               -1,
-                               SQLITE_TRANSIENT())
-    } {
-        ffi::SQLITE_OK => Ok(()),
-        _ => Err(generate_sqlite3_error(db.db)),
+        let mut stmt: *mut ffi::sqlite3_stmt =
+            unsafe { mem::uninitialized() };
+
+        let r = unsafe {
+            ffi::sqlite3_prepare_v2(conn.db,
+                                    raw_query.as_ptr(),
+                                    -1,
+                                    &mut stmt,
+                                    ptr::null_mut())
+        };
+        match r {
+            ffi::SQLITE_OK => Ok(Statement { stmt: stmt }),
+            _ => Err(generate_sqlite3_error(conn.db)),
+        }
+
+    }
+}
+
+pub fn reset_statement(stmt: &Statement) {
+    unsafe {
+        ffi::sqlite3_reset(stmt.stmt);
+        ffi::sqlite3_clear_bindings(stmt.stmt);
     }
 }
 
@@ -227,6 +194,44 @@ pub fn execute_statement(stmt: &Statement)
             }))
         }
     }
+}
+
+pub fn bind_text(db: &RawConnection,
+                 stmt: &Statement,
+                 index: i32,
+                 value: String)
+                 -> Result<(), SQLite3Error> {
+
+    let value_c = CString::new(value).unwrap();
+
+    match unsafe {
+        ffi::sqlite3_bind_text(stmt.stmt,
+                               index,
+                               value_c.as_ptr(),
+                               -1,
+                               SQLITE_TRANSIENT())
+    } {
+        ffi::SQLITE_OK => Ok(()),
+        _ => Err(generate_sqlite3_error(db.db)),
+    }
+}
+
+
+
+pub enum Cursor<'a> {
+    OKCursor,
+    DONECursor,
+    RowsCursor {
+        num_columns: i32,
+        types: Vec<EntityType>,
+        previous_status: i32,
+        stmt: &'a Statement,
+    },
+}
+
+#[allow(non_snake_case)]
+pub fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
+    Some(unsafe { mem::transmute(-1isize) })
 }
 
 pub enum EntityType {

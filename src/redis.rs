@@ -186,7 +186,7 @@ fn execute_query(db: &sql::RawConnection,
                  query: String)
                  -> Result<QueryResult, sql::SQLite3Error> {
 
-    let stmt = sql::create_statement(&db, query.clone())?;
+    let stmt = sql::Statement::new(&db, query.clone())?;
     let cursor = sql::execute_statement(&stmt)?;
     Ok(cursor_to_query_result(cursor))
 }
@@ -466,7 +466,7 @@ pub fn create_metadata_table(db: &sql::RawConnection)
                                  RediSQLMetadata(data_type TEXT, key \
                                  TEXT, value TEXT);");
 
-    match sql::create_statement(&db, statement) {
+    match sql::Statement::new(&db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
             match sql::execute_statement(&stmt) {
@@ -485,7 +485,7 @@ pub fn insert_metadata(db: &sql::RawConnection,
     let statement = String::from("INSERT INTO RediSQLMetadata \
                                   VALUES(?, ?, ?);");
 
-    match sql::create_statement(&db, statement) {
+    match sql::Statement::new(&db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
             match sql::bind_text(&db, &stmt, 1, data_type) {
@@ -517,7 +517,7 @@ pub fn update_statement_metadata(db: &sql::RawConnection,
                                   WHERE data_type = 'statement' AND \
                                   key = ?");
 
-    let stmt = sql::create_statement(&db, statement)?;
+    let stmt = sql::Statement::new(&db, statement)?;
     sql::bind_text(&db, &stmt, 1, value)?;
     sql::bind_text(&db, &stmt, 2, key)?;
     sql::execute_statement(&stmt)?;
@@ -530,7 +530,7 @@ pub fn remove_statement_metadata(db: &sql::RawConnection,
     let statement = String::from("DELETE FROM RediSQLMetadata WHERE \
                                   data_type = 'statement' AND key = ?");
 
-    let stmt = sql::create_statement(&db, statement)?;
+    let stmt = sql::Statement::new(&db, statement)?;
     sql::bind_text(&db, &stmt, 2, key)?;
     sql::execute_statement(&stmt)?;
     Ok(())
@@ -543,7 +543,7 @@ pub fn get_statement_metadata
     let statement = String::from("SELECT * FROM RediSQLMetadata WHERE \
                                   data_type = 'statement';");
 
-    let stmt = sql::create_statement(&db, statement)?;
+    let stmt = sql::Statement::new(&db, statement)?;
     let cursor = sql::execute_statement(&stmt)?;
     Ok(cursor_to_query_result(cursor))
 }
@@ -677,7 +677,7 @@ fn create_statement(db: &sql::RawConnection,
                     statement: String)
                     -> Result<sql::Statement, err::RediSQLError> {
 
-    let stmt = sql::create_statement(db, statement.clone())?;
+    let stmt = sql::Statement::new(db, statement.clone())?;
     insert_metadata(db,
                     String::from("statement"),
                     identifier.clone(),
@@ -690,7 +690,7 @@ fn update_statement(db: &sql::RawConnection,
                     statement: String)
                     -> Result<sql::Statement, err::RediSQLError> {
 
-    let stmt = sql::create_statement(db, statement.clone())?;
+    let stmt = sql::Statement::new(db, statement.clone())?;
     update_statement_metadata(db, identifier.clone(), statement)?;
     Ok(stmt)
 }
