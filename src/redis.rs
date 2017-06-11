@@ -187,7 +187,7 @@ fn execute_query(db: &sql::RawConnection,
                  -> Result<QueryResult, sql::SQLite3Error> {
 
     let stmt = sql::Statement::new(&db, query.clone())?;
-    let cursor = sql::execute_statement(&stmt)?;
+    let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
 }
 
@@ -200,7 +200,7 @@ fn bind_statement<'a>
     let bind: Result<Vec<()>, _> = arguments.iter()
         .enumerate()
         .map(|(i, argument)| {
-            sql::bind_text(&db, &stmt, (i as i32 + 1), argument.clone())
+            stmt.bind_text(&db, (i as i32 + 1), argument.clone())
         })
         .collect();
     match bind {
@@ -360,11 +360,11 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 let result = match statements_cache.get(&identifier) {
                     None => Err(None),
                     Some(stmt) => {
-                        sql::reset_statement(stmt);
+                        stmt.reset();
                         let bind = bind_statement(&db, stmt, arguments);
                         match bind {
                             Ok(stmt) => {
-                                let cursor = sql::execute_statement(stmt);
+                                let cursor = stmt.execute();
                                 match cursor {
                                     Err(e) => Err(Some(e)),
                                     Ok(cursor) => {
@@ -469,7 +469,7 @@ pub fn create_metadata_table(db: &sql::RawConnection)
     match sql::Statement::new(&db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
-            match sql::execute_statement(&stmt) {
+            match stmt.execute() {
                 Ok(_) => Ok(()),
                 Err(e) => Err(e),
             }
@@ -488,14 +488,14 @@ pub fn insert_metadata(db: &sql::RawConnection,
     match sql::Statement::new(&db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
-            match sql::bind_text(&db, &stmt, 1, data_type) {
+            match stmt.bind_text(&db, 1, data_type) {
                 Err(e) => Err(e),
-                Ok(()) => match sql::bind_text(&db, &stmt, 2, key) {
+                Ok(()) => match stmt.bind_text(&db, 2, key) {
                     Err(e) => Err(e),
-                    Ok(()) => match sql::bind_text(&db, &stmt, 3, value) {
+                    Ok(()) => match stmt.bind_text(&db, 3, value) {
                         Err(e) => Err(e),
                         Ok(()) => {
-                            match sql::execute_statement(&stmt) {
+                            match stmt.execute() {
                                 Ok(_) => {
                                     Ok(())
                                 },
@@ -518,9 +518,9 @@ pub fn update_statement_metadata(db: &sql::RawConnection,
                                   key = ?");
 
     let stmt = sql::Statement::new(&db, statement)?;
-    sql::bind_text(&db, &stmt, 1, value)?;
-    sql::bind_text(&db, &stmt, 2, key)?;
-    sql::execute_statement(&stmt)?;
+    stmt.bind_text(&db, 1, value)?;
+    stmt.bind_text(&db, 2, key)?;
+    stmt.execute()?;
     Ok(())
 }
 
@@ -531,8 +531,8 @@ pub fn remove_statement_metadata(db: &sql::RawConnection,
                                   data_type = 'statement' AND key = ?");
 
     let stmt = sql::Statement::new(&db, statement)?;
-    sql::bind_text(&db, &stmt, 2, key)?;
-    sql::execute_statement(&stmt)?;
+    stmt.bind_text(&db, 2, key)?;
+    stmt.execute()?;
     Ok(())
 }
 
@@ -544,7 +544,7 @@ pub fn get_statement_metadata
                                   data_type = 'statement';");
 
     let stmt = sql::Statement::new(&db, statement)?;
-    let cursor = sql::execute_statement(&stmt)?;
+    let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
 }
 
