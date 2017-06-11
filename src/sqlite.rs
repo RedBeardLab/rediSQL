@@ -192,7 +192,6 @@ impl Statement {
         }
     }
     pub fn bind_text(&self,
-                     db: &RawConnection,
                      index: i32,
                      value: String)
                      -> Result<(), SQLite3Error> {
@@ -205,7 +204,10 @@ impl Statement {
                                    SQLITE_TRANSIENT())
         } {
             ffi::SQLITE_OK => Ok(()),
-            _ => Err(generate_sqlite3_error(db.db)),
+            _ => {
+                let db = unsafe { ffi::sqlite3_db_handle(self.stmt) };
+                Err(generate_sqlite3_error(db))
+            }
         }
     }
 }
