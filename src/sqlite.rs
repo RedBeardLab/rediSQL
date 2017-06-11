@@ -195,6 +195,12 @@ impl Statement {
                      index: i32,
                      value: String)
                      -> Result<(), SQLite3Error> {
+
+        #[allow(non_snake_case)]
+        fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
+            Some(unsafe { mem::transmute(-1isize) })
+        }
+
         let value_c = CString::new(value).unwrap();
         match unsafe {
             ffi::sqlite3_bind_text(self.stmt,
@@ -213,23 +219,6 @@ impl Statement {
 }
 
 
-
-
-pub enum Cursor<'a> {
-    OKCursor,
-    DONECursor,
-    RowsCursor {
-        num_columns: i32,
-        types: Vec<EntityType>,
-        previous_status: i32,
-        stmt: &'a Statement,
-    },
-}
-
-#[allow(non_snake_case)]
-pub fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
-    Some(unsafe { mem::transmute(-1isize) })
-}
 
 pub enum EntityType {
     Integer,
@@ -250,6 +239,19 @@ pub enum Entity {
 }
 
 pub type Row = Vec<Entity>;
+
+
+
+pub enum Cursor<'a> {
+    OKCursor,
+    DONECursor,
+    RowsCursor {
+        num_columns: i32,
+        types: Vec<EntityType>,
+        previous_status: i32,
+        stmt: &'a Statement,
+    },
+}
 
 impl<'a> Iterator for Cursor<'a> {
     type Item = Row;
