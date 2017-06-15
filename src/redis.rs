@@ -1,4 +1,3 @@
-
 extern crate libc;
 extern crate uuid;
 extern crate fnv;
@@ -91,11 +90,59 @@ fn reply_with_string(ctx: *mut ffi::RedisModuleCtx, s: String) -> i32 {
     }
 }
 
+pub fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
+                                s: String)
+                                -> i32 {
+    let s = CString::new(s).unwrap();
+    unsafe {
+        ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, s.as_ptr())
+    }
+}
+
+pub fn reply_with_ok(ctx: *mut ffi::RedisModuleCtx) -> i32 {
+    reply_with_simple_string(ctx, String::from("OK"))
+}
+
+pub fn reply_with_done(ctx: *mut ffi::RedisModuleCtx) -> i32 {
+    reply_with_simple_string(ctx, String::from("DONE"))
+}
+
+pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
+                        array: Vec<sql::Row>)
+                        -> i32 {
+    let len = array.len() as i64;
+    unsafe {
+        ffi::RedisModule_ReplyWithArray.unwrap()(ctx, len);
+    }
+    for row in array {
+        unsafe {
+            ffi::RedisModule_ReplyWithArray.unwrap()(ctx,
+                                                     row.len() as i64);
+        }
+        for entity in row {
+            entity.reply(ctx);
+        }
+    }
+    ffi::REDISMODULE_OK
+}
+
+
 impl RedisReply for sql::SQLite3Error {
     fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
         let error = format!("{}", self);
         reply_with_string(ctx, error)
     }
+}
+
+fn parse_args(argv: *mut *mut ffi::RedisModuleString,
+              argc: i32)
+              -> Result<Vec<String>, string::FromUtf8Error> {
+    let mut args: Vec<String> = Vec::with_capacity(argc as usize);
+    for i in 0..argc {
+        let redis_str = unsafe { *argv.offset(i as isize) };
+        args.push(string_ptr_len(redis_str));
+    }
+    Ok(args)
 }
 
 pub fn create_argument(ctx: *mut ffi::RedisModuleCtx,
@@ -128,7 +175,6 @@ impl Drop for RedisKey {
         }
     }
 }
-
 
 pub enum Command {
     Stop,
@@ -230,13 +276,10 @@ impl error::Error for RedisError {
     }
 }
 
-pub fn listen_and_execute(db: sql::RawConnection,
-                          rx: Receiver<Command>) {
-
-    let mut statements_cache = FnvHashMap::default();
-
-    let saved_statements = get_statement_metadata(&db);
-
+fn restore_previous_statements(db: &sql::RawConnection, mut statements_cache: &mut HashMap<String, sql::Statement, std::hash::BuildHasherDefault<fnv::FnvHasher
+                               >> )
+                               -> () {
+    let saved_statements = get_statement_metadata(db);
     match saved_statements {
         Ok(QueryResult::Array { array }) => {
             for row in array {
@@ -253,17 +296,21 @@ pub fn listen_and_execute(db: sql::RawConnection,
                                              statement,
                                              &db,
                                              &mut statements_cache) {
-                    Err(e) => println!("{}", e),
+                    Err(e) => println!("Error: {}", e),
                     _ => (),
                 }
             }
         }
-        Err(e) => {
-            println!("{}", e);
-        }
+        Err(e) => println!("Error: {}", e),
         _ => (),
     }
+}
 
+pub fn listen_and_execute(db: sql::RawConnection,
+                          rx: Receiver<Command>) {
+
+    let mut statements_cache = FnvHashMap::default();
+    restore_previous_statements(&db, &mut statements_cache);
 
     loop {
         match rx.recv() {
@@ -416,42 +463,6 @@ fn compile_and_insert_statement(identifier: String,
     }
 }
 
-pub fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
-                                s: String)
-                                -> i32 {
-    let s = CString::new(s).unwrap();
-    unsafe {
-        ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, s.as_ptr())
-    }
-}
-
-pub fn reply_with_ok(ctx: *mut ffi::RedisModuleCtx) -> i32 {
-    reply_with_simple_string(ctx, String::from("OK"))
-}
-
-pub fn reply_with_done(ctx: *mut ffi::RedisModuleCtx) -> i32 {
-    reply_with_simple_string(ctx, String::from("DONE"))
-}
-
-pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
-                        array: Vec<sql::Row>)
-                        -> i32 {
-    let len = array.len() as i64;
-    unsafe {
-        ffi::RedisModule_ReplyWithArray.unwrap()(ctx, len);
-    }
-    for row in array {
-        unsafe {
-            ffi::RedisModule_ReplyWithArray.unwrap()(ctx,
-                                                     row.len() as i64);
-        }
-        for entity in row {
-            entity.reply(ctx);
-        }
-    }
-    ffi::REDISMODULE_OK
-}
-
 pub struct DBKey {
     pub tx: Sender<Command>,
     pub db: sql::RawConnection,
@@ -545,17 +556,6 @@ pub fn get_statement_metadata
     let stmt = sql::Statement::new(&db, statement)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
-}
-
-fn parse_args(argv: *mut *mut ffi::RedisModuleString,
-              argc: i32)
-              -> Result<Vec<String>, string::FromUtf8Error> {
-    let mut args: Vec<String> = Vec::with_capacity(argc as usize);
-    for i in 0..argc {
-        let redis_str = unsafe { *argv.offset(i as isize) };
-        args.push(string_ptr_len(redis_str));
-    }
-    Ok(args)
 }
 
 pub fn string_ptr_len(str: *mut ffi::RedisModuleString) -> String {
