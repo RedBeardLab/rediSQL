@@ -14,6 +14,8 @@ mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
+
+
 #[derive(Clone)]
 pub struct SQLite3Error {
     pub code: i32,
@@ -64,6 +66,8 @@ impl error::Error for SQLite3Error {
 
 impl err::RediSQLErrorTrait for SQLite3Error {}
 
+
+
 #[derive(Clone)]
 pub struct RawConnection {
     db: *mut ffi::sqlite3,
@@ -71,68 +75,11 @@ pub struct RawConnection {
 
 unsafe impl Send for RawConnection {}
 
-impl fmt::Display for Statement {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let sql = unsafe {
-            CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
-                .to_string_lossy()
-                .into_owned()
-        };
-        write!(f, "{}", sql)
-    }
-}
-
-pub struct Statement {
-    stmt: *mut ffi::sqlite3_stmt,
-}
-
-impl Statement {
-    fn new(s: *mut ffi::sqlite3_stmt) -> Statement {
-        Statement { stmt: s }
-    }
-}
-impl Drop for Statement {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::sqlite3_finalize(self.stmt);
-        }
-    }
-}
-
 impl Drop for RawConnection {
     fn drop(&mut self) {
         unsafe {
             ffi::sqlite3_close(self.db);
         }
-    }
-}
-
-pub fn create_statement(conn: &RawConnection,
-                        query: String)
-                        -> Result<Statement, SQLite3Error> {
-
-    let raw_query = CString::new(query).unwrap();
-
-    let mut stmt: *mut ffi::sqlite3_stmt =
-        unsafe { mem::uninitialized() };
-
-    let r = unsafe {
-        ffi::sqlite3_prepare_v2(conn.db,
-                                raw_query.as_ptr(),
-                                -1,
-                                &mut stmt,
-                                ptr::null_mut())
-    };
-    match r {
-        ffi::SQLITE_OK => Ok(Statement::new(stmt)),
-        _ => Err(generate_sqlite3_error(conn.db)),
-    }
-}
-
-pub fn reset_statement(stmt: &Statement) {
-    unsafe {
-        ffi::sqlite3_reset(stmt.stmt);
-        ffi::sqlite3_clear_bindings(stmt.stmt);
     }
 }
 
@@ -156,78 +103,122 @@ pub fn open_connection(path: String)
     }
 }
 
-pub enum Cursor<'a> {
-    OKCursor,
-    DONECursor,
-    RowsCursor {
-        num_columns: i32,
-        types: Vec<EntityType>,
-        previous_status: i32,
-        stmt: &'a Statement,
-    },
+
+
+pub struct Statement {
+    stmt: *mut ffi::sqlite3_stmt,
 }
 
-#[allow(non_snake_case)]
-pub fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
-    Some(unsafe { mem::transmute(-1isize) })
-}
-
-pub fn bind_text(db: &RawConnection,
-                 stmt: &Statement,
-                 index: i32,
-                 value: String)
-                 -> Result<(), SQLite3Error> {
-
-    let value_c = CString::new(value).unwrap();
-
-    match unsafe {
-        ffi::sqlite3_bind_text(stmt.stmt,
-                               index,
-                               value_c.as_ptr(),
-                               -1,
-                               SQLITE_TRANSIENT())
-    } {
-        ffi::SQLITE_OK => Ok(()),
-        _ => Err(generate_sqlite3_error(db.db)),
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let sql = unsafe {
+            CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
+                .to_string_lossy()
+                .into_owned()
+        };
+        write!(f, "{}", sql)
     }
 }
 
-pub fn execute_statement(stmt: &Statement)
-                         -> Result<Cursor, SQLite3Error> {
+impl Drop for Statement {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::sqlite3_finalize(self.stmt);
+        }
+    }
+}
 
-    match unsafe { ffi::sqlite3_step(stmt.stmt) } {
-        ffi::SQLITE_OK => Ok(Cursor::OKCursor),
-        ffi::SQLITE_DONE => Ok(Cursor::DONECursor),
-        ffi::SQLITE_ROW => {
-            let n_columns =
-                unsafe { ffi::sqlite3_column_count(stmt.stmt) } as i32;
-            let mut types: Vec<EntityType> = Vec::new();
-            for i in 0..n_columns {
-                types.push(match unsafe {
-                    ffi::sqlite3_column_type(stmt.stmt, i)
-                } {
-                    ffi::SQLITE_INTEGER => EntityType::Integer,
-                    ffi::SQLITE_FLOAT => EntityType::Float,
-                    ffi::SQLITE_TEXT => EntityType::Text,
-                    ffi::SQLITE_BLOB => EntityType::Blob,
-                    ffi::SQLITE_NULL => EntityType::Null,
-                    _ => EntityType::Null,
+impl Statement {
+    pub fn new(conn: &RawConnection,
+               query: String)
+               -> Result<Statement, SQLite3Error> {
+        let raw_query = CString::new(query).unwrap();
+
+        let mut stmt: *mut ffi::sqlite3_stmt =
+            unsafe { mem::uninitialized() };
+
+        let r = unsafe {
+            ffi::sqlite3_prepare_v2(conn.db,
+                                    raw_query.as_ptr(),
+                                    -1,
+                                    &mut stmt,
+                                    ptr::null_mut())
+        };
+        match r {
+            ffi::SQLITE_OK => Ok(Statement { stmt: stmt }),
+            _ => Err(generate_sqlite3_error(conn.db)),
+        }
+    }
+
+    pub fn reset(&self) {
+        unsafe {
+            ffi::sqlite3_reset(self.stmt);
+            ffi::sqlite3_clear_bindings(self.stmt);
+        }
+    }
+    pub fn execute(&self) -> Result<Cursor, SQLite3Error> {
+        match unsafe { ffi::sqlite3_step(self.stmt) } {
+            ffi::SQLITE_OK => Ok(Cursor::OKCursor),
+            ffi::SQLITE_DONE => Ok(Cursor::DONECursor),
+            ffi::SQLITE_ROW => {
+                let n_columns = unsafe {
+                    ffi::sqlite3_column_count(self.stmt)
+                } as i32;
+                let mut types: Vec<EntityType> = Vec::new();
+                for i in 0..n_columns {
+                    types.push(match unsafe {
+                        ffi::sqlite3_column_type(self.stmt, i)
+                    } {
+                        ffi::SQLITE_INTEGER => EntityType::Integer,
+                        ffi::SQLITE_FLOAT => EntityType::Float,
+                        ffi::SQLITE_TEXT => EntityType::Text,
+                        ffi::SQLITE_BLOB => EntityType::Blob,
+                        ffi::SQLITE_NULL => EntityType::Null,
+                        _ => EntityType::Null,
+                    })
+                }
+                Ok(Cursor::RowsCursor {
+                    stmt: self,
+                    num_columns: n_columns,
+                    types: types,
+                    previous_status: ffi::SQLITE_ROW,
                 })
             }
-            Ok(Cursor::RowsCursor {
-                stmt: stmt,
-                num_columns: n_columns,
-                types: types,
-                previous_status: ffi::SQLITE_ROW,
-            })
-        }
-        _ => {
+            _ => {
             Err(generate_sqlite3_error(unsafe {
-                ffi::sqlite3_db_handle(stmt.stmt)
+                ffi::sqlite3_db_handle(self.stmt)
             }))
+        }
+        }
+    }
+    pub fn bind_text(&self,
+                     index: i32,
+                     value: String)
+                     -> Result<(), SQLite3Error> {
+
+        #[allow(non_snake_case)]
+        fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
+            Some(unsafe { mem::transmute(-1isize) })
+        }
+
+        let value_c = CString::new(value).unwrap();
+        match unsafe {
+            ffi::sqlite3_bind_text(self.stmt,
+                                   index,
+                                   value_c.as_ptr(),
+                                   -1,
+                                   SQLITE_TRANSIENT())
+        } {
+            ffi::SQLITE_OK => Ok(()),
+            _ => {
+                let db = unsafe { ffi::sqlite3_db_handle(self.stmt) };
+                Err(generate_sqlite3_error(db))
+            }
         }
     }
 }
+
+
 
 pub enum EntityType {
     Integer,
@@ -248,6 +239,19 @@ pub enum Entity {
 }
 
 pub type Row = Vec<Entity>;
+
+
+
+pub enum Cursor<'a> {
+    OKCursor,
+    DONECursor,
+    RowsCursor {
+        num_columns: i32,
+        types: Vec<EntityType>,
+        previous_status: i32,
+        stmt: &'a Statement,
+    },
+}
 
 impl<'a> Iterator for Cursor<'a> {
     type Item = Row;
