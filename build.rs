@@ -11,12 +11,12 @@ fn main() {
 
     println!("cargo:rerun-if-changed=src/CDeps");
 
-    gcc::Config::new()
+    gcc::Build::new()
         .file("src/CDeps/Redis/redismodule.c")
         .include("src/CDeps/Redis/include")
         .compile("libredismodule.a");
 
-    gcc::Config::new()
+    gcc::Build::new()
         .file("src/CDeps/SQLite/sqlite3.c")
         .include("src/CDeps/SQLite/include")
         .compile("libsqlite3.a");
@@ -35,9 +35,7 @@ fn main() {
         }
     }
 
-
     let bindings = bindgen::Builder::default()
-        .no_unstable_rust()
         .parse_callbacks(Box::new(SqliteTypeChooser))
         .header("sqlite_dependencies.h")
         .generate()
@@ -48,7 +46,6 @@ fn main() {
         .expect("Couldn't write bindings!");
 
     let bindings = bindgen::Builder::default()
-        .no_unstable_rust()
         .parse_callbacks(Box::new(SqliteTypeChooser))
         .header("redis_dependencies.h")
         .generate()
@@ -57,6 +54,4 @@ fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings.write_to_file(out_path.join("bindings_redis.rs"))
         .expect("Couldn't write bindings!");
-
-
 }

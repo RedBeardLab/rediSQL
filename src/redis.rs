@@ -232,7 +232,7 @@ fn execute_query(db: &sql::RawConnection,
                  query: String)
                  -> Result<QueryResult, sql::SQLite3Error> {
 
-    let stmt = sql::Statement::new(&db, query.clone())?;
+    let stmt = sql::Statement::new(&db, query)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
 }
