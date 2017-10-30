@@ -6,3 +6,8 @@ test/correctness/include/* linguist-vendored
 test/correctness/lib/* linguist-vendored
 test/correctness/local/* linguist-vendored
 
+test/performance/bin/* linguist-vendored
+test/performance/include/* linguist-vendored
+test/performance/lib/* linguist-vendored
+test/performance/local/* linguist-vendored
+
