@@ -1,0 +1,8 @@
+
+src/CDeps/* linguist-vendored
+
+test/correctness/bin/* linguist-vendored
+test/correctness/include/* linguist-vendored
+test/correctness/lib/* linguist-vendored
+test/correctness/local/* linguist-vendored
+
