@@ -2,7 +2,7 @@ extern crate bindgen;
 
 use bindgen::callbacks::{ParseCallbacks, IntKind};
 
-extern crate gcc;
+extern crate cc;
 
 use std::env;
 use std::path::PathBuf;
@@ -11,12 +11,12 @@ fn main() {
 
     println!("cargo:rerun-if-changed=src/CDeps");
 
-    gcc::Build::new()
+    cc::Build::new()
         .file("src/CDeps/Redis/redismodule.c")
         .include("src/CDeps/Redis/include")
         .compile("libredismodule.a");
 
-    gcc::Build::new()
+    cc::Build::new()
         .file("src/CDeps/SQLite/sqlite3.c")
         .include("src/CDeps/SQLite/include")
         .compile("libsqlite3.a");
@@ -39,19 +39,19 @@ fn main() {
         .parse_callbacks(Box::new(SqliteTypeChooser))
         .header("sqlite_dependencies.h")
         .generate()
-        .expect("Unable to generate bindings");
+        .expect("Unable to generate bindings for SQLite");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings.write_to_file(out_path.join("bindings_sqlite.rs"))
-        .expect("Couldn't write bindings!");
+        .expect("Couldn't write bindings for SQLite!");
 
     let bindings = bindgen::Builder::default()
         .parse_callbacks(Box::new(SqliteTypeChooser))
         .header("redis_dependencies.h")
         .generate()
-        .expect("Unable to generate bindings");
+        .expect("Unable to generate bindings for Redis");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings.write_to_file(out_path.join("bindings_redis.rs"))
-        .expect("Couldn't write bindings!");
+        .expect("Couldn't write bindings for Redis!");
 }

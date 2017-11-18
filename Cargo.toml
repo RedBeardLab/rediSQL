@@ -9,12 +9,10 @@ name = "redis_sql"
 crate-type = ["cdylib"]
 
 [build-dependencies]
-bindgen = { git = "https://github.com/servo/rust-bindgen" }
-gcc = "0.3.45"
+bindgen = "0.31.3"
+cc = "1.0.3"
 
 [dependencies]
 libc = "0.2.21"
 fnv = "1.0.5"
 uuid = { version = "0.4", features = ["v4"] }
-pest = "^1.0.0-beta"
-pest_derive = "^1.0.0-beta"
