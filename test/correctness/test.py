@@ -71,21 +71,21 @@ class TestRediSQLExec(TestRediSQLWithExec):
   def test_create_table(self):
     with DB(self.client, "A"):
       done = self.exec_cmd("A", "CREATE TABLE test1 (A INTEGER);")
-      self.assertEquals(done, "DONE")
+      self.assertEquals(done, ["DONE", 1L])
       done = self.exec_cmd("A", "DROP TABLE test1")
-      self.assertEquals(done, "DONE")
+      self.assertEquals(done, ["DONE", 1L])
 
   def test_insert(self):
     with DB(self.client, "B"):
       with Table(self.client, "test2", "(A INTEGER)", key = "B"):
         done = self.exec_cmd("B", "INSERT INTO test2 VALUES(2);")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
 
   def test_select(self):
     with DB(self.client, "C"):
       with Table(self.client, "test3", "(A INTEGER)", key = "C"):
         done = self.exec_cmd("C", "INSERT INTO test3 VALUES(2);")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
       
         result = self.exec_cmd("C", "SELECT * from test3")
         self.assertEquals(result, [[2]])
@@ -172,18 +172,17 @@ class TestRediSQLKeys(TestRediSQLWithExec):
   def test_create_table_inside_key(self):
     with DB(self.client, "A"):
       done = self.exec_cmd("A", "CREATE TABLE t1 (A INTEGER);")
-      self.assertEquals(done, "DONE")
+      self.assertEquals(done, ["DONE", 1L])
       done = self.exec_cmd("A", "DROP TABLE t1")
-      self.assertEquals(done, "DONE")
+      self.assertEquals(done, ["DONE", 1L])
 
   def test_insert_into_table(self):
     with DB(self.client, "B"):
       with Table(self.client, "t2", "(A INTEGER, B INTEGER)", key = "B"):
         done = self.exec_cmd("B", "INSERT INTO t2 VALUES(1,2)")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         result = self.exec_cmd("B", "SELECT * FROM t2")
         self.assertEquals(result, [[1, 2]])
-
 
 class TestStatements(TestRediSQLWithExec):
   def test_create_statement(self):
@@ -192,9 +191,9 @@ class TestStatements(TestRediSQLWithExec):
         ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4]])
 
@@ -204,11 +203,11 @@ class TestStatements(TestRediSQLWithExec):
         ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         ok = self.exec_naked("REDISQL.UPDATE_STATEMENT", "A", "insert", "insert into t1 values(? + 10001);")
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [10005]])
 
@@ -218,10 +217,10 @@ class TestStatements(TestRediSQLWithExec):
         ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         self.disposable_redis.dump_and_reload()
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4]])
 
@@ -230,11 +229,11 @@ class TestStatements(TestRediSQLWithExec):
       with Table(self.client, "t1", "(A INTEGER)", key = "A"):
         
         done = self.exec_cmd("A", "INSERT INTO t1 VALUES(5)")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
 
         self.disposable_redis.dump_and_reload()
         done = self.exec_cmd("A", "INSERT INTO t1 VALUES(6)")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[5], [6]])
@@ -248,25 +247,20 @@ class TestStatements(TestRediSQLWithExec):
         self.assertEquals(ok, "OK")
 
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert più cento", "3")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
 
         self.disposable_redis.dump_and_reload()
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert più cento", "4")
-        self.assertEquals(done, "DONE")
+        self.assertEquals(done, ["DONE", 1L])
         
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4], [103], [104]])
 
 
-
-
-
-
 if __name__ == '__main__':
    unittest.main()
-
 

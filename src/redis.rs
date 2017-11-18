@@ -68,12 +68,8 @@ impl RedisReply for sql::Entity {
                     let ok_c = CString::new(ok.clone()).unwrap();
                     ffi::RedisModule_ReplyWithStringBuffer.unwrap()(ctx, ok_c.as_ptr(), ok.len())
                 }                
-                sql::Entity::DONE => {
-                    let done = String::from("DONE");
-                    let done_c = CString::new(done.clone()).unwrap();
-                    ffi::RedisModule_ReplyWithStringBuffer.unwrap()(ctx,
-                                                                    done_c.as_ptr(),
-                                                                    done.len())
+                sql::Entity::DONE { modified_rows } => {
+                    reply_with_done(ctx, modified_rows)
                 }
             }
         }
@@ -103,8 +99,18 @@ pub fn reply_with_ok(ctx: *mut ffi::RedisModuleCtx) -> i32 {
     reply_with_simple_string(ctx, String::from("OK"))
 }
 
-pub fn reply_with_done(ctx: *mut ffi::RedisModuleCtx) -> i32 {
-    reply_with_simple_string(ctx, String::from("DONE"))
+pub fn reply_with_done(ctx: *mut ffi::RedisModuleCtx,
+                       modified_rows: i32)
+                       -> i32 {
+    unsafe {
+        ffi::RedisModule_ReplyWithArray.unwrap()(ctx, 2);
+    }
+    reply_with_simple_string(ctx, String::from("DONE"));
+    unsafe {
+        ffi::RedisModule_ReplyWithLongLong.unwrap()(ctx,
+                                                    modified_rows as i64);
+    }
+    ffi::REDISMODULE_OK
 }
 
 pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
@@ -211,14 +217,14 @@ unsafe impl Send for BlockedClient {}
 
 pub enum QueryResult {
     OK,
-    DONE,
+    DONE {modified_rows: i32},
     Array { array: Vec<sql::Row> },
 }
 
 fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     match cursor {
         sql::Cursor::OKCursor => QueryResult::OK,
-        sql::Cursor::DONECursor => QueryResult::DONE,
+        sql::Cursor::DONECursor {modified_rows} => QueryResult::DONE {modified_rows},
         sql::Cursor::RowsCursor { .. } => {
             let y = QueryResult::Array {
                 array: cursor.collect::<Vec<sql::Row>>(),
@@ -240,7 +246,7 @@ fn execute_query(db: &sql::RawConnection,
 fn bind_statement<'a>
     (stmt: &'a sql::Statement,
      arguments: Vec<String>)
-     -> Result<&'a sql::Statement, sql::SQLite3Error> {
+     -> Result<&'a sql::Statement<'a>, sql::SQLite3Error> {
 
     let bind: Result<Vec<()>, _> = arguments.iter()
         .enumerate()
@@ -276,7 +282,7 @@ impl error::Error for RedisError {
     }
 }
 
-fn restore_previous_statements(db: &sql::RawConnection, mut statements_cache: &mut HashMap<String, sql::Statement, std::hash::BuildHasherDefault<fnv::FnvHasher
+fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_cache: &mut HashMap<String, sql::Statement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher
                                >> )
                                -> () {
     let saved_statements = get_statement_metadata(db);
@@ -436,10 +442,10 @@ pub fn listen_and_execute(db: sql::RawConnection,
 }
 
 
-fn compile_and_insert_statement(identifier: String,
+fn compile_and_insert_statement<'a>(identifier: String,
                                 statement: String,
-                                db: &sql::RawConnection,
-                                statements_cache: &mut HashMap<String, sql::Statement, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
+                                db: &'a sql::RawConnection,
+                                statements_cache: &mut HashMap<String, sql::Statement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
                                 -> Result<(), err::RediSQLError> {
     match statements_cache.entry(identifier.clone()) {
         Entry::Vacant(v) => {
@@ -463,11 +469,11 @@ fn compile_and_insert_statement(identifier: String,
     }
 }
 
-pub struct DBKey {
+pub struct DBKey<'a> {
     pub tx: Sender<Command>,
     pub db: sql::RawConnection,
     pub in_memory: bool,
-    pub statements: HashMap<String, sql::Statement>,
+    pub statements: HashMap<String, sql::Statement<'a>>,
 }
 
 pub fn create_metadata_table(db: &sql::RawConnection)

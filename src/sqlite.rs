@@ -105,11 +105,12 @@ pub fn open_connection(path: String)
 
 
 
-pub struct Statement {
+pub struct Statement<'a> {
     stmt: *mut ffi::sqlite3_stmt,
+    conn: &'a RawConnection,
 }
 
-impl fmt::Display for Statement {
+impl<'a> fmt::Display for Statement<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let sql = unsafe {
             CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
@@ -120,7 +121,7 @@ impl fmt::Display for Statement {
     }
 }
 
-impl Drop for Statement {
+impl<'a> Drop for Statement<'a> {
     fn drop(&mut self) {
         unsafe {
             ffi::sqlite3_finalize(self.stmt);
@@ -128,8 +129,8 @@ impl Drop for Statement {
     }
 }
 
-impl Statement {
-    pub fn new(conn: &RawConnection,
+impl<'a> Statement<'a> {
+    pub fn new(conn: &'a RawConnection,
                query: String)
                -> Result<Statement, SQLite3Error> {
         let raw_query = CString::new(query).unwrap();
@@ -145,7 +146,12 @@ impl Statement {
                                     ptr::null_mut())
         };
         match r {
-            ffi::SQLITE_OK => Ok(Statement { stmt: stmt }),
+            ffi::SQLITE_OK => {
+                Ok(Statement {
+                    stmt: stmt,
+                    conn: conn,
+                })
+            }
             _ => Err(generate_sqlite3_error(conn.db)),
         }
     }
@@ -159,7 +165,11 @@ impl Statement {
     pub fn execute(&self) -> Result<Cursor, SQLite3Error> {
         match unsafe { ffi::sqlite3_step(self.stmt) } {
             ffi::SQLITE_OK => Ok(Cursor::OKCursor),
-            ffi::SQLITE_DONE => Ok(Cursor::DONECursor),
+            ffi::SQLITE_DONE => {
+                let modified_rows =
+                    unsafe { ffi::sqlite3_changes(self.conn.db) };
+                Ok(Cursor::DONECursor { modified_rows: modified_rows })
+            }
             ffi::SQLITE_ROW => {
                 let n_columns = unsafe {
                     ffi::sqlite3_column_count(self.stmt)
@@ -235,7 +245,7 @@ pub enum Entity {
     Blob { blob: String },
     Null,
     OK,
-    DONE,
+    DONE { modified_rows: i32 },
 }
 
 pub type Row = Vec<Entity>;
@@ -244,12 +254,12 @@ pub type Row = Vec<Entity>;
 
 pub enum Cursor<'a> {
     OKCursor,
-    DONECursor,
+    DONECursor { modified_rows: i32 },
     RowsCursor {
         num_columns: i32,
         types: Vec<EntityType>,
         previous_status: i32,
-        stmt: &'a Statement,
+        stmt: &'a Statement<'a>,
     },
 }
 
@@ -259,7 +269,9 @@ impl<'a> Iterator for Cursor<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match *self {
             Cursor::OKCursor => Some(vec![Entity::OK]),
-            Cursor::DONECursor => Some(vec![Entity::DONE]),
+            Cursor::DONECursor { modified_rows } => {
+                Some(vec![Entity::DONE {modified_rows}])
+            }
 
             Cursor::RowsCursor { ref stmt,
                                  num_columns,

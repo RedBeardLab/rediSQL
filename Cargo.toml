@@ -9,7 +9,7 @@ name = "redis_sql"
 crate-type = ["cdylib"]
 
 [build-dependencies]
-bindgen = "0.31.3"
+bindgen = "0.30.0"
 cc = "1.0.3"
 
 [dependencies]

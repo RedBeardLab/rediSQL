@@ -32,7 +32,7 @@ extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
         unsafe { Box::from_raw(result) };
     match *result {
         Ok(r::QueryResult::OK) => r::reply_with_ok(ctx),
-        Ok(r::QueryResult::DONE) => r::reply_with_done(ctx),
+        Ok(r::QueryResult::DONE {modified_rows}) => r::reply_with_done(ctx, modified_rows),
         Ok(r::QueryResult::Array { array }) => {
             r::reply_with_array(ctx, array)
         }
@@ -50,7 +50,7 @@ extern "C" fn reply_exec_statement(ctx: *mut r::ffi::RedisModuleCtx,
         unsafe { Box::from_raw(result) };
     match *result {
         Ok(r::QueryResult::OK) => r::reply_with_ok(ctx),
-        Ok(r::QueryResult::DONE) => r::reply_with_done(ctx),
+        Ok(r::QueryResult::DONE {modified_rows}) => r::reply_with_done(ctx, modified_rows),
         Ok(r::QueryResult::Array { array }) => {
             r::reply_with_array(ctx, array)
         }
