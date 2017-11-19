@@ -6,15 +6,16 @@ use std::error;
 
 use redisql_error as err;
 
+pub use community_statement;
+pub use community_statement::Statement;
+
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
 #[allow(non_upper_case_globals)]
-mod ffi {
+pub mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
-
-
 
 #[derive(Clone)]
 pub struct SQLite3Error {
@@ -23,7 +24,8 @@ pub struct SQLite3Error {
     pub error_string: String,
 }
 
-fn generate_sqlite3_error(conn: *mut ffi::sqlite3) -> SQLite3Error {
+pub fn generate_sqlite3_error(conn: *mut ffi::sqlite3)
+                              -> SQLite3Error {
     let error_code = unsafe { ffi::sqlite3_extended_errcode(conn) };
     let error_message = unsafe {
         CStr::from_ptr(ffi::sqlite3_errmsg(conn))
@@ -83,6 +85,12 @@ impl Drop for RawConnection {
     }
 }
 
+impl RawConnection {
+    pub fn get_db(&self) -> *mut ffi::sqlite3 {
+        self.db
+    }
+}
+
 pub fn open_connection(path: String)
                        -> Result<RawConnection, SQLite3Error> {
     let mut db: *mut ffi::sqlite3 = unsafe { mem::uninitialized() };
@@ -103,132 +111,21 @@ pub fn open_connection(path: String)
     }
 }
 
-
-
-pub struct Statement<'a> {
-    stmt: *mut ffi::sqlite3_stmt,
-    conn: &'a RawConnection,
-}
-
-impl<'a> fmt::Display for Statement<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let sql = unsafe {
-            CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
-                .to_string_lossy()
-                .into_owned()
-        };
-        write!(f, "{}", sql)
+pub trait StatementTrait<'a>: Sized {
+    fn new(conn: &'a RawConnection,
+           query: String)
+           -> Result<Self, SQLite3Error>;
+    fn reset(&self);
+    fn execute(&self) -> Result<Cursor, SQLite3Error>;
+    fn bind_text(&self,
+                 index: i32,
+                 value: String)
+                 -> Result<(), SQLite3Error>;
+    fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt;
+    fn to_replicate(&self) -> bool {
+        false
     }
 }
-
-impl<'a> Drop for Statement<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::sqlite3_finalize(self.stmt);
-        }
-    }
-}
-
-impl<'a> Statement<'a> {
-    pub fn new(conn: &'a RawConnection,
-               query: String)
-               -> Result<Statement, SQLite3Error> {
-        let raw_query = CString::new(query).unwrap();
-
-        let mut stmt: *mut ffi::sqlite3_stmt =
-            unsafe { mem::uninitialized() };
-
-        let r = unsafe {
-            ffi::sqlite3_prepare_v2(conn.db,
-                                    raw_query.as_ptr(),
-                                    -1,
-                                    &mut stmt,
-                                    ptr::null_mut())
-        };
-        match r {
-            ffi::SQLITE_OK => {
-                Ok(Statement {
-                    stmt: stmt,
-                    conn: conn,
-                })
-            }
-            _ => Err(generate_sqlite3_error(conn.db)),
-        }
-    }
-
-    pub fn reset(&self) {
-        unsafe {
-            ffi::sqlite3_reset(self.stmt);
-            ffi::sqlite3_clear_bindings(self.stmt);
-        }
-    }
-    pub fn execute(&self) -> Result<Cursor, SQLite3Error> {
-        match unsafe { ffi::sqlite3_step(self.stmt) } {
-            ffi::SQLITE_OK => Ok(Cursor::OKCursor),
-            ffi::SQLITE_DONE => {
-                let modified_rows =
-                    unsafe { ffi::sqlite3_changes(self.conn.db) };
-                Ok(Cursor::DONECursor { modified_rows: modified_rows })
-            }
-            ffi::SQLITE_ROW => {
-                let n_columns = unsafe {
-                    ffi::sqlite3_column_count(self.stmt)
-                } as i32;
-                let mut types: Vec<EntityType> = Vec::new();
-                for i in 0..n_columns {
-                    types.push(match unsafe {
-                        ffi::sqlite3_column_type(self.stmt, i)
-                    } {
-                        ffi::SQLITE_INTEGER => EntityType::Integer,
-                        ffi::SQLITE_FLOAT => EntityType::Float,
-                        ffi::SQLITE_TEXT => EntityType::Text,
-                        ffi::SQLITE_BLOB => EntityType::Blob,
-                        ffi::SQLITE_NULL => EntityType::Null,
-                        _ => EntityType::Null,
-                    })
-                }
-                Ok(Cursor::RowsCursor {
-                    stmt: self,
-                    num_columns: n_columns,
-                    types: types,
-                    previous_status: ffi::SQLITE_ROW,
-                })
-            }
-            _ => {
-            Err(generate_sqlite3_error(unsafe {
-                ffi::sqlite3_db_handle(self.stmt)
-            }))
-        }
-        }
-    }
-    pub fn bind_text(&self,
-                     index: i32,
-                     value: String)
-                     -> Result<(), SQLite3Error> {
-
-        #[allow(non_snake_case)]
-        fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
-            Some(unsafe { mem::transmute(-1isize) })
-        }
-
-        let value_c = CString::new(value).unwrap();
-        match unsafe {
-            ffi::sqlite3_bind_text(self.stmt,
-                                   index,
-                                   value_c.as_ptr(),
-                                   -1,
-                                   SQLITE_TRANSIENT())
-        } {
-            ffi::SQLITE_OK => Ok(()),
-            _ => {
-                let db = unsafe { ffi::sqlite3_db_handle(self.stmt) };
-                Err(generate_sqlite3_error(db))
-            }
-        }
-    }
-}
-
-
 
 pub enum EntityType {
     Integer,
@@ -244,22 +141,27 @@ pub enum Entity {
     Text { text: String },
     Blob { blob: String },
     Null,
-    OK,
-    DONE { modified_rows: i32 },
+    OK { to_replicate: bool },
+    DONE {
+        modified_rows: i32,
+        to_replicate: bool,
+    },
 }
 
 pub type Row = Vec<Entity>;
 
-
-
 pub enum Cursor<'a> {
-    OKCursor,
-    DONECursor { modified_rows: i32 },
+    OKCursor { to_replicate: bool },
+    DONECursor {
+        modified_rows: i32,
+        to_replicate: bool,
+    },
     RowsCursor {
         num_columns: i32,
         types: Vec<EntityType>,
         previous_status: i32,
         stmt: &'a Statement<'a>,
+        to_replicate: bool,
     },
 }
 
@@ -268,52 +170,58 @@ impl<'a> Iterator for Cursor<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match *self {
-            Cursor::OKCursor => Some(vec![Entity::OK]),
-            Cursor::DONECursor { modified_rows } => {
-                Some(vec![Entity::DONE {modified_rows}])
+            Cursor::OKCursor { to_replicate } => {
+                Some(vec![Entity::OK {to_replicate}])
+            }
+            Cursor::DONECursor { modified_rows, to_replicate } => {
+                Some(vec![Entity::DONE {modified_rows, to_replicate}])
             }
 
             Cursor::RowsCursor { ref stmt,
                                  num_columns,
                                  ref types,
-                                 ref mut previous_status } => {
+                                 ref mut previous_status,
+                                 .. } => {
                 match *previous_status {
                     ffi::SQLITE_ROW => {
                         let mut result = vec![];
                         for i in 0..num_columns {
-                            let entity_value = match types[i as usize] {
-                                EntityType::Integer => {
-                                    let value =
+                            let entity_value =
+                                match types[i as usize] {
+                                    EntityType::Integer => {
+                                        let value =
                                         unsafe {
-                                            ffi::sqlite3_column_int(stmt.stmt, i)
+                                            ffi::sqlite3_column_int(stmt.get_raw_stmt(), i)
                                         };
-                                    Entity::Integer { int: value }
-                                }
-                                EntityType::Float => {
-                                    let value = unsafe { ffi::sqlite3_column_double(stmt.stmt, i) };
-                                    Entity::Float { float: value }
-                                }
-                                EntityType::Text => {
-                                    let value =
+                                        Entity::Integer { int: value }
+                                    }
+                                    EntityType::Float => {
+                                        let value = unsafe { ffi::sqlite3_column_double(stmt.get_raw_stmt(), i) };
+                                        Entity::Float { float: value }
+                                    }
+                                    EntityType::Text => {
+                                        let value =
                                 unsafe {
-                                    CStr::from_ptr(ffi::sqlite3_column_text(stmt.stmt, i) as *const i8).to_string_lossy().into_owned()
+                                    CStr::from_ptr(ffi::sqlite3_column_text(stmt.get_raw_stmt(), i) as *const i8).to_string_lossy().into_owned()
                                 };
-                                    Entity::Text { text: value }
-                                }
-                                EntityType::Blob => {
-                                    let value = 
+                                        Entity::Text { text: value }
+                                    }
+                                    EntityType::Blob => {
+                                        let value = 
                                 unsafe { 
-                                    CStr::from_ptr(ffi::sqlite3_column_blob(stmt.stmt, i) as *const i8).to_string_lossy().into_owned() 
+                                    CStr::from_ptr(ffi::sqlite3_column_blob(stmt.get_raw_stmt(), i) as *const i8).to_string_lossy().into_owned() 
                                 };
-                                    Entity::Blob { blob: value }
-                                }
-                                EntityType::Null => Entity::Null {},
-                            };
+                                        Entity::Blob { blob: value }
+                                    }
+                                    EntityType::Null => {
+                                        Entity::Null {}
+                                    }
+                                };
                             result.push(entity_value);
                         }
                         unsafe {
                             *previous_status =
-                                ffi::sqlite3_step(stmt.stmt);
+                                ffi::sqlite3_step(stmt.get_raw_stmt());
                         };
                         Some(result)
                     }
@@ -337,7 +245,9 @@ pub fn create_backup
                                  src_name.as_ptr())
     };
     match result {
-        null if null.is_null() => Err(generate_sqlite3_error(dest.db)),
+        null if null.is_null() => {
+            Err(generate_sqlite3_error(dest.db))
+        }
         ptr => Ok(ptr),
     }
 }

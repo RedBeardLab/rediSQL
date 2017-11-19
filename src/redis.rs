@@ -21,6 +21,9 @@ use std::error;
 
 use redisql_error as err;
 
+//#[cfg(feature = "pro")]
+//use replication;
+
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -31,6 +34,7 @@ pub mod ffi {
 }
 
 use sqlite as sql;
+use sqlite::StatementTrait;
 
 #[allow(dead_code)]
 pub struct Context {
@@ -63,13 +67,11 @@ impl RedisReply for sql::Entity {
                 sql::Entity::Null => {
                     ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
                 }
-                sql::Entity::OK => {
-                    let ok = String::from("OK");
-                    let ok_c = CString::new(ok.clone()).unwrap();
-                    ffi::RedisModule_ReplyWithStringBuffer.unwrap()(ctx, ok_c.as_ptr(), ok.len())
+                sql::Entity::OK {to_replicate} => {
+                    QueryResult::OK{to_replicate}.reply(ctx)
                 }                
-                sql::Entity::DONE { modified_rows } => {
-                    reply_with_done(ctx, modified_rows)
+                sql::Entity::DONE { modified_rows, to_replicate } => {
+                    QueryResult::DONE {modified_rows, to_replicate}.reply(ctx)
                 }
             }
         }
@@ -216,18 +218,30 @@ pub struct BlockedClient {
 unsafe impl Send for BlockedClient {}
 
 pub enum QueryResult {
-    OK,
-    DONE {modified_rows: i32},
-    Array { array: Vec<sql::Row> },
+    OK {to_replicate: bool},
+    DONE {modified_rows: i32, to_replicate: bool},
+    Array { array: Vec<sql::Row>, to_replicate: bool },
+}
+
+#[cfg(feature="community")]
+impl QueryResult {
+    pub fn reply(self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
+        match self {
+            QueryResult::OK {..} => reply_with_ok(ctx),
+            QueryResult::DONE {modified_rows, ..} => reply_with_done(ctx, modified_rows),
+            QueryResult::Array {array, ..} => reply_with_array(ctx, array),
+        }
+    }
 }
 
 fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     match cursor {
-        sql::Cursor::OKCursor => QueryResult::OK,
-        sql::Cursor::DONECursor {modified_rows} => QueryResult::DONE {modified_rows},
-        sql::Cursor::RowsCursor { .. } => {
+        sql::Cursor::OKCursor {to_replicate} => QueryResult::OK {to_replicate},
+        sql::Cursor::DONECursor {modified_rows, to_replicate} => QueryResult::DONE {modified_rows, to_replicate},
+        sql::Cursor::RowsCursor { to_replicate, .. } => {
             let y = QueryResult::Array {
                 array: cursor.collect::<Vec<sql::Row>>(),
+                to_replicate: to_replicate,
             };
             return y;
         }
@@ -287,7 +301,7 @@ fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_ca
                                -> () {
     let saved_statements = get_statement_metadata(db);
     match saved_statements {
-        Ok(QueryResult::Array { array }) => {
+        Ok(QueryResult::Array { array, .. }) => {
             for row in array {
                 let identifier = match row[1] {
                     sql::Entity::Text { ref text } => text.clone(),
@@ -349,7 +363,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
                                                    statement) {
                                 Ok(stmt) => {
                                     o.insert(stmt);
-                                    Ok(())
+                                    Ok(QueryResult::OK {to_replicate: true})
                                 }
                                 Err(e) => Err(e),
                             }
@@ -378,7 +392,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
                             match remove_statement(&db, identifier) {
                                 Ok(()) => {
                                 o.remove_entry();
-                                Ok(())
+                                Ok(QueryResult::OK {to_replicate: true})
                             }
                                 Err(e) => Err(err::RediSQLError::from(e)),
                             }
@@ -446,13 +460,13 @@ fn compile_and_insert_statement<'a>(identifier: String,
                                 statement: String,
                                 db: &'a sql::RawConnection,
                                 statements_cache: &mut HashMap<String, sql::Statement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
-                                -> Result<(), err::RediSQLError> {
+                                -> Result<QueryResult, err::RediSQLError> {
     match statements_cache.entry(identifier.clone()) {
         Entry::Vacant(v) => {
             match create_statement(db, identifier.clone(), statement) {
                 Ok(stmt) => {
                     v.insert(stmt);
-                    Ok(())
+                    Ok(QueryResult::OK {to_replicate: true})
                 }
                 Err(e) => Err(e),
             }

@@ -15,12 +15,18 @@ use uuid::Uuid;
 
 mod redisql_error;
 
+pub mod community_statement;
+
 mod sqlite;
 use sqlite as sql;
 
 mod redis;
 use redis as r;
 use redis::RedisReply;
+
+#[cfg(feature = "pro")]
+mod replication;
+
 
 extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::ffi::RedisModuleString,
@@ -31,11 +37,7 @@ extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(r::QueryResult::OK) => r::reply_with_ok(ctx),
-        Ok(r::QueryResult::DONE {modified_rows}) => r::reply_with_done(ctx, modified_rows),
-        Ok(r::QueryResult::Array { array }) => {
-            r::reply_with_array(ctx, array)
-        }
+        Ok(query_result) => query_result.reply(ctx),
         Err(error) => error.reply(ctx),
     }
 }
@@ -49,11 +51,7 @@ extern "C" fn reply_exec_statement(ctx: *mut r::ffi::RedisModuleCtx,
     let result: Box<Result<r::QueryResult, Option<sql::SQLite3Error>>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(r::QueryResult::OK) => r::reply_with_ok(ctx),
-        Ok(r::QueryResult::DONE {modified_rows}) => r::reply_with_done(ctx, modified_rows),
-        Ok(r::QueryResult::Array { array }) => {
-            r::reply_with_array(ctx, array)
-        }
+        Ok(query_result) => query_result.reply(ctx),
         Err(Some(error)) => error.reply(ctx),
         Err(None) => {
             r::reply_with_simple_string(ctx,
@@ -68,11 +66,11 @@ extern "C" fn reply_create_statement(ctx: *mut r::ffi::RedisModuleCtx,
                          _argc: ::std::os::raw::c_int)
                          -> i32 {
     let result =
-        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<(), sql::SQLite3Error>};
-    let result: Box<Result<(), sql::SQLite3Error>> =
+        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<r::QueryResult, sql::SQLite3Error>};
+    let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(()) => r::reply_with_ok(ctx),
+        Ok(query_result) => query_result.reply(ctx),
         Err(error) => error.reply(ctx),
     }
 }
@@ -437,8 +435,8 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                         
                                     match type_set {
                                         r::ffi::REDISMODULE_OK => {
-                                            let ok = CString::new("OK").unwrap();
-                                            unsafe { r::ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, ok.as_ptr()) }
+                                            let ok = r::QueryResult::OK {to_replicate: true};
+                                            ok.reply(ctx)
                                         }
                                         r::ffi::REDISMODULE_ERR => {
                                             let err = CString::new("ERR - Error in saving the database inside Redis").unwrap();
