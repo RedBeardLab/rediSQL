@@ -47,18 +47,13 @@ extern "C" fn reply_exec_statement(ctx: *mut r::ffi::RedisModuleCtx,
                          _argc: ::std::os::raw::c_int)
                          -> i32 {
     let result =
-        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<r::QueryResult, Option<sql::SQLite3Error>>};
-    let result: Box<Result<r::QueryResult, Option<sql::SQLite3Error>>> =
+        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<r::QueryResult, sql::SQLite3Error>};
+    let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
         Ok(query_result) => query_result.reply(ctx),
-        Err(Some(error)) => error.reply(ctx),
-        Err(None) => {
-            r::reply_with_simple_string(ctx,
-                                        String::from("Statement not \
-                                                      found!"))
-        }
-    }
+        Err(error) => error.reply(ctx),
+   }
 }
 
 extern "C" fn reply_create_statement(ctx: *mut r::ffi::RedisModuleCtx,
@@ -206,6 +201,7 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
                                                                                   Some(free_privdata), 
                                                                                   10000)},
                 };
+                    mem::forget(ctx);
                     let cmd = r::Command::Exec {
                         query: argvector[2].clone(),
                         client: blocked_client,
@@ -436,6 +432,9 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                     match type_set {
                                         r::ffi::REDISMODULE_OK => {
                                             let ok = r::QueryResult::OK {to_replicate: true};
+                                            unsafe {
+                                                r::ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx);
+                                            }
                                             ok.reply(ctx)
                                         }
                                         r::ffi::REDISMODULE_ERR => {
@@ -628,8 +627,6 @@ pub extern "C" fn RedisModule_OnLoad(ctx: *mut r::ffi::RedisModuleCtx,
                                      _argv: *mut *mut r::ffi::RedisModuleString,
                                      _argc: i32)
                                      -> i32 {
-
-
 
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();

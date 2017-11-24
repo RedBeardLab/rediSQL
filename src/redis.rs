@@ -2,6 +2,7 @@ extern crate libc;
 extern crate uuid;
 extern crate fnv;
 
+use std::mem;
 use std::ffi::{CString, CStr};
 use std::string;
 use std::fs::File;
@@ -21,9 +22,6 @@ use std::error;
 
 use redisql_error as err;
 
-//#[cfg(feature = "pro")]
-//use replication;
-
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -39,6 +37,12 @@ use sqlite::StatementTrait;
 #[allow(dead_code)]
 pub struct Context {
     ctx: *mut ffi::RedisModuleCtx,
+}
+
+impl Drop for Context {
+    fn drop(&mut self) {
+        mem::forget(self.ctx);
+    }
 }
 
 pub trait RedisReply {
@@ -145,6 +149,8 @@ impl RedisReply for sql::SQLite3Error {
 fn parse_args(argv: *mut *mut ffi::RedisModuleString,
               argc: i32)
               -> Result<Vec<String>, string::FromUtf8Error> {
+    mem::forget(argv);
+    mem::forget(argc);
     let mut args: Vec<String> = Vec::with_capacity(argc as usize);
     for i in 0..argc {
         let redis_str = unsafe { *argv.offset(i as isize) };
@@ -157,6 +163,9 @@ pub fn create_argument(ctx: *mut ffi::RedisModuleCtx,
                        argv: *mut *mut ffi::RedisModuleString,
                        argc: i32)
                        -> (Context, Vec<String>) {
+    mem::forget(argv);
+    mem::forget(argc);
+    mem::forget(ctx);
     let context = Context { ctx: ctx };
     let argvector = parse_args(argv, argc).unwrap();
     (context, argvector)
@@ -232,6 +241,9 @@ impl QueryResult {
             QueryResult::Array {array, ..} => reply_with_array(ctx, array),
         }
     }
+    pub fn to_replicate(&self) -> bool {
+        false
+    }
 }
 
 fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
@@ -250,7 +262,7 @@ fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
 
 fn execute_query(db: &sql::RawConnection,
                  query: String)
-                 -> Result<QueryResult, sql::SQLite3Error> {
+                 -> Result<QueryResult, err::RediSQLError> {
 
     let stmt = sql::Statement::new(&db, query)?;
     let cursor = stmt.execute()?;
@@ -326,6 +338,57 @@ fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_ca
     }
 }
 
+fn return_value(client: BlockedClient, result: Result<QueryResult, err::RediSQLError>) {
+    match result {
+        Err(_) => {},
+        Ok(ref query_result) => {
+            match query_result.to_replicate() {
+                false => {},
+                true => {
+                    unsafe {
+                        match ffi::RedisModule_GetThreadSafeContext{
+                            None => println!("Get None 1"),
+                            Some(_) => println!("ok"),
+                        }
+                        match ffi::RedisModule_ThreadSafeContextLock{
+                            None => println!("Get None 2"),
+                            Some(_) => println!("ok"),
+                        }
+                        match ffi::RedisModule_ReplicateVerbatim{
+                            None => println!("Get None 3"),
+                            Some(_) => println!("ok"),
+                        }
+                        match ffi::RedisModule_ThreadSafeContextUnlock{
+                            None => println!("Get None 4"),
+                            Some(_) => println!("ok"),
+                        }
+                        match ffi::RedisModule_FreeThreadSafeContext{
+                            None => println!("Get None 5"),
+                            Some(_) => println!("ok"),
+                        }
+                    }
+                    
+                    /*
+                     * unsafe {
+                        let ctx = ffi::RedisModule_GetThreadSafeContext.unwrap()(client.client);
+                        ffi::RedisModule_ThreadSafeContextLock.unwrap()(ctx);
+                        ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx);
+                        ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(ctx);
+                        ffi::RedisModule_FreeThreadSafeContext.unwrap()(ctx);
+         
+                    }
+                    */
+                },
+            }
+        },
+    }
+    unsafe {
+        ffi::RedisModule_UnblockClient.unwrap()(client.client,
+                                                       Box::into_raw(Box::new(result)) as *mut std::os::raw::c_void);
+    
+    }
+}
+
 pub fn listen_and_execute(db: sql::RawConnection,
                           rx: Receiver<Command>) {
 
@@ -335,14 +398,9 @@ pub fn listen_and_execute(db: sql::RawConnection,
     loop {
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
-                let result = Box::new(execute_query(&db, query));
-
-                unsafe {
-                    ffi::RedisModule_UnblockClient.unwrap()(client.client,
-                                                       Box::into_raw(result) as *mut std::os::raw::c_void)
-                };
-
-            }
+                let result = execute_query(&db, query);
+                return_value(client, result);
+                }
             Ok(Command::UpdateStatement { identifier,
                                           statement,
                                           client }) => {
@@ -370,11 +428,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
                         }
                     };
 
-                let to_pass = Box::into_raw(Box::new(result));
-                unsafe {
-                    ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
-                };
-
+                return_value(client, result)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
                 let result =
@@ -398,10 +452,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
                             }
                         }
                     };
-                let to_pass = Box::into_raw(Box::new(result));
-                unsafe {
-                    ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
-                };
+                return_value(client, result);
             }
             Ok(Command::CompileStatement { identifier,
                                            statement,
@@ -412,19 +463,18 @@ pub fn listen_and_execute(db: sql::RawConnection,
                                                  statement,
                                                  &db,
                                                  &mut statements_cache);
-
-                let to_pass = Box::into_raw(Box::new(result));
-
-                unsafe {
-                    ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
-                };
+    return_value(client, result);
             }
 
             Ok(Command::ExecStatement { identifier,
                                         arguments,
                                         client }) => {
                 let result = match statements_cache.get(&identifier) {
-                    None => Err(None),
+                    None => {
+                        let debug = String::from("No statement found");
+                        let description = String::from("The statement is not present in the database");
+                        Err(err::RediSQLError::new(debug, description))
+                    },
                     Some(stmt) => {
                         stmt.reset();
                         let bind = bind_statement(stmt, arguments);
@@ -432,22 +482,17 @@ pub fn listen_and_execute(db: sql::RawConnection,
                             Ok(stmt) => {
                                 let cursor = stmt.execute();
                                 match cursor {
-                                    Err(e) => Err(Some(e)),
+                                    Err(e) => Err(err::RediSQLError::from(e)),
                                     Ok(cursor) => {
                                         Ok(cursor_to_query_result(cursor))
                                     }
                                 }
                             }
-                            Err(e) => Err(Some(e)),
+                            Err(e) => Err(err::RediSQLError::from(e)),
                         }
                     }
                 };
-                let to_pass = Box::into_raw(Box::new(result));
-
-                unsafe {
-                    ffi::RedisModule_UnblockClient.unwrap()(client.client, to_pass as *mut std::os::raw::c_void)
-                };
-
+                return_value(client, result);
             }
             Ok(Command::Stop) => return,
             Err(RecvError) => return,

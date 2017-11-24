@@ -68,8 +68,6 @@ impl error::Error for SQLite3Error {
 
 impl err::RediSQLErrorTrait for SQLite3Error {}
 
-
-
 #[derive(Clone)]
 pub struct RawConnection {
     db: *mut ffi::sqlite3,

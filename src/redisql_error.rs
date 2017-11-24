@@ -13,6 +13,12 @@ pub struct RediSQLError {
     error_description: String,
 }
 
+impl RediSQLError {
+    pub fn new(debug: String, error_description: String) -> RediSQLError {
+        RediSQLError {debug, error_description}
+    }
+}
+
 impl fmt::Debug for RediSQLError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.debug)
