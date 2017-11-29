@@ -133,20 +133,21 @@
 <p>The project provides two versions, an open source one, which is enough for most simple projects, and a PRO version that provide features required from companies and enterprises.</p>
 <h1 id="overview">Overview</h1>
 <p>In this section we are going to explore the main concepts in the module.</p>
+<p>There is another section of the website, <a href="references/">the reference</a>, that explore every single command that the module provides giving deeper explaination of every detail.</p>
 <h2 id="databases">Databases</h2>
 <p>RediSQL provide the concept of database.</p>
-<p>It is possible to create a new database with the command <code>REDISQL.CREATE_DB</code>.</p>
+<p>It is possible to create a new database with the command <a href="references/#redisqlcreate_db"><code>REDISQL.CREATE_DB</code></a>.</p>
 <p>The database get associate with a Redis key and so it is possible to have multiple SQL databases in a single Redis instance.</p>
 <p>Also it is possible to use in-memory database, wich is the default, or databases backed by a real file. In-memory databases are generally a little faster but they are limited by the ammount of memory your server has. Database backed by files are a little slower but they can grow basically indefinitely.</p>
 <h2 id="exec">Exec</h2>
-<p><code>REDISQL.EXEC</code> is the command that let you execute command against a SQL database.</p>
+<p><a href="references/#redisqlexec"><code>REDISQL.EXEC</code></a> is the command that let you execute command against a SQL database.</p>
 <p>It is usefull when you are testing the module or when you are changing the settings of the databases throught SQLite <code>PRAGMA</code>s.</p>
 <p>However I would not suggest to use them in production since there are better tools like <code>Statements</code>.</p>
 <h2 id="statements">Statements</h2>
 <p>Queries and stataments can be precompile and stores inside the Redis key in order to provide a faster execution and more agility in your application.</p>
 <p>When you execute a SQLite query, the text is compiled to a binary code, this binary code is then executed against the database and the result provide as answer.
 The phase of compilation can be quite expensive, but if you always execute the same statements (think about <code>inserts</code>), it can be avoided.</p>
-<p>When you use <code>REDISQL.CREATE_STATEMENT</code> your statement get compiled, then when you execute it using <code>REDISQL.EXECUTE_STATEMENT</code> it is not re-compiled but we use the pre-compiled one. It seems a trivial change but it will really speed up some workload.</p>
+<p>When you use <a href="references/#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a> your statement get compiled, then when you execute it using <a href="references/#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a> it is not re-compiled but we use the pre-compiled one. It seems a trivial change but it will really speed up some workload.</p>
 <p>Statements can also be used as an interface for different application using the same RediSQL instance.</p>
 <p>Once you define the interface of the statement and its behavior, then you are free to change it's implementation  while maintain all the legacy code working.
 This is quite useful esepcially if you have several services using the same RediSQL instance.</p>
@@ -205,5 +206,5 @@ This is quite useful esepcially if you have several services using the same Redi
 
 <!--
 MkDocs version : 0.14.0
-Build Date UTC : 2017-11-29 09:59:13.500336
+Build Date UTC : 2017-11-29 10:43:36.449102
 -->
