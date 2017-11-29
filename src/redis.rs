@@ -345,43 +345,23 @@ fn return_value(client: BlockedClient, result: Result<QueryResult, err::RediSQLE
             match query_result.to_replicate() {
                 false => {},
                 true => {
-                    unsafe {
-                        match ffi::RedisModule_GetThreadSafeContext{
-                            None => println!("Get None 1"),
-                            Some(_) => println!("ok"),
-                        }
-                        match ffi::RedisModule_ThreadSafeContextLock{
-                            None => println!("Get None 2"),
-                            Some(_) => println!("ok"),
-                        }
-                        match ffi::RedisModule_ReplicateVerbatim{
-                            None => println!("Get None 3"),
-                            Some(_) => println!("ok"),
-                        }
-                        match ffi::RedisModule_ThreadSafeContextUnlock{
-                            None => println!("Get None 4"),
-                            Some(_) => println!("ok"),
-                        }
-                        match ffi::RedisModule_FreeThreadSafeContext{
-                            None => println!("Get None 5"),
-                            Some(_) => println!("ok"),
-                        }
-                    }
-                    
-                    /*
-                     * unsafe {
+                    println!("It should replicate");
+                      unsafe {
                         let ctx = ffi::RedisModule_GetThreadSafeContext.unwrap()(client.client);
+    
+                        let flags = ffi::RedisModule_GetContextFlags.unwrap()(ctx);
+                        println!("Flags: {}", flags);
+
                         ffi::RedisModule_ThreadSafeContextLock.unwrap()(ctx);
                         ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx);
                         ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(ctx);
                         ffi::RedisModule_FreeThreadSafeContext.unwrap()(ctx);
-         
                     }
-                    */
                 },
             }
         },
     }
+
     unsafe {
         ffi::RedisModule_UnblockClient.unwrap()(client.client,
                                                        Box::into_raw(Box::new(result)) as *mut std::os::raw::c_void);
