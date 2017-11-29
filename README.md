@@ -4,6 +4,10 @@ RediSQL is a redis module that embeded SQLite.
 
 _With great powers comes great responsability_ (cit. Uncle Ben)
 
+# Documentation
+
+This readme will provide you with the basis, however for deeper documentation you should look here: [siscia.github.io/rediSQL](https://siscia.github.io/rediSQL/)
+
 ## Motivation
 
 I love the agility provided by Redis, however, several times, I wished I had a little more structure in my in-memory database.
