@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+
+	<title>References - RediSQL</title>
+
+        <link href="../css/bootstrap-custom.min.css" rel="stylesheet">
+        <link href="../css/font-awesome-4.0.3.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="../css/highlight.css">
+
+        <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+        <!--[if lt IE 9]>
+            <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+            <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+        <![endif]-->
+
+        
+    </head>
+
+    <body>
+
+        <div class="navbar navbar-default navbar-fixed-top" role="navigation">
+    <div class="container">
+
+        <!-- Collapsed navigation -->
+        <div class="navbar-header">
+            
+            <!-- Expander button -->
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            
+
+            <!-- Main title -->
+            <a class="navbar-brand" href="..">RediSQL</a>
+        </div>
+
+        <!-- Expanded navigation -->
+        <div class="navbar-collapse collapse">
+            
+                <!-- Main navigation -->
+                <ul class="nav navbar-nav">
+                
+                
+                    <li >
+                        <a href="..">Overview</a>
+                    </li>
+                
+                
+                
+                    <li class="active">
+                        <a href="./">References</a>
+                    </li>
+                
+                
+                </ul>
+            
+
+            <ul class="nav navbar-nav navbar-right">
+                <li>
+                    <a href="#" data-toggle="modal" data-target="#mkdocs_search_modal">
+                        <i class="fa fa-search"></i> Search
+                    </a>
+                </li>
+                
+                    <li >
+                        <a rel="next" href="..">
+                            <i class="fa fa-arrow-left"></i> Previous
+                        </a>
+                    </li>
+                    <li class="disabled">
+                        <a rel="prev" >
+                            Next <i class="fa fa-arrow-right"></i>
+                        </a>
+                    </li>
+                
+                
+            </ul>
+        </div>
+    </div>
+</div>
+
+        <div class="container">
+            
+                <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
+    <ul class="nav bs-sidenav">
+    
+        <li class="main active"><a href="#references">References</a></li>
+        
+            <li><a href="#redisqlcreate_db">REDISQL.CREATE_DB</a></li>
+        
+            <li><a href="#del">DEL</a></li>
+        
+            <li><a href="#redisqlexec">REDISQL.EXEC</a></li>
+        
+            <li><a href="#redisqlcreate_statement">REDISQL.CREATE_STATEMENT</a></li>
+        
+            <li><a href="#redisqlexec_statement">REDISQL.EXEC_STATEMENT</a></li>
+        
+            <li><a href="#redisqldelete_statement">REDISQL.DELETE_STATEMENT</a></li>
+        
+    
+    </ul>
+</div></div>
+                <div class="col-md-9" role="main">
+
+<h1 id="references">References</h1>
+<p>This documents explains all the API that RediSQL provide to the users.</p>
+<p>For each command it expose first the name and then the syntaxt and finally a brief explaination of what is going on inside the code.</p>
+<p>Where is possible it provides also an estimate of the complexity, since we are talkings about databases not al queries have the same time and spatial complexity.</p>
+<p>Finaly, if it is appropriate the document also provide several references to external material that the interested reader can use to understand better the dynamics of every and each command.</p>
+<h2 id="redisqlcreate_db">REDISQL.CREATE_DB</h2>
+<h4 id="redisqlcreate_db-db_key-path">REDISQL.CREATE_DB db_key [path]</h4>
+<p>This command create a new DB and associate it with the key.</p>
+<p>The path arguments is optional and, if provide is the file that SQLite will use.
+It can be an exixsting SQLite file or it can be a non exixsting file.</p>
+<p>If the file actually exists and if it is a regular SQLite file that database will be used.
+If the file does not exists a new file will be created.</p>
+<p>If the path is not provide it will open an in memory database. Not providing a path is equivalent to provide the special string <code>:memory:</code> as path argument.</p>
+<p>After opening the database it inserts metadata into it and then starts a thread loop.</p>
+<p><strong>Complexity</strong>: O(1), it means constant, it does not necessarly means <em>fast</em>. However is fast enough for any use case facing human users (eg create a new databse for every user loggin in a website.)</p>
+<p><strong>See also</strong>: </p>
+<ol>
+<li><a href="https://sqlite.org/c3ref/open.html">SQLite <code>sqlite3_open_v2</code></a></li>
+</ol>
+<h2 id="del">DEL</h2>
+<h4 id="del-db_key-key">DEL db_key [key ...]</h4>
+<p>This command is a generic command from Redis.</p>
+<p>It eliminates keys from Redis itself, as well if the key is a RediSQL database create with <a href="#redisqlcreate_db"><code>REDISQL.CREATE_DB</code></a> it will eliminate the SQLite database, stop the thread loop and clean up everything left.</p>
+<p>If the database is backed by a file the file will be close.</p>
+<p><strong>Complexity</strong>: DEL is O(N) on the number of keys, if you are only eliminating the key associated with the SQLite database will be constant, O(1).</p>
+<p><strong>See also</strong>: </p>
+<ol>
+<li><a href="https://sqlite.org/c3ref/close.html">SQLite <code>sqlite3_close</code></a></li>
+<li><a href="https://redis.io/commands/del">Redis <code>DEL</code></a></li>
+</ol>
+<h2 id="redisqlexec">REDISQL.EXEC</h2>
+<h4 id="redisqlexec-db_key-statement">REDISQL.EXEC db_key "statement"</h4>
+<p>This command takes as input a redis key created with <a href="#redisqlcreate_db"><code>REDISQL.CREATE_DB</code></a> and a statement string.</p>
+<p>Internally it transform the string into a <a href="https://sqlite.org/c3ref/stmt.html">sqlite statement</a> using <a href="https://sqlite.org/c3ref/prepare.html">sqlite3_prepare_v2</a>, execute it against the database, <a href="https://sqlite.org/c3ref/step.html">sqlite3_step</a>, and finally returns the results to the client.</p>
+<p>The compilation of the string into a statement and its execution happens in a different therad from the one used by redis and so this command has a minimum impact on the overall Redis performance, however it does block the client.</p>
+<p>This command is quite useful to execute <a href="https://sqlite.org/pragma.html">PRAGMA Statements</a>, for normal operations against the database is suggested to use <code>STATEMENTS</code>.</p>
+<p>Also, remember that there is only a single thread for database, execution of multiple <code>REDISQL.EXEC</code> against the same database will result in a serialization of the executions, one will be executed before the others.</p>
+<p>Finally is importat to have in mind how <code>sqlite3_prepare_v2</code> works. The functions compile only the first statement, (everything between the start of the string and the first semicolon <code>;</code>) and not the whole string. This means that executing commands like:</p>
+<pre><code class="SQL">BEGIN TRANSACTION; -- here first semicolon, and first statement
+INSERT INTO ... ;
+SELECT n FROM ...;
+CASE 
+  WHEN n &gt;= 4 THEN ABORT
+  ELSE COMMIT
+END;
+</code></pre>
+
+<p>Will <strong>NOT</strong>, let me repeat, it will <strong>not</strong> work as expected, the first statement is just <code>BEGIN TRANSACTION;</code> and only that one will be executed.</p>
+<p>Please note that we are seriously considering to change this behaviour in order to make transactions and other queries works in the expected way.</p>
+<p><strong>Complexity</strong>: It depends interally on the statement string. The use of a single thread for database is been choosen after several tests where the single thread configuration was faster than a multi thread one. This is true in a write intensive application and in a mixed write/read application.</p>
+<p><strong>See also</strong>:</p>
+<ol>
+<li><a href="https://sqlite.org/c3ref/prepare.html">SQLite <code>sqlite3_prepare_v2</code></a></li>
+<li><a href="https://sqlite.org/c3ref/stmt.html">SQLite <code>statement</code> aka <code>sqlite3_stmt</code></a></li>
+<li><a href="https://sqlite.org/c3ref/step.html">SQLite <code>sqlite3_step</code></a></li>
+<li><a href="https://sqlite.org/pragma.html">SQLite <code>PRAGMA</code>s</a></li>
+<li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
+</ol>
+<h2 id="redisqlcreate_statement">REDISQL.CREATE_STATEMENT</h2>
+<h4 id="redisqlcreate_statement-db_key-stmt_identifier-statement">REDISQL.CREATE_STATEMENT db_key stmt_identifier "statement"</h4>
+<p>This command compile a statement string into an <a href="https://sqlite.org/c3ref/stmt.html">sqlite statement</a> and associate such statement to an identifier.</p>
+<p>The same limitation of <a href="#redisqlexec">REDISQL.EXEC</a> regarding multiple statements in the same string. Only the first SQL statement (from the beginning to the first semicolon <code>;</code>) get compiled into an sqlite statement.</p>
+<p>Using this command you can insert parameters using the <code>?</code> special sysmbols, those parameters will be bind to the statements when you are executing the statement itself.</p>
+<p>For now only the <code>?</code> syntax is supported.</p>
+<p>This command does not execute anything against the database, but simply store the sqlite statements into a dictionary associated with the identifier provided (<code>stmt_identifier</code>). Then it stores the information regarding the statement into the metadata table in order to provide a simple way to restore also the statements.</p>
+<p>The statement is associated with a database, a statement created for one database cannot be used for another database, you need to create a different one. This allow a simple and fast way to provide persistency.</p>
+<p>You can execute the statement with <a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a>.</p>
+<p>You cannot overwrite a statement, however you can delete an old one, using <a href="#redisqldelete_statement"><code>REDISQL.DELETE_STATEMENT</code></a> and then create a new one with the same name, this in order to avoid error while creating statements. 
+Suppose that a service need a particular statement to be define in order to work, this safety measure allow the users to simply go ahead, try to create it, and in case catch the error.</p>
+<p>Also this command is not blocking, meaning that all the work happens in a separate thread respect the redis one.</p>
+<p><strong>Complexity</strong>: If we assume that the time necessary to compile a string into a sqlite statement is constant, overall the complexity is O(1), again constant, not necessarly <em>fast</em>.</p>
+<p><strong>See also</strong>:</p>
+<ol>
+<li><a href="https://sqlite.org/c3ref/prepare.html">SQLite <code>sqlite3_prepare_v2</code></a></li>
+<li><a href="https://sqlite.org/c3ref/stmt.html">SQLite <code>statement</code> aka <code>sqlite3_stmt</code></a></li>
+<li><a href="https://sqlite.org/c3ref/bind_blob.html">SQLite bindings, <code>sqlite3_bind_text</code></a></li>
+<li><a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a></li>
+<li><a href="#redisqldelete_statement"><code>REDISQL.DELETE_STATEMENT</code></a></li>
+<li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
+</ol>
+<h2 id="redisqlexec_statement">REDISQL.EXEC_STATEMENT</h2>
+<h4 id="redisqlexec_statement-db_key-stmt_identifier-binding_parameters">REDISQL.EXEC_STATEMENT db_key stmt_identifier [binding_parameters ...]</h4>
+<p>This command binds all the parameters to the statement created using <a href="#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a> and identifed by <code>stmt_identifier</code>. Then the module execute the statement against the db associate to <code>db_key</code>.</p>
+<p>The number of parameters must be coherent with the number expected by the statement, if there were 3 <code>?</code> you need to provide 3 binding parameters.
+The bindings are associated in order to the statement.</p>
+<p>Redis works using a text protocol, all the arguments are encoded as text, hence the module is forced to use the procedure <code>sqlite3_bind_text</code>, however SQLite is smart enough to recognize numbers and treat them correctly. Numbers will be threat as numbers, text will be treat as text.</p>
+<p>Finally, once completed the binding part the statement is executed and its result is returned to the client.</p>
+<p>This command as well is not blocking, all the work happens in a different thread from the one of Redis.</p>
+<p><strong>Complexity</strong>: The complexity to retrieve and to bind the parameters is roughly constant for any practical purpose, however the overall complexity will be dominated by the time to execute the query.</p>
+<p><strong>See also</strong>:</p>
+<ol>
+<li><a href="https://sqlite.org/c3ref/stmt.html">SQLite <code>statement</code> aka <code>sqlite3_stmt</code></a></li>
+<li><a href="https://sqlite.org/c3ref/bind_blob.html">SQLite bindings, <code>sqlite3_bind_text</code></a></li>
+<li><a href="#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a></li>
+<li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
+</ol>
+<h2 id="redisqldelete_statement">REDISQL.DELETE_STATEMENT</h2>
+<h4 id="redisqldelete_statement-db_key-stmt_identifier">REDISQL.DELETE_STATEMENT db_key stmt_identifier</h4>
+<p>This comand eliminates a statements from the db.</p>
+<p>It first look remove it from an internal hash table and then remove it from an internal SQLite table.</p>
+<p>Eliminating a statement first and then re-create one using the same identifier is the only way to change its implementation.</p>
+<p>Also this command is not blocking and work in a different thread from the main Redis one.</p>
+<p><strong>Complexity</strong>: The complexity is constant and fast.</p>
+<p><strong>See also</strong>:</p>
+<ol>
+<li><a href="https://sqlite.org/c3ref/stmt.html">SQLite <code>statement</code> aka <code>sqlite3_stmt</code></a></li>
+<li><a href="#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a></li>
+<li><a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a></li>
+<li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
+</ol></div>
+            
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            
+            <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+
+        <script src="../js/jquery-1.10.2.min.js"></script>
+        <script src="../js/bootstrap-3.0.3.min.js"></script>
+        <script src="../js/highlight.pack.js"></script>
+        <script>var base_url = '..';</script>
+        <script data-main="../mkdocs/js/search.js" src="../mkdocs/js/require.js"></script>
+        <script src="../js/base.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="Search Modal" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                        <h4 class="modal-title" id="exampleModalLabel">Search</h4>
+                    </div>
+                    <div class="modal-body">
+                        <p>
+                            From here you can search these documents. Enter
+                            your search terms below.
+                        </p>
+                        <form role="form">
+                            <div class="form-group">
+                                <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query">
+                            </div>
+                        </form>
+                        <div id="mkdocs-search-results"></div>
+                    </div>
+                    <div class="modal-footer">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </body>
+</html>
