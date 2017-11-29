@@ -18,11 +18,13 @@ The project provides two versions, an open source one, which is enough for most 
 
 In this section we are going to explore the main concepts in the module.
 
+There is another section of the website, [the reference][ref], that explore every single command that the module provides giving deeper explaination of every detail.
+
 ## Databases
 
 RediSQL provide the concept of database.
 
-It is possible to create a new database with the command `REDISQL.CREATE_DB`.
+It is possible to create a new database with the command [`REDISQL.CREATE_DB`][r:create_db].
 
 The database get associate with a Redis key and so it is possible to have multiple SQL databases in a single Redis instance.
 
@@ -30,7 +32,7 @@ Also it is possible to use in-memory database, wich is the default, or databases
 
 ## Exec
 
-`REDISQL.EXEC` is the command that let you execute command against a SQL database.
+[`REDISQL.EXEC`][r:exec] is the command that let you execute command against a SQL database.
 
 It is usefull when you are testing the module or when you are changing the settings of the databases throught SQLite `PRAGMA`s.
 
@@ -43,7 +45,7 @@ Queries and stataments can be precompile and stores inside the Redis key in orde
 When you execute a SQLite query, the text is compiled to a binary code, this binary code is then executed against the database and the result provide as answer.
 The phase of compilation can be quite expensive, but if you always execute the same statements (think about `inserts`), it can be avoided.
 
-When you use `REDISQL.CREATE_STATEMENT` your statement get compiled, then when you execute it using `REDISQL.EXECUTE_STATEMENT` it is not re-compiled but we use the pre-compiled one. It seems a trivial change but it will really speed up some workload.
+When you use [`REDISQL.CREATE_STATEMENT`][r:create_statement] your statement get compiled, then when you execute it using [`REDISQL.EXEC_STATEMENT`][r:exec_statement] it is not re-compiled but we use the pre-compiled one. It seems a trivial change but it will really speed up some workload.
 
 Statements can also be used as an interface for different application using the same RediSQL instance.
 
@@ -67,3 +69,10 @@ AOF replication is provided only in the PRO edition.
 At the moment all the commands are replicated, this is quite a waste and we are moving to replicate only the commands that actually modify the codebase.
 
 With AOF replication you also get instance replication that allows to replicate the same dataset into different redis instances.
+
+
+[ref]: references.md
+[r:create_db]: references.md#redisqlcreate_db
+[r:exec]: references.md#redisqlexec
+[r:create_statement]: references.md#redisqlcreate_statement
+[r:exec_statement]: references.md#redisqlexec_statement
