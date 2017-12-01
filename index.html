@@ -100,7 +100,7 @@
         
             <li><a href="#motivation">Motivation</a></li>
         
-            <li><a href="#susteinable-open-source">Susteinable Open Source</a></li>
+            <li><a href="#sustainable-open-source">Sustainable Open Source</a></li>
         
     
         <li class="main "><a href="#overview">Overview</a></li>
@@ -124,42 +124,42 @@
                 <div class="col-md-9" role="main">
 
 <h1 id="redisql">RediSQL</h1>
-<p>RediSQL is a redis module that embed a fully functional SQLite database.</p>
+<p>RediSQL is a Redis module that embeds a fully functional SQLite database.</p>
 <h2 id="motivation">Motivation</h2>
 <p>The main motivation behind the project is to provide a quick and hands-off environment to store structured data.</p>
 <p>It also turns out that RediSQL is a great way to cache your content and data in a more structured way.</p>
-<h2 id="susteinable-open-source">Susteinable Open Source</h2>
-<p>The project is based on the idea of susteinable Open Source.</p>
-<p>The project provides two versions, an open source one, which is enough for most simple projects, and a PRO version that provide features required from companies and enterprises.</p>
+<h2 id="sustainable-open-source">Sustainable Open Source</h2>
+<p>The project is based on the idea of sustainable Open Source.</p>
+<p>The project provides two versions, an open source one, which is enough for most simple projects, and a PRO version that provides features required from companies and enterprises.</p>
 <h1 id="overview">Overview</h1>
-<p>In this section we are going to explore the main concepts in the module.</p>
-<p>There is another section of the website, <a href="references/">the reference</a>, that explore every single command that the module provides giving deeper explaination of every detail.</p>
+<p>In this section, we are going to explore the main concepts in the module.</p>
+<p>There is another section of the website, <a href="references/">the reference</a>, that explore every single command that the module provides giving a deeper explanation of every detail.</p>
 <h2 id="databases">Databases</h2>
-<p>RediSQL provide the concept of database.</p>
+<p>RediSQL provides the concept of database.</p>
 <p>It is possible to create a new database with the command <a href="references/#redisqlcreate_db"><code>REDISQL.CREATE_DB</code></a>.</p>
-<p>The database get associate with a Redis key and so it is possible to have multiple SQL databases in a single Redis instance.</p>
-<p>Also it is possible to use in-memory database, wich is the default, or databases backed by a real file. In-memory databases are generally a little faster but they are limited by the ammount of memory your server has. Database backed by files are a little slower but they can grow basically indefinitely.</p>
+<p>The database is associated with a Redis key and so it is possible to have multiple SQL databases in a single Redis instance.</p>
+<p>Also, it is possible to use in-memory database, which is the default, or databases backed by a real file. In-memory databases are generally a little faster but they are limited by the amount of memory your server has. Database backed by files are a little slower but they can grow basically indefinitely.</p>
 <h2 id="exec">Exec</h2>
 <p><a href="references/#redisqlexec"><code>REDISQL.EXEC</code></a> is the command that let you execute command against a SQL database.</p>
-<p>It is usefull when you are testing the module or when you are changing the settings of the databases throught SQLite <code>PRAGMA</code>s.</p>
-<p>However I would not suggest to use them in production since there are better tools like <code>Statements</code>.</p>
+<p>It is useful when you are testing the module or when you are changing the settings of the databases through SQLite <code>PRAGMA</code>s.</p>
+<p>However, I would not suggest to use them in production since there are better tools like <code>Statements</code>.</p>
 <h2 id="statements">Statements</h2>
-<p>Queries and stataments can be precompile and stores inside the Redis key in order to provide a faster execution and more agility in your application.</p>
-<p>When you execute a SQLite query, the text is compiled to a binary code, this binary code is then executed against the database and the result provide as answer.
+<p>Queries and statements can be precompiled and stores inside the Redis key in order to provide a faster execution and more agility in your application.</p>
+<p>When you execute an SQLite query, the text is compiled to a binary code, this binary code is then executed against the database and the result provide an answer.
 The phase of compilation can be quite expensive, but if you always execute the same statements (think about <code>inserts</code>), it can be avoided.</p>
-<p>When you use <a href="references/#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a> your statement get compiled, then when you execute it using <a href="references/#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a> it is not re-compiled but we use the pre-compiled one. It seems a trivial change but it will really speed up some workload.</p>
+<p>When you use <a href="references/#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a> your statement is compiled, then when you execute it using <a href="references/#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a> it is not re-compiled but we use the pre-compiled one. It seems a trivial change but it will really speed up some workload.</p>
 <p>Statements can also be used as an interface for different application using the same RediSQL instance.</p>
-<p>Once you define the interface of the statement and its behavior, then you are free to change it's implementation  while maintain all the legacy code working.
-This is quite useful esepcially if you have several services using the same RediSQL instance.</p>
+<p>Once you define the interface of the statement and its behavior, then you are free to change it's implementation while maintaining all the legacy code working.
+This is quite useful especially if you have several services using the same RediSQL instance.</p>
 <h1 id="persistency">Persistency</h1>
-<p>The module in the community version implements only RDB. However the PRO version provide also AOF and replication.</p>
+<p>The module in the community version implements only RDB. However, the PRO version provides also AOF and replication.</p>
 <h2 id="rdb">RDB</h2>
 <p>The module implements RDB persistency.</p>
 <p>When Redis starts to save the RDB file the status of the database get serialized and written, along with all the other information, in the RDB file.</p>
 <h2 id="aof">AOF</h2>
 <p>AOF replication is provided only in the PRO edition.</p>
 <p>At the moment all the commands are replicated, this is quite a waste and we are moving to replicate only the commands that actually modify the codebase.</p>
-<p>With AOF replication you also get instance replication that allows to replicate the same dataset into different redis instances.</p></div>
+<p>With AOF replication you also get instance replication that allows replicating the same dataset into different Redis instances.</p></div>
             
         </div>
 
@@ -206,5 +206,5 @@ This is quite useful esepcially if you have several services using the same Redi
 
 <!--
 MkDocs version : 0.14.0
-Build Date UTC : 2017-11-29 10:43:36.449102
+Build Date UTC : 2017-12-01 13:25:44.063405
 -->
