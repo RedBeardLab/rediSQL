@@ -4,7 +4,7 @@
     
     <url>
      <loc>None/</loc>
-     <lastmod>2017-12-01</lastmod>
+     <lastmod>2017-12-02</lastmod>
      <changefreq>daily</changefreq>
     </url>
     
@@ -12,7 +12,15 @@
     
     <url>
      <loc>None/references/</loc>
-     <lastmod>2017-12-01</lastmod>
+     <lastmod>2017-12-02</lastmod>
+     <changefreq>daily</changefreq>
+    </url>
+    
+
+    
+    <url>
+     <loc>None/motivations/</loc>
+     <lastmod>2017-12-02</lastmod>
      <changefreq>daily</changefreq>
     </url>
     
