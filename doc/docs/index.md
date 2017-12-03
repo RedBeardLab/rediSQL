@@ -1,12 +1,14 @@
 # RediSQL
 
-RediSQL is a Redis module that embeds a fully functional SQLite database.
+[RediSQL][github] is a Redis module that embeds a fully functional SQLite database.
 
 ## Motivation
 
 The main motivation behind the project is to provide a quick and hands-off environment to store structured data.
 
 It also turns out that RediSQL is a great way to cache your content and data in a more structured way.
+
+Anyway, the main history and motivation of the project are explained [in this page.][motivations]
 
 ## Sustainable Open Source
 
@@ -71,8 +73,10 @@ At the moment all the commands are replicated, this is quite a waste and we are 
 With AOF replication you also get instance replication that allows replicating the same dataset into different Redis instances.
 
 
+[github]: https://github.com/RedBeardLab/rediSQL
 [ref]: references.md
 [r:create_db]: references.md#redisqlcreate_db
 [r:exec]: references.md#redisqlexec
 [r:create_statement]: references.md#redisqlcreate_statement
 [r:exec_statement]: references.md#redisqlexec_statement
+[motivations]: motivations.md

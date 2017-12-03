@@ -1,8 +1,10 @@
 
 site_name: RediSQL
+repo_url: https://github.com/RedBeardLab/rediSQL
 pages: 
   - 
     Overview: index.md
   -
     References: references.md
-
+  -
+    Motivations: motivations.md

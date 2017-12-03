@@ -345,18 +345,20 @@ fn return_value(client: BlockedClient, result: Result<QueryResult, err::RediSQLE
             match query_result.to_replicate() {
                 false => {},
                 true => {
-                    println!("It should replicate");
+                    /*
+                    // println!("It should replicate");
                       unsafe {
                         let ctx = ffi::RedisModule_GetThreadSafeContext.unwrap()(client.client);
     
                         let flags = ffi::RedisModule_GetContextFlags.unwrap()(ctx);
-                        println!("Flags: {}", flags);
+                        // println!("Flags: {}", flags);
 
                         ffi::RedisModule_ThreadSafeContextLock.unwrap()(ctx);
                         ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx);
                         ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(ctx);
                         ffi::RedisModule_FreeThreadSafeContext.unwrap()(ctx);
                     }
+                    */
                 },
             }
         },
