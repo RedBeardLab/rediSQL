@@ -419,7 +419,7 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                         tx: tx,
                                         db: rc.clone(),
                                         in_memory: in_memory,
-                                        statements: HashMap::new(),
+                                        //statements: HashMap::new(),
                                     };
                                     thread::spawn(move || {
                                         r::listen_and_execute(rc, rx);
@@ -567,7 +567,7 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
                                                 tx: tx,
                                                 db: in_mem.clone(),
                                                 in_memory: true,
-                                                statements: HashMap::new(),
+                                                //statements: HashMap::new(),
                                             };
 
                                             thread::spawn(move || { 
@@ -628,6 +628,8 @@ pub extern "C" fn RedisModule_OnLoad(ctx: *mut r::ffi::RedisModuleCtx,
                                      _argc: i32)
                                      -> i32 {
 
+    sql::disable_global_memory_statistics();
+                                         
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();
 

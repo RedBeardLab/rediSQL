@@ -3,11 +3,12 @@ use std::ptr;
 use std::fmt;
 use std::ffi::{CString, CStr};
 use std::error;
+use std::iter::FromIterator;
 
 use redisql_error as err;
 
 pub use community_statement;
-pub use community_statement::Statement;
+pub use community_statement::{MultiStatement, Statement};
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -15,6 +16,17 @@ pub use community_statement::Statement;
 #[allow(non_upper_case_globals)]
 pub mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
+}
+
+pub enum SQLiteOK {
+    OK,
+}
+
+impl FromIterator<SQLiteOK> for SQLiteOK {
+    fn from_iter<I: IntoIterator<Item = SQLiteOK>>(_iter: I)
+                                                   -> SQLiteOK {
+        SQLiteOK::OK
+    }
 }
 
 #[derive(Clone)]
@@ -71,6 +83,7 @@ impl err::RediSQLErrorTrait for SQLite3Error {}
 #[derive(Clone)]
 pub struct RawConnection {
     db: *mut ffi::sqlite3,
+    modified_rows: i32,
 }
 
 unsafe impl Send for RawConnection {}
@@ -102,7 +115,12 @@ pub fn open_connection(path: String)
                              ptr::null())
     };
     match r {
-        ffi::SQLITE_OK => Ok(RawConnection { db: db }),
+        ffi::SQLITE_OK => {
+            Ok(RawConnection {
+                db: db,
+                modified_rows: 0,
+            })
+        }
         _ => {
             return Err(generate_sqlite3_error(db));
         }
@@ -115,10 +133,13 @@ pub trait StatementTrait<'a>: Sized {
            -> Result<Self, SQLite3Error>;
     fn reset(&self);
     fn execute(&self) -> Result<Cursor, SQLite3Error>;
-    fn bind_text(&self,
-                 index: i32,
-                 value: String)
-                 -> Result<(), SQLite3Error>;
+    fn bind_texts(&self,
+                  values: Vec<String>)
+                  -> Result<SQLiteOK, SQLite3Error>;
+    fn bind_index(&self,
+                  index: i32,
+                  value: &String)
+                  -> Result<SQLiteOK, SQLite3Error>;
     fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt;
     fn to_replicate(&self) -> bool {
         false
@@ -138,6 +159,7 @@ pub enum Entity {
     Float { float: f64 },
     Text { text: String },
     Blob { blob: String },
+
     Null,
     OK { to_replicate: bool },
     DONE {
@@ -159,9 +181,45 @@ pub enum Cursor<'a> {
         types: Vec<EntityType>,
         previous_status: i32,
         stmt: &'a Statement<'a>,
+        modified_rows: i32,
         to_replicate: bool,
     },
 }
+
+impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
+    fn from_iter<I: IntoIterator<Item = Cursor<'a>>>
+        (cursors: I)
+         -> Cursor<'a> {
+
+        let mut to_replicate_acc = false;
+        let mut result: Option<Cursor<'a>> = None;
+        for cursor in cursors {
+            match cursor {
+                Cursor::OKCursor { to_replicate } => {
+                    to_replicate_acc &= to_replicate;
+                }
+                Cursor::DONECursor { modified_rows,
+                                     to_replicate } => {
+                    to_replicate_acc &= to_replicate;
+                }
+                Cursor::RowsCursor { to_replicate, .. } => {
+                    to_replicate_acc &= to_replicate;
+                    result = Some(cursor);
+                }
+            }
+        }
+        match result {
+            None => {
+                Cursor::DONECursor {
+                    to_replicate: to_replicate_acc,
+                    modified_rows: 0,
+                }
+            }
+            Some(c) => c,
+        }
+    }
+}
+
 
 impl<'a> Iterator for Cursor<'a> {
     type Item = Row;
@@ -272,4 +330,10 @@ pub fn backup_should_step_again(result: i32) -> bool {
 
 pub fn backup_complete_with_done(result: i32) -> bool {
     result == ffi::SQLITE_DONE
+}
+
+pub fn disable_global_memory_statistics() {
+    unsafe {
+        ffi::sqlite3_config(ffi::SQLITE_CONFIG_MEMSTATUS, 0);
+    }
 }

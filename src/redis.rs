@@ -22,6 +22,8 @@ use std::error;
 
 use redisql_error as err;
 
+use sqlite::StatementTrait;
+
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -32,7 +34,6 @@ pub mod ffi {
 }
 
 use sqlite as sql;
-use sqlite::StatementTrait;
 
 #[allow(dead_code)]
 pub struct Context {
@@ -58,7 +59,8 @@ impl RedisReply for sql::Entity {
                                                                 int as i64)
                 }
                 sql::Entity::Float { float } => {
-                    ffi::RedisModule_ReplyWithDouble.unwrap()(ctx, float)
+                    ffi::RedisModule_ReplyWithDouble.unwrap()(ctx,
+                                                              float)
                 }
                 sql::Entity::Text { ref text } => {
                     let text_c = CString::new(text.clone()).unwrap();
@@ -71,18 +73,25 @@ impl RedisReply for sql::Entity {
                 sql::Entity::Null => {
                     ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
                 }
-                sql::Entity::OK {to_replicate} => {
-                    QueryResult::OK{to_replicate}.reply(ctx)
+                sql::Entity::OK { to_replicate } => {
+                    QueryResult::OK { to_replicate: to_replicate }
+                        .reply(ctx)
                 }                
                 sql::Entity::DONE { modified_rows, to_replicate } => {
-                    QueryResult::DONE {modified_rows, to_replicate}.reply(ctx)
+                    QueryResult::DONE {
+                            modified_rows: modified_rows,
+                            to_replicate: to_replicate,
+                        }
+                        .reply(ctx)
                 }
             }
         }
     }
 }
 
-fn reply_with_string(ctx: *mut ffi::RedisModuleCtx, s: String) -> i32 {
+fn reply_with_string(ctx: *mut ffi::RedisModuleCtx,
+                     s: String)
+                     -> i32 {
     let len = s.len();
     let s = CString::new(s).unwrap();
     unsafe {
@@ -97,7 +106,8 @@ pub fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
                                 -> i32 {
     let s = CString::new(s).unwrap();
     unsafe {
-        ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, s.as_ptr())
+        ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx,
+                                                        s.as_ptr())
     }
 }
 
@@ -177,7 +187,9 @@ pub fn create_rm_string(ctx: *mut ffi::RedisModuleCtx,
     let l = s.len();
     let cs = CString::new(s).unwrap();
 
-    unsafe { ffi::RedisModule_CreateString.unwrap()(ctx, cs.as_ptr(), l) }
+    unsafe {
+        ffi::RedisModule_CreateString.unwrap()(ctx, cs.as_ptr(), l)
+    }
 }
 
 #[repr(C)]
@@ -227,18 +239,28 @@ pub struct BlockedClient {
 unsafe impl Send for BlockedClient {}
 
 pub enum QueryResult {
-    OK {to_replicate: bool},
-    DONE {modified_rows: i32, to_replicate: bool},
-    Array { array: Vec<sql::Row>, to_replicate: bool },
+    OK { to_replicate: bool },
+    DONE {
+        modified_rows: i32,
+        to_replicate: bool,
+    },
+    Array {
+        array: Vec<sql::Row>,
+        to_replicate: bool,
+    },
 }
 
 #[cfg(feature="community")]
 impl QueryResult {
     pub fn reply(self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
         match self {
-            QueryResult::OK {..} => reply_with_ok(ctx),
-            QueryResult::DONE {modified_rows, ..} => reply_with_done(ctx, modified_rows),
-            QueryResult::Array {array, ..} => reply_with_array(ctx, array),
+            QueryResult::OK { .. } => reply_with_ok(ctx),
+            QueryResult::DONE { modified_rows, .. } => {
+                reply_with_done(ctx, modified_rows)
+            }
+            QueryResult::Array { array, .. } => {
+                reply_with_array(ctx, array)
+            }
         }
     }
     pub fn to_replicate(&self) -> bool {
@@ -248,8 +270,16 @@ impl QueryResult {
 
 fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     match cursor {
-        sql::Cursor::OKCursor {to_replicate} => QueryResult::OK {to_replicate},
-        sql::Cursor::DONECursor {modified_rows, to_replicate} => QueryResult::DONE {modified_rows, to_replicate},
+        sql::Cursor::OKCursor { to_replicate: to_replicate } => {
+            QueryResult::OK { to_replicate: to_replicate }
+        }
+        sql::Cursor::DONECursor { modified_rows: modified_rows,
+                                  to_replicate: to_replicate } => {
+            QueryResult::DONE {
+                modified_rows: modified_rows,
+                to_replicate: to_replicate,
+            }
+        }
         sql::Cursor::RowsCursor { to_replicate, .. } => {
             let y = QueryResult::Array {
                 array: cursor.collect::<Vec<sql::Row>>(),
@@ -264,25 +294,20 @@ fn execute_query(db: &sql::RawConnection,
                  query: String)
                  -> Result<QueryResult, err::RediSQLError> {
 
-    let stmt = sql::Statement::new(&db, query)?;
+    let stmt = sql::MultiStatement::new(&db, query)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
 }
 
 fn bind_statement<'a>
-    (stmt: &'a sql::Statement,
+    (stmt: &'a sql::MultiStatement,
      arguments: Vec<String>)
-     -> Result<&'a sql::Statement<'a>, sql::SQLite3Error> {
+     -> Result<&'a sql::MultiStatement<'a>, sql::SQLite3Error> {
 
-    let bind: Result<Vec<()>, _> = arguments.iter()
-        .enumerate()
-        .map(|(i, argument)| {
-            stmt.bind_text((i as i32 + 1), argument.clone())
-        })
-        .collect();
-    match bind {
+    println!("Binding statement with arguments");
+    match stmt.bind_texts(arguments) {
         Err(e) => Err(e),
-        _ => Ok(stmt),
+        Ok(_) => Ok(stmt),
     }
 }
 
@@ -308,7 +333,7 @@ impl error::Error for RedisError {
     }
 }
 
-fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_cache: &mut HashMap<String, sql::Statement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher
+fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_cache: &mut HashMap<String, sql::MultiStatement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher
                                >> )
                                -> () {
     let saved_statements = get_statement_metadata(db);
@@ -338,12 +363,13 @@ fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_ca
     }
 }
 
-fn return_value(client: BlockedClient, result: Result<QueryResult, err::RediSQLError>) {
+fn return_value(client: BlockedClient,
+                result: Result<QueryResult, err::RediSQLError>) {
     match result {
-        Err(_) => {},
+        Err(_) => {}
         Ok(ref query_result) => {
             match query_result.to_replicate() {
-                false => {},
+                false => {}
                 true => {
                     /*
                     // println!("It should replicate");
@@ -359,15 +385,15 @@ fn return_value(client: BlockedClient, result: Result<QueryResult, err::RediSQLE
                         ffi::RedisModule_FreeThreadSafeContext.unwrap()(ctx);
                     }
                     */
-                },
+                }
             }
-        },
+        }
     }
 
     unsafe {
         ffi::RedisModule_UnblockClient.unwrap()(client.client,
                                                        Box::into_raw(Box::new(result)) as *mut std::os::raw::c_void);
-    
+
     }
 }
 
@@ -382,7 +408,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
             Ok(Command::Exec { query, client }) => {
                 let result = execute_query(&db, query);
                 return_value(client, result);
-                }
+            }
             Ok(Command::UpdateStatement { identifier,
                                           statement,
                                           client }) => {
@@ -445,35 +471,44 @@ pub fn listen_and_execute(db: sql::RawConnection,
                                                  statement,
                                                  &db,
                                                  &mut statements_cache);
-    return_value(client, result);
+                return_value(client, result);
             }
 
             Ok(Command::ExecStatement { identifier,
                                         arguments,
                                         client }) => {
-                let result = match statements_cache.get(&identifier) {
-                    None => {
-                        let debug = String::from("No statement found");
-                        let description = String::from("The statement is not present in the database");
-                        Err(err::RediSQLError::new(debug, description))
-                    },
-                    Some(stmt) => {
-                        stmt.reset();
-                        let bind = bind_statement(stmt, arguments);
-                        match bind {
-                            Ok(stmt) => {
-                                let cursor = stmt.execute();
-                                match cursor {
-                                    Err(e) => Err(err::RediSQLError::from(e)),
-                                    Ok(cursor) => {
+                let result =
+                    match statements_cache.get(&identifier) {
+                        None => {
+                            let debug = String::from("No statement \
+                                                      found");
+                            let description =
+                                String::from("The statement is not \
+                                              present in the \
+                                              database");
+                            Err(err::RediSQLError::new(debug,
+                                                       description))
+                        }
+                        Some(stmt) => {
+                            stmt.reset();
+                            let bind = bind_statement(stmt,
+                                                      arguments);
+                            match bind {
+                                Ok(stmt) => {
+                                    let cursor = stmt.execute();
+                                    match cursor {
+                                        Err(e) => Err(err::RediSQLError::from(e)),
+                                        Ok(cursor) => {
                                         Ok(cursor_to_query_result(cursor))
                                     }
+                                    }
+                                }
+                                Err(e) => {
+                                    Err(err::RediSQLError::from(e))
                                 }
                             }
-                            Err(e) => Err(err::RediSQLError::from(e)),
                         }
-                    }
-                };
+                    };
                 return_value(client, result);
             }
             Ok(Command::Stop) => return,
@@ -486,14 +521,16 @@ pub fn listen_and_execute(db: sql::RawConnection,
 fn compile_and_insert_statement<'a>(identifier: String,
                                 statement: String,
                                 db: &'a sql::RawConnection,
-                                statements_cache: &mut HashMap<String, sql::Statement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
+                                statements_cache: &mut HashMap<String, sql::MultiStatement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
                                 -> Result<QueryResult, err::RediSQLError> {
     match statements_cache.entry(identifier.clone()) {
         Entry::Vacant(v) => {
-            match create_statement(db, identifier.clone(), statement) {
+            match create_statement(db,
+                                   identifier.clone(),
+                                   statement) {
                 Ok(stmt) => {
                     v.insert(stmt);
-                    Ok(QueryResult::OK {to_replicate: true})
+                    Ok(QueryResult::OK { to_replicate: true })
                 }
                 Err(e) => Err(e),
             }
@@ -510,20 +547,20 @@ fn compile_and_insert_statement<'a>(identifier: String,
     }
 }
 
-pub struct DBKey<'a> {
+pub struct DBKey {
     pub tx: Sender<Command>,
     pub db: sql::RawConnection,
-    pub in_memory: bool,
-    pub statements: HashMap<String, sql::Statement<'a>>,
+    pub in_memory: bool, /* pub statements: HashMap<String,
+                          * sql::MultiStatement<'a>>, */
 }
 
 pub fn create_metadata_table(db: &sql::RawConnection)
                              -> Result<(), sql::SQLite3Error> {
     let statement = String::from("CREATE TABLE \
-                                 RediSQLMetadata(data_type TEXT, key \
-                                 TEXT, value TEXT);");
+                                  RediSQLMetadata(data_type TEXT, \
+                                  key TEXT, value TEXT);");
 
-    match sql::Statement::new(&db, statement) {
+    match sql::MultiStatement::new(&db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
             match stmt.execute() {
@@ -540,27 +577,29 @@ pub fn insert_metadata(db: &sql::RawConnection,
                        value: String)
                        -> Result<(), sql::SQLite3Error> {
     let statement = String::from("INSERT INTO RediSQLMetadata \
-                                  VALUES(?, ?, ?);");
+                                  VALUES(?1, ?2, ?3);");
 
-    match sql::Statement::new(&db, statement) {
+    match sql::MultiStatement::new(&db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
-            match stmt.bind_text(1, data_type) {
+            match stmt.bind_index(1, &data_type) {
                 Err(e) => Err(e),
-                Ok(()) => match stmt.bind_text(2, key) {
-                    Err(e) => Err(e),
-                    Ok(()) => match stmt.bind_text(3, value) {
+                Ok(sql::SQLiteOK::OK) => {
+                    match stmt.bind_index(2, &key) {
                         Err(e) => Err(e),
-                        Ok(()) => {
-                            match stmt.execute() {
-                                Ok(_) => {
-                                    Ok(())
-                                },
+                        Ok(sql::SQLiteOK::OK) => {
+                            match stmt.bind_index(3, &value) {
                                 Err(e) => Err(e),
+                                Ok(sql::SQLiteOK::OK) => {
+                                    match stmt.execute() {
+                                        Ok(_) => Ok(()),
+                                        Err(e) => Err(e),
+                                    }
+                                }
                             }
-                        }
-                    }    
-                },
+                        }    
+                    }
+                }
             }
         }
     }
@@ -570,13 +609,13 @@ pub fn update_statement_metadata(db: &sql::RawConnection,
                                  key: String,
                                  value: String)
                                  -> Result<(), sql::SQLite3Error> {
-    let statement = String::from("UPDATE RediSQLMetadata SET value = ? \
-                                  WHERE data_type = 'statement' AND \
-                                  key = ?");
+    let statement = String::from("UPDATE RediSQLMetadata SET value \
+                                  = ?1 WHERE data_type = \
+                                  'statement' AND key = ?2");
 
-    let stmt = sql::Statement::new(&db, statement)?;
-    stmt.bind_text(1, value)?;
-    stmt.bind_text(2, key)?;
+    let stmt = sql::MultiStatement::new(&db, statement)?;
+    stmt.bind_index(1, &value)?;
+    stmt.bind_index(2, &key)?;
     stmt.execute()?;
     Ok(())
 }
@@ -584,11 +623,12 @@ pub fn update_statement_metadata(db: &sql::RawConnection,
 pub fn remove_statement_metadata(db: &sql::RawConnection,
                                  key: String)
                                  -> Result<(), sql::SQLite3Error> {
-    let statement = String::from("DELETE FROM RediSQLMetadata WHERE \
-                                  data_type = 'statement' AND key = ?");
+    let statement = String::from("DELETE FROM RediSQLMetadata \
+                                  WHERE data_type = 'statement' \
+                                  AND key = ?1");
 
-    let stmt = sql::Statement::new(&db, statement)?;
-    stmt.bind_text(2, key)?;
+    let stmt = sql::MultiStatement::new(&db, statement)?;
+    stmt.bind_index(1, &key)?;
     stmt.execute()?;
     Ok(())
 }
@@ -597,10 +637,10 @@ pub fn get_statement_metadata
     (db: &sql::RawConnection)
      -> Result<QueryResult, sql::SQLite3Error> {
 
-    let statement = String::from("SELECT * FROM RediSQLMetadata WHERE \
-                                  data_type = 'statement';");
+    let statement = String::from("SELECT * FROM RediSQLMetadata \
+                                  WHERE data_type = 'statement';");
 
-    let stmt = sql::Statement::new(&db, statement)?;
+    let stmt = sql::MultiStatement::new(&db, statement)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
 }
@@ -718,12 +758,13 @@ pub fn write_rdb_to_file(f: &mut File,
     Ok(())
 }
 
-fn create_statement(db: &sql::RawConnection,
-                    identifier: String,
-                    statement: String)
-                    -> Result<sql::Statement, err::RediSQLError> {
+fn create_statement
+    (db: &sql::RawConnection,
+     identifier: String,
+     statement: String)
+     -> Result<sql::MultiStatement, err::RediSQLError> {
 
-    let stmt = sql::Statement::new(db, statement.clone())?;
+    let stmt = sql::MultiStatement::new(db, statement.clone())?;
     insert_metadata(db,
                     String::from("statement"),
                     identifier.clone(),
@@ -731,12 +772,13 @@ fn create_statement(db: &sql::RawConnection,
     Ok(stmt)
 }
 
-fn update_statement(db: &sql::RawConnection,
-                    identifier: String,
-                    statement: String)
-                    -> Result<sql::Statement, err::RediSQLError> {
+fn update_statement
+    (db: &sql::RawConnection,
+     identifier: String,
+     statement: String)
+     -> Result<sql::MultiStatement, err::RediSQLError> {
 
-    let stmt = sql::Statement::new(db, statement.clone())?;
+    let stmt = sql::MultiStatement::new(db, statement.clone())?;
     update_statement_metadata(db, identifier.clone(), statement)?;
     Ok(stmt)
 }
