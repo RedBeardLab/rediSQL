@@ -1,1 +1,4 @@
 target
+test/correctness/lib/*
+test/correctness/*.sqlite
+
