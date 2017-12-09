@@ -19,13 +19,17 @@ fn main() {
     cc::Build::new()
         .file("src/CDeps/SQLite/sqlite3.c")
         .include("src/CDeps/SQLite/include")
+        .define("SQLITE_THREADSAFE", Some("1"))
         .compile("libsqlite3.a");
 
     #[derive(Debug)]
     struct SqliteTypeChooser;
 
     impl ParseCallbacks for SqliteTypeChooser {
-        fn int_macro(&self, _name: &str, value: i64) -> Option<IntKind> {
+        fn int_macro(&self,
+                     _name: &str,
+                     value: i64)
+                     -> Option<IntKind> {
             if value >= i32::min_value() as i64 &&
                value <= i32::max_value() as i64 {
                 Some(IntKind::I32)
