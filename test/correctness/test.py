@@ -8,7 +8,7 @@ import redis
 from rmtest import ModuleTestCase
     
 os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/debug/libredis_sql.so"
-os.environ["REDIS_PATH"] = "/home/simo/redis-4.0-rc1/src/redis-server"
+os.environ["REDIS_PATH"] = "/home/simo/redis-4.0.2/src/redis-server"
  
 class Table():
   def __init__(self, redis, name, values, key = ""):
@@ -71,9 +71,9 @@ class TestRediSQLExec(TestRediSQLWithExec):
   def test_create_table(self):
     with DB(self.client, "A"):
       done = self.exec_cmd("A", "CREATE TABLE test1 (A INTEGER);")
-      self.assertEquals(done, ["DONE", 1L])
+      self.assertEquals(done, ["DONE", 0L])
       done = self.exec_cmd("A", "DROP TABLE test1")
-      self.assertEquals(done, ["DONE", 1L])
+      self.assertEquals(done, ["DONE", 0L])
 
   def test_insert(self):
     with DB(self.client, "B"):
@@ -172,9 +172,9 @@ class TestRediSQLKeys(TestRediSQLWithExec):
   def test_create_table_inside_key(self):
     with DB(self.client, "A"):
       done = self.exec_cmd("A", "CREATE TABLE t1 (A INTEGER);")
-      self.assertEquals(done, ["DONE", 1L])
+      self.assertEquals(done, ["DONE", 0L])
       done = self.exec_cmd("A", "DROP TABLE t1")
-      self.assertEquals(done, ["DONE", 1L])
+      self.assertEquals(done, ["DONE", 0L])
 
   def test_insert_into_table(self):
     with DB(self.client, "B"):
@@ -184,11 +184,47 @@ class TestRediSQLKeys(TestRediSQLWithExec):
         result = self.exec_cmd("B", "SELECT * FROM t2")
         self.assertEquals(result, [[1, 2]])
 
+class TestMultipleInserts(TestRediSQLWithExec):
+  def test_insert_two_rows(self):
+    with DB(self.client, "M"):
+      with Table(self.client, "t1", "(A INTEGER, B INTEGER)", key = "M"):
+        done = self.exec_naked("REDISQL.EXEC", "M", "INSERT INTO t1 values(1, 2);")
+        self.assertEquals(done, ["DONE", 1L])
+        done = self.exec_naked("REDISQL.EXEC", "M", "INSERT INTO t1 values(3, 4),(5, 6);")
+        self.assertEquals(done, ["DONE", 2L])
+        done = self.exec_naked("REDISQL.EXEC", "M", "INSERT INTO t1 values(7, 8);")
+        self.assertEquals(done, ["DONE", 1L])
+ 
+  def test_multi_insert_same_statement(self):
+    with DB(self.client, "N"):
+      with Table(self.client, "t1", "(A INTEGER, B INTEGER)", key = "N"):
+        done = self.exec_naked("REDISQL.EXEC", "N", "INSERT INTO t1 values(1, 2); INSERT INTO t1 values(3, 4);")
+        self.assertEquals(done, ["DONE", 2L])
+        done = self.exec_naked("REDISQL.EXEC", "N", """BEGIN; 
+              INSERT INTO t1 values(3, 4);
+              INSERT INTO t1 values(5, 6);
+              INSERT INTO t1 values(7, 8);
+              COMMIT;""")
+        print done
+        self.assertEquals(done, ["DONE", 3L])
+        done = self.exec_naked("REDISQL.EXEC", "N", """BEGIN; 
+              INSERT INTO t1 values(3, 4);
+              INSERT INTO t1 values(5, 6);
+              INSERT INTO t1 values(7, 8);
+              INSERT INTO t1 values(3, 4);
+              INSERT INTO t1 values(5, 6);
+              INSERT INTO t1 values(7, 8);
+              COMMIT;""")
+        self.assertEquals(done, ["DONE", 6L])
+
+
+
+
 class TestStatements(TestRediSQLWithExec):
   def test_create_statement(self):
     with DB(self.client, "A"):
       with Table(self.client, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 1L])
@@ -200,11 +236,11 @@ class TestStatements(TestRediSQLWithExec):
   def test_update_statement(self):
     with DB(self.client, "A"):
       with Table(self.client, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 1L])
-        ok = self.exec_naked("REDISQL.UPDATE_STATEMENT", "A", "insert", "insert into t1 values(? + 10001);")
+        ok = self.exec_naked("REDISQL.UPDATE_STATEMENT", "A", "insert", "insert into t1 values(?1 + 10001);")
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
         self.assertEquals(done, ["DONE", 1L])
@@ -214,7 +250,7 @@ class TestStatements(TestRediSQLWithExec):
   def test_rds_persistency(self):
     with DB(self.client, "A"):
       with Table(self.client, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 1L])
@@ -241,9 +277,9 @@ class TestStatements(TestRediSQLWithExec):
   def test_rds_persistency_multiple_statements(self):
     with DB(self.client, "A"):
       with Table(self.client, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?);")
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
         self.assertEquals(ok, "OK")
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert più cento", "insert into t1 values(? + 100);")
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert più cento", "insert into t1 values(?1 + 100);")
         self.assertEquals(ok, "OK")
 
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
