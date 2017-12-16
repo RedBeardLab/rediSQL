@@ -23,7 +23,7 @@ pub struct MultiStatement<'a> {
     stmts: Vec<Statement<'a>>,
     conn: &'a RawConnection,
     number_parameters: i32,
-    parameters: Vec<Vec<Parameters>>,
+    _parameters: Vec<Vec<Parameters>>,
 }
 
 impl<'a> fmt::Display for MultiStatement<'a> {
@@ -95,11 +95,11 @@ pub fn generate_statements<'a>
                     let (num_parameters, parameters) =
                         count_parameters(&stmts)?;
                     return Ok(MultiStatement {
-                        stmts: stmts,
-                        conn: conn,
-                        number_parameters: num_parameters,
-                        parameters: parameters,
-                    });
+                                  stmts: stmts,
+                                  conn: conn,
+                                  number_parameters: num_parameters,
+                                  _parameters: parameters,
+                              });
                 }
             }
             _ => return Err(generate_sqlite3_error(conn.get_db())),
@@ -126,9 +126,9 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
         match r {
             ffi::SQLITE_OK => {
                 Ok(Statement {
-                    stmt: stmt,
-                    conn: conn,
-                })
+                       stmt: stmt,
+                       conn: conn,
+                   })
             }
             _ => Err(generate_sqlite3_error(conn.get_db())),
         }
@@ -145,23 +145,24 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
         match unsafe { ffi::sqlite3_step(self.stmt) } {
             ffi::SQLITE_OK => {
                 Ok(Cursor::OKCursor {
-                    to_replicate: self.to_replicate(),
-                })
+                       to_replicate: self.to_replicate(),
+                   })
             }
             ffi::SQLITE_DONE => {
-                let modified_rows = unsafe {
-                    ffi::sqlite3_changes(self.conn.get_db())
-                };
-                println!("Modified rows: {}", modified_rows);
+                let modified_rows =
+                    unsafe {
+                        ffi::sqlite3_changes(self.conn.get_db())
+                    };
                 Ok(Cursor::DONECursor {
-                    modified_rows: modified_rows,
-                    to_replicate: self.to_replicate(),
-                })
+                       modified_rows: modified_rows,
+                       to_replicate: self.to_replicate(),
+                   })
             }
             ffi::SQLITE_ROW => {
-                let n_columns = unsafe {
-                    ffi::sqlite3_column_count(self.stmt)
-                } as i32;
+                let n_columns =
+                    unsafe {
+                        ffi::sqlite3_column_count(self.stmt)
+                    } as i32;
                 let mut types: Vec<EntityType> = Vec::new();
                 for i in 0..n_columns {
                     types.push(match unsafe {
@@ -176,35 +177,32 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
                     })
                 }
                 Ok(Cursor::RowsCursor {
-                    stmt: self,
-                    num_columns: n_columns,
-                    types: types,
-                    previous_status: ffi::SQLITE_ROW,
-                    to_replicate: self.to_replicate(),
-                    modified_rows: 0,
-                })
+                       stmt: self,
+                       num_columns: n_columns,
+                       types: types,
+                       previous_status: ffi::SQLITE_ROW,
+                       to_replicate: self.to_replicate(),
+                       modified_rows: 0,
+                   })
             }
             _ => {
-            Err(generate_sqlite3_error(unsafe {
-                ffi::sqlite3_db_handle(self.stmt)
-            }))
-        }
+                Err(generate_sqlite3_error(
+                    unsafe { ffi::sqlite3_db_handle(self.stmt) },
+                ))
+            }
         }
     }
 
     fn bind_texts(&self,
                   values: Vec<String>)
                   -> Result<SQLiteOK, SQLite3Error> {
-        println!("Inside bind_texts");
         let mut index = 0;
-        values.iter()
+        values
+            .iter()
             .map(|value| {
-                index += 1;
-                println!("Binding to index {} value: {}",
-                         index,
-                         value);
-                self.bind_index(index, &value)
-            })
+                     index += 1;
+                     self.bind_index(index, &value)
+                 })
             .collect()
     }
 
@@ -219,12 +217,12 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
         }
         let value_c = CString::new(value.clone()).unwrap();
         match unsafe {
-            ffi::sqlite3_bind_text(self.stmt,
-                                   index,
-                                   value_c.as_ptr(),
-                                   -1,
-                                   SQLITE_TRANSIENT())
-        } {
+                  ffi::sqlite3_bind_text(self.stmt,
+                                         index,
+                                         value_c.as_ptr(),
+                                         -1,
+                                         SQLITE_TRANSIENT())
+              } {
             ffi::SQLITE_OK => Ok(SQLiteOK::OK),
             _ => {
                 let db = unsafe { ffi::sqlite3_db_handle(self.stmt) };
@@ -245,10 +243,7 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
 
 impl<'a> StatementTrait<'a> for MultiStatement<'a> {
     fn reset(&self) {
-        self.stmts
-            .iter()
-            .map(|stmt| stmt.reset())
-            .count();
+        self.stmts.iter().map(|stmt| stmt.reset()).count();
     }
     fn execute(&self) -> Result<Cursor, SQLite3Error> {
         let rows_modified_before_executing =
@@ -256,29 +251,22 @@ impl<'a> StatementTrait<'a> for MultiStatement<'a> {
         match self.stmts.iter().map(|stmt| stmt.execute()).collect() {
             Err(e) => Err(e),
             Ok(mut v) => {
-                let rows_modified_after_executing =
-                    unsafe {
-                        ffi::sqlite3_total_changes(self.conn.get_db())
-                    };
+                let rows_modified_after_executing = unsafe {
+                    ffi::sqlite3_total_changes(self.conn.get_db())
+                };
                 let total_modified_rows =
                     rows_modified_after_executing -
                     rows_modified_before_executing;
-                println!("Total modified rows: {}",
-                         total_modified_rows);
                 match v {
-                    Cursor::DONECursor { ref mut modified_rows, .. } => {
-                        println!("Modified rows changes");
+                    Cursor::DONECursor {
+                        ref mut modified_rows, ..
+                    } => {
                         *modified_rows = total_modified_rows;
                     }
-                    Cursor::RowsCursor { ref mut modified_rows, .. } => {
+                    Cursor::RowsCursor {
+                        ref mut modified_rows, ..
+                    } => {
                         *modified_rows = total_modified_rows;
-                    }
-                    _ => {}
-                }
-                match v {
-                    Cursor::DONECursor { modified_rows, .. } => {
-                        println!("Modified cursor: {}",
-                                 modified_rows);
                     }
                     _ => {}
                 }
@@ -291,7 +279,7 @@ impl<'a> StatementTrait<'a> for MultiStatement<'a> {
                   value: &String)
                   -> Result<SQLiteOK, SQLite3Error> {
         for stmt in &self.stmts {
-            stmt.bind_index(index, value);
+            stmt.bind_index(index, value)?;
         }
         Ok(SQLiteOK::OK)
 
@@ -299,11 +287,24 @@ impl<'a> StatementTrait<'a> for MultiStatement<'a> {
     fn bind_texts(&self,
                   values: Vec<String>)
                   -> Result<SQLiteOK, SQLite3Error> {
-        println!("Binding arguments: {:?}", values);
+        if values.len() != self.number_parameters as usize {
+            return Err(SQLite3Error {
+                           code: 2021,
+                           error_message: String::from("RediSQL MISUSE, only \
+                                     parameters in the form \
+                                     `?NNN`, where `N` is a digit, \
+                                     are supported, also no gap \
+                                     should be present."),
+                           error_string:
+                               format!("Wrong number of parameters, expected {}, provided {}",
+                                       self.number_parameters,
+                                       values.len()),
+                       });
+        }
+
         let mut i = 0;
         for value in values {
             i += 1;
-            println!("Inside binding, {} => {}", i, value);
             self.bind_index(i, &value)?;
         }
         Ok(SQLiteOK::OK)
@@ -332,19 +333,18 @@ fn count_parameters<'a>
     };
 
     let parameters: Result<Vec<Vec<Parameters>>, SQLite3Error> =
-        statements.iter()
-            .map(|stmt| get_parameters(stmt))
-            .collect();
-    println!("Collected parameters: {:?}", parameters);
+        statements.iter().map(|stmt| get_parameters(stmt)).collect();
     match parameters {
         Err(e) => Err(e),
         Ok(parameters) => {
-            let mut discriminant: Vec<_> = parameters.clone()
+            let mut discriminant: Vec<_> = parameters
+                .clone()
                 .iter()
                 .flat_map(|params| {
-                    params.iter()
-                        .map(|p| mem::discriminant(p))
-                })
+                              params.iter().map(|p| {
+                        mem::discriminant(p)
+                    })
+                          })
                 .collect();
             discriminant.dedup();
             if discriminant.len() > 1 {
@@ -352,17 +352,25 @@ fn count_parameters<'a>
             }
             match discriminant.first() {
                 None => return Ok((0, vec![])),
-                Some(d) if *d == mem::discriminant(&Parameters::Anonymous) => {
-                return Err(error_wrong_paramenter);}
+                Some(d)
+                    if *d ==
+                           mem::discriminant(
+                            &Parameters::Anonymous,
+                        ) => {
+                    return Err(error_wrong_paramenter);
+                }
                 Some(_) => {}
             }
 
-            let mut flatted = parameters.iter()
+            let mut flatted = parameters
+                .iter()
                 .flat_map(|params| {
-                    params.iter().map(|ref p| match **p {
-                        Parameters::Anonymous => 0,
-                        Parameters::Named { index } => index,
-                    })
+                    params
+                        .iter()
+                        .map(|ref p| match **p {
+                                 Parameters::Anonymous => 0,
+                                 Parameters::Named { index } => index,
+                             })
                 })
                 .collect::<Vec<_>>();
             flatted.sort();
@@ -376,7 +384,6 @@ fn get_parameter_name<'a>
     (stmt: &Statement<'a>,
      index: i32)
      -> Result<Option<Parameters>, SQLite3Error> {
-    println!("Inside get_parameter_name {}", index);
     let parameter_name_ptr =
         unsafe { ffi::sqlite3_bind_parameter_name(stmt.stmt, index) };
     let index_parameter =
@@ -393,9 +400,8 @@ fn get_parameter_name<'a>
 fn get_parameters<'a>(stmt: &Statement<'a>)
                       -> Result<Vec<Parameters>, SQLite3Error> {
     let total_paramenters =
-        unsafe {
-            ffi::sqlite3_bind_parameter_count(stmt.stmt)
-        } as usize;
+        unsafe { ffi::sqlite3_bind_parameter_count(stmt.stmt) } as
+        usize;
     if total_paramenters == 0 {
         return Ok(vec![]);
     }
