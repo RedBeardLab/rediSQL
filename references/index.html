@@ -187,9 +187,11 @@ If the file does not exist a new file will be created.</p>
 <p>The statement is associated with a database, a statement created for one database cannot be used for another database, you need to create a different one. This allows a simple and fast way to provide persistence.</p>
 <p>You can execute the statement with <a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a>.</p>
 <p>You cannot overwrite a statement using this command.</p>
-<p>If you need to change the implementation of a statement you have two options:
-1. Delete the statement using <a href="#redisqldelete_statement"><code>REDISQL.DELETE_STATEMENT</code></a> and the create a new one.
-2. Use <a href="#redisqlupdate_statement"><code>REDISQL.UPDATE_STATEMENT</code></a></p>
+<p>If you need to change the implementation of a statement you have two options:</p>
+<ol>
+<li>Delete the statement using <a href="#redisqldelete_statement"><code>REDISQL.DELETE_STATEMENT</code></a> and the create a new one.</li>
+<li>Use <a href="#redisqlupdate_statement"><code>REDISQL.UPDATE_STATEMENT</code></a></li>
+</ol>
 <p>Suppose that a service needs a particular statement to be defined in order to work, this safety measure allows the users to simply go ahead, try to create it, and in case catch the error.</p>
 <p>Also, this command is not blocking, meaning that all the work happens in a separate thread respect the redis one.</p>
 <p>Please keep in mind that the parameters should be named in order and that there should not be any gap.</p>
