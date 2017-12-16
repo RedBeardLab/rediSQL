@@ -56,7 +56,8 @@ impl RedisReply for sql::Entity {
             match *self {
                 sql::Entity::Integer { int } => {
                     ffi::RedisModule_ReplyWithLongLong.unwrap()(ctx,
-                                                                int as i64)
+                                                                int as
+                                                                i64)
                 }
                 sql::Entity::Float { float } => {
                     ffi::RedisModule_ReplyWithDouble.unwrap()(ctx,
@@ -64,11 +65,13 @@ impl RedisReply for sql::Entity {
                 }
                 sql::Entity::Text { ref text } => {
                     let text_c = CString::new(text.clone()).unwrap();
-                    ffi::RedisModule_ReplyWithStringBuffer.unwrap()(ctx, text_c.as_ptr(), text.len())
+                    ffi::RedisModule_ReplyWithStringBuffer
+                        .unwrap()(ctx, text_c.as_ptr(), text.len())
                 }
                 sql::Entity::Blob { ref blob } => {
                     let blob_c = CString::new(blob.clone()).unwrap();
-                    ffi::RedisModule_ReplyWithStringBuffer.unwrap()(ctx, blob_c.as_ptr(), blob.len())
+                    ffi::RedisModule_ReplyWithStringBuffer
+                        .unwrap()(ctx, blob_c.as_ptr(), blob.len())
                 }
                 sql::Entity::Null => {
                     ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
@@ -77,7 +80,10 @@ impl RedisReply for sql::Entity {
                     QueryResult::OK { to_replicate: to_replicate }
                         .reply(ctx)
                 }                
-                sql::Entity::DONE { modified_rows, to_replicate } => {
+                sql::Entity::DONE {
+                    modified_rows,
+                    to_replicate,
+                } => {
                     QueryResult::DONE {
                             modified_rows: modified_rows,
                             to_replicate: to_replicate,
@@ -124,7 +130,8 @@ pub fn reply_with_done(ctx: *mut ffi::RedisModuleCtx,
     reply_with_simple_string(ctx, String::from("DONE"));
     unsafe {
         ffi::RedisModule_ReplyWithLongLong.unwrap()(ctx,
-                                                    modified_rows as i64);
+                                                    modified_rows as
+                                                    i64);
     }
     ffi::REDISMODULE_OK
 }
@@ -139,7 +146,8 @@ pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
     for row in array {
         unsafe {
             ffi::RedisModule_ReplyWithArray.unwrap()(ctx,
-                                                     row.len() as i64);
+                                                     row.len() as
+                                                     i64);
         }
         for entity in row {
             entity.reply(ctx);
@@ -250,7 +258,7 @@ pub enum QueryResult {
     },
 }
 
-#[cfg(feature="community")]
+#[cfg(feature = "community")]
 impl QueryResult {
     pub fn reply(self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
         match self {
@@ -270,14 +278,16 @@ impl QueryResult {
 
 fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     match cursor {
-        sql::Cursor::OKCursor { to_replicate: to_replicate } => {
-            QueryResult::OK { to_replicate: to_replicate }
+        sql::Cursor::OKCursor { to_replicate } => {
+            QueryResult::OK { to_replicate }
         }
-        sql::Cursor::DONECursor { modified_rows: modified_rows,
-                                  to_replicate: to_replicate } => {
+        sql::Cursor::DONECursor {
+            modified_rows,
+            to_replicate,
+        } => {
             QueryResult::DONE {
-                modified_rows: modified_rows,
-                to_replicate: to_replicate,
+                modified_rows,
+                to_replicate,
             }
         }
         sql::Cursor::RowsCursor { to_replicate, .. } => {
@@ -304,7 +314,6 @@ fn bind_statement<'a>
      arguments: Vec<String>)
      -> Result<&'a sql::MultiStatement<'a>, sql::SQLite3Error> {
 
-    println!("Binding statement with arguments");
     match stmt.bind_texts(arguments) {
         Err(e) => Err(e),
         Ok(_) => Ok(stmt),
@@ -335,7 +344,7 @@ impl error::Error for RedisError {
 
 fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_cache: &mut HashMap<String, sql::MultiStatement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher
                                >> )
-                               -> () {
+-> (){
     let saved_statements = get_statement_metadata(db);
     match saved_statements {
         Ok(QueryResult::Array { array, .. }) => {
@@ -349,10 +358,12 @@ fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_ca
                     _ => continue,
                 };
 
-                match compile_and_insert_statement(identifier,
-                                             statement,
-                                             &db,
-                                             &mut statements_cache) {
+                match compile_and_insert_statement(
+                    identifier,
+                    statement,
+                    &db,
+                    &mut statements_cache,
+                ) {
                     Err(e) => println!("Error: {}", e),
                     _ => (),
                 }
@@ -391,8 +402,10 @@ fn return_value(client: BlockedClient,
     }
 
     unsafe {
-        ffi::RedisModule_UnblockClient.unwrap()(client.client,
-                                                       Box::into_raw(Box::new(result)) as *mut std::os::raw::c_void);
+        ffi::RedisModule_UnblockClient
+            .unwrap()(client.client,
+                      Box::into_raw(Box::new(result)) as
+                      *mut std::os::raw::c_void);
 
     }
 }
@@ -409,106 +422,115 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 let result = execute_query(&db, query);
                 return_value(client, result);
             }
-            Ok(Command::UpdateStatement { identifier,
-                                          statement,
-                                          client }) => {
-                let result =
-                    match statements_cache.entry(identifier.clone()) {
-                        Entry::Vacant(_) => {
-                            let err = RedisError {
-                                msg: String::from("Statement does not \
+            Ok(Command::UpdateStatement {
+                   identifier,
+                   statement,
+                   client,
+               }) => {
+                let result = match statements_cache
+                          .entry(identifier.clone()) {
+                    Entry::Vacant(_) => {
+                        let err = RedisError {
+                            msg: String::from("Statement does not \
                                                    exists yet, \
                                                    impossible to \
                                                    update."),
-                            };
-                            Err(err::RediSQLError::from(err))
-                        }
-                        Entry::Occupied(mut o) => {
-                            match update_statement(&db,
-                                                   identifier.clone(),
-                                                   statement) {
-                                Ok(stmt) => {
-                                    o.insert(stmt);
-                                    Ok(QueryResult::OK {to_replicate: true})
-                                }
-                                Err(e) => Err(e),
+                        };
+                        Err(err::RediSQLError::from(err))
+                    }
+                    Entry::Occupied(mut o) => {
+                        match update_statement(&db,
+                                               identifier.clone(),
+                                               statement) {
+                            Ok(stmt) => {
+                                o.insert(stmt);
+                                Ok(QueryResult::OK {
+                                       to_replicate: true,
+                                   })
                             }
+                            Err(e) => Err(e),
                         }
-                    };
+                    }
+                };
 
                 return_value(client, result)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
-                let result =
-                    match statements_cache.entry(identifier.clone()) {
-                        Entry::Vacant(_) => {
-                            let err = RedisError {
-                                msg: String::from("Statement does not \
+                let result = match statements_cache
+                          .entry(identifier.clone()) {
+                    Entry::Vacant(_) => {
+                        let err = RedisError {
+                            msg: String::from("Statement does not \
                                                    exists yet, \
                                                    impossible to \
                                                    delete."),
-                            };
-                            Err(err::RediSQLError::from(err))
-                        }
-                        Entry::Occupied(o) => {
-                            match remove_statement(&db, identifier) {
-                                Ok(()) => {
+                        };
+                        Err(err::RediSQLError::from(err))
+                    }
+                    Entry::Occupied(o) => {
+                        match remove_statement(&db, identifier) {
+                            Ok(()) => {
                                 o.remove_entry();
                                 Ok(QueryResult::OK {to_replicate: true})
                             }
-                                Err(e) => Err(err::RediSQLError::from(e)),
-                            }
+                            Err(e) => Err(err::RediSQLError::from(e)),
                         }
-                    };
+                    }
+                };
                 return_value(client, result);
             }
-            Ok(Command::CompileStatement { identifier,
-                                           statement,
-                                           client }) => {
+            Ok(Command::CompileStatement {
+                   identifier,
+                   statement,
+                   client,
+               }) => {
 
-                let result =
-                    compile_and_insert_statement(identifier,
-                                                 statement,
-                                                 &db,
-                                                 &mut statements_cache);
+                let result = compile_and_insert_statement(
+                    identifier,
+                    statement,
+                    &db,
+                    &mut statements_cache,
+                );
                 return_value(client, result);
             }
 
-            Ok(Command::ExecStatement { identifier,
-                                        arguments,
-                                        client }) => {
-                let result =
-                    match statements_cache.get(&identifier) {
-                        None => {
-                            let debug = String::from("No statement \
+            Ok(Command::ExecStatement {
+                   identifier,
+                   arguments,
+                   client,
+               }) => {
+                let result = match statements_cache
+                          .get(&identifier) {
+                    None => {
+                        let debug = String::from("No statement \
                                                       found");
-                            let description =
-                                String::from("The statement is not \
+                        let description = String::from("The statement is not \
                                               present in the \
                                               database");
-                            Err(err::RediSQLError::new(debug,
-                                                       description))
-                        }
-                        Some(stmt) => {
-                            stmt.reset();
-                            let bind = bind_statement(stmt,
-                                                      arguments);
-                            match bind {
-                                Ok(stmt) => {
-                                    let cursor = stmt.execute();
-                                    match cursor {
-                                        Err(e) => Err(err::RediSQLError::from(e)),
-                                        Ok(cursor) => {
-                                        Ok(cursor_to_query_result(cursor))
+                        Err(err::RediSQLError::new(debug,
+                                                   description))
+                    }
+                    Some(stmt) => {
+                        stmt.reset();
+                        let bind = bind_statement(stmt, arguments);
+                        match bind {
+                            Ok(stmt) => {
+                                let cursor = stmt.execute();
+                                match cursor {
+                                    Err(e) => Err(
+                                        err::RediSQLError::from(e),
+                                    ),
+                                    Ok(cursor) => {
+                                        Ok(
+                                            cursor_to_query_result(cursor),
+                                        )
                                     }
-                                    }
-                                }
-                                Err(e) => {
-                                    Err(err::RediSQLError::from(e))
                                 }
                             }
+                            Err(e) => Err(err::RediSQLError::from(e)),
                         }
-                    };
+                    }
+                };
                 return_value(client, result);
             }
             Ok(Command::Stop) => return,
@@ -522,7 +544,7 @@ fn compile_and_insert_statement<'a>(identifier: String,
                                 statement: String,
                                 db: &'a sql::RawConnection,
                                 statements_cache: &mut HashMap<String, sql::MultiStatement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
-                                -> Result<QueryResult, err::RediSQLError> {
+-> Result<QueryResult, err::RediSQLError>{
     match statements_cache.entry(identifier.clone()) {
         Entry::Vacant(v) => {
             match create_statement(db,
@@ -647,9 +669,10 @@ pub fn get_statement_metadata
 
 pub fn string_ptr_len(str: *mut ffi::RedisModuleString) -> String {
     unsafe {
-        CStr::from_ptr(ffi::RedisModule_StringPtrLen.unwrap()(str, std::ptr::null_mut()))
-            .to_string_lossy()
-            .into_owned()
+        CStr::from_ptr(ffi::RedisModule_StringPtrLen
+                           .unwrap()(str, std::ptr::null_mut()))
+                .to_string_lossy()
+                .into_owned()
     }
 }
 
@@ -699,9 +722,10 @@ pub fn write_file_to_rdb(f: File,
                 return Ok(());
             }
             Ok(n) => unsafe {
-                ffi::RedisModule_SaveStringBuffer.unwrap()(rdb,
-                                                           tw.as_slice().as_ptr() as *const i8,
-                                                           n)
+                ffi::RedisModule_SaveStringBuffer
+                    .unwrap()(rdb,
+                              tw.as_slice().as_ptr() as *const i8,
+                              n)
 
             },
             Err(e) => return Err(e),
@@ -718,7 +742,10 @@ struct SafeRedisModuleString {
 
 impl Drop for SafeRedisModuleString {
     fn drop(&mut self) {
-        unsafe { ffi::RedisModule_Free.unwrap()(self.ptr as *mut std::os::raw::c_void) }
+        unsafe {
+            ffi::RedisModule_Free.unwrap()(self.ptr as
+                                           *mut std::os::raw::c_void)
+        }
     }
 }
 
@@ -732,22 +759,20 @@ pub fn write_rdb_to_file(f: &mut File,
     for _ in 0..blocks {
         let mut dimension: libc::size_t = 0;
         let c_str_ptr = SafeRedisModuleString {
-            ptr:
-                unsafe {
-                ffi::RedisModule_LoadStringBuffer.unwrap()(rdb,
-                                                           &mut dimension)
+            ptr: unsafe {
+                ffi::RedisModule_LoadStringBuffer
+                    .unwrap()(rdb, &mut dimension)
             },
         };
 
         if dimension == 0 {
             break;
         }
-        let buffer: Vec<u8> =
-            unsafe {
-                Vec::from_raw_parts(c_str_ptr.ptr as *mut u8,
-                                    dimension,
-                                    dimension)
-            };
+        let buffer: Vec<u8> = unsafe {
+            Vec::from_raw_parts(c_str_ptr.ptr as *mut u8,
+                                dimension,
+                                dimension)
+        };
         let y = f.write_all(buffer.as_slice());
         ::mem::forget(buffer);
         match y {
