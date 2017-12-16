@@ -169,18 +169,6 @@ If the file does not exist a new file will be created.</p>
 <p>The compilation of the string into a statement and its execution happens in a different thread from the one used by Redis and so this command has a minimum impact on the overall Redis performance, however, it does block the client.</p>
 <p>This command is quite useful to execute <a href="https://sqlite.org/pragma.html">PRAGMA Statements</a>, for normal operations against the database is suggested to use <code>STATEMENTS</code>.</p>
 <p>Also, remember that there is only a single thread for database, execution of multiple <code>REDISQL.EXEC</code> against the same database will result in a serialization of the executions, one will be executed before the others.</p>
-<p>Finally is important to have in mind how <code>sqlite3_prepare_v2</code> works. The functions compile only the first statement, (everything between the start of the string and the first semicolon <code>;</code>) and not the whole string. This means that executing commands like:</p>
-<pre><code class="SQL">BEGIN TRANSACTION; -- here first semicolon, and first statement
-INSERT INTO ... ;
-SELECT n FROM ...;
-CASE 
-  WHEN n &gt;= 4 THEN ABORT
-  ELSE COMMIT
-END;
-</code></pre>
-
-<p>Will <strong>NOT</strong>, let me repeat, it will <strong>not</strong> work as expected, the first statement is just <code>BEGIN TRANSACTION;</code> and only that one will be executed.</p>
-<p>Please note that we are seriously considering to change this behavior in order to make transactions and other queries work in an expected way.</p>
 <p><strong>Complexity</strong>: It depends entirely on the statement string. The use of a single thread for database is been chosen after several tests where the single thread configuration was faster than a multi-thread one. This is true in a write-intensive application and in a mixed write/read application.</p>
 <p><strong>See also</strong>:</p>
 <ol>
@@ -193,9 +181,8 @@ END;
 <h2 id="redisqlcreate_statement">REDISQL.CREATE_STATEMENT</h2>
 <h4 id="redisqlcreate_statement-db_key-stmt_identifier-statement">REDISQL.CREATE_STATEMENT db_key stmt_identifier "statement"</h4>
 <p>This command compiles a statement string into a <a href="https://sqlite.org/c3ref/stmt.html">sqlite statement</a> and associate such statement to an identifier.</p>
-<p>The same limitation of <a href="#redisqlexec">REDISQL.EXEC</a> regarding multiple statements in the same string. Only the first SQL statement (from the beginning to the first semicolon <code>;</code>) get compiled into a sqlite statement.</p>
-<p>Using this command you can insert parameters using the special symbol <code>?</code>, those parameters will be bind to the statements when you are executing the statement itself.</p>
-<p>For now only the <code>?</code> syntax is supported.</p>
+<p>Using this command you can insert parameters using the special symbol <code>?NNN</code>, those parameters will be bind to the statements when you are executing the statement itself.</p>
+<p>For now only the <code>?NNN</code> syntax is supported, where <code>N</code> is a digit (Ex. <code>?1</code>, <code>?2</code>, <code>?3</code> ...)</p>
 <p>This command does not execute anything against the database, but simply store the sqlite statements into a dictionary associated with the identifier provided (<code>stmt_identifier</code>). Then it stores the information regarding the statement in the metadata table in order to provide a simple way to restore also the statements.</p>
 <p>The statement is associated with a database, a statement created for one database cannot be used for another database, you need to create a different one. This allows a simple and fast way to provide persistence.</p>
 <p>You can execute the statement with <a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a>.</p>
@@ -205,6 +192,13 @@ END;
 2. Use <a href="#redisqlupdate_statement"><code>REDISQL.UPDATE_STATEMENT</code></a></p>
 <p>Suppose that a service needs a particular statement to be defined in order to work, this safety measure allows the users to simply go ahead, try to create it, and in case catch the error.</p>
 <p>Also, this command is not blocking, meaning that all the work happens in a separate thread respect the redis one.</p>
+<p>Please keep in mind that the parameters should be named in order and that there should not be any gap.</p>
+<pre><code class="SQL">INSERT INTO foo VALUES(?1, ?2, ?3); -- this one is fine and we work as you expect
+
+INSERT INTO foo VALUES(?1, ?123, ?564); -- this one will be more problematic, and you should avoid it
+</code></pre>
+
+<p>Keep in mind that SQLite start to count the bounding parameters from 1 and not from 0, using <code>?0</code> is an error.</p>
 <p><strong>Complexity</strong>: If we assume that the time necessary to compile a string into a sqlite statement is constant, overall the complexity is O(1), again constant, not necessarily <em>fast</em>.</p>
 <p><strong>See also</strong>:</p>
 <ol>
@@ -219,8 +213,18 @@ END;
 <h2 id="redisqlexec_statement">REDISQL.EXEC_STATEMENT</h2>
 <h4 id="redisqlexec_statement-db_key-stmt_identifier-binding_parameters">REDISQL.EXEC_STATEMENT db_key stmt_identifier [binding_parameters ...]</h4>
 <p>This command binds all the parameters to the statement created using <a href="#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a> and identified by <code>stmt_identifier</code>. Then the module executes the statement against the database associated to <code>db_key</code>.</p>
-<p>The number of parameters must be coherent with the number expected by the statement. If there were 3 <code>?</code> you need to provide 3 binding parameters.
-The bindings are associated in order to the statement.</p>
+<p>For each parameter in the query of the form <code>?nnn</code> the engine will look for the <code>nnn-th</code> binding_parameters.
+So if the statements is from the following query:</p>
+<pre><code class="SQL">INSERT INTO foo VALUES(?1, ?2, ?3);
+</code></pre>
+
+<p>You will only need to provide 3 parameters and they will be bound, in order to <code>?1</code>, <code>?2</code> and <code>?3</code>.</p>
+<p>If your statements looks like this:</p>
+<pre><code class="SQL">INSERT INTO foo VALUES(?1, ?123, ?564);
+</code></pre>
+
+<p>You will need to provide 564 parameters and only the first, the 123-rd and the 564-th will be considered.</p>
+<p>SQLite starts to count the binding parameters from 0, not from 1. Using <code>?0</code> is an error.</p>
 <p>Redis works using a text protocol, all the arguments are encoded as text, hence the module is forced to use the procedure <code>sqlite3_bind_text</code>, however, SQLite is smart enough to recognize numbers and treat them correctly. Numbers will be treated as numbers and text will be treated as text.</p>
 <p>Finally, once completed the binding part the statement is executed and its result is returned to the client.</p>
 <p>This command as well is not blocking, all the work happens in a different thread from the one of Redis.</p>
