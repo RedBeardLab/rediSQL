@@ -162,7 +162,7 @@ Now you can create tables, insert data on those tables, make queries, remove ele
 
 ## API
 
-The complete API are explained in the official documentation that you can access here: [API References]
+The complete API are explained in the official documentation that you can access here: [API References][api]
 
 ## Contributing
 
