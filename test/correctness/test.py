@@ -205,7 +205,6 @@ class TestMultipleInserts(TestRediSQLWithExec):
               INSERT INTO t1 values(5, 6);
               INSERT INTO t1 values(7, 8);
               COMMIT;""")
-        print done
         self.assertEquals(done, ["DONE", 3L])
         done = self.exec_naked("REDISQL.EXEC", "N", """BEGIN; 
               INSERT INTO t1 values(3, 4);
