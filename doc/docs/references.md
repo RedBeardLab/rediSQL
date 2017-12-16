@@ -61,22 +61,6 @@ This command is quite useful to execute [PRAGMA Statements][sqlite_pragma], for 
 
 Also, remember that there is only a single thread for database, execution of multiple `REDISQL.EXEC` against the same database will result in a serialization of the executions, one will be executed before the others.
 
-Finally is important to have in mind how `sqlite3_prepare_v2` works. The functions compile only the first statement, (everything between the start of the string and the first semicolon `;`) and not the whole string. This means that executing commands like:
-
-``` SQL
-BEGIN TRANSACTION; -- here first semicolon, and first statement
-INSERT INTO ... ;
-SELECT n FROM ...;
-CASE 
-  WHEN n >= 4 THEN ABORT
-  ELSE COMMIT
-END;
-```
-
-Will **NOT**, let me repeat, it will **not** work as expected, the first statement is just `BEGIN TRANSACTION;` and only that one will be executed.
-
-Please note that we are seriously considering to change this behavior in order to make transactions and other queries work in an expected way.
-
 **Complexity**: It depends entirely on the statement string. The use of a single thread for database is been chosen after several tests where the single thread configuration was faster than a multi-thread one. This is true in a write-intensive application and in a mixed write/read application.
 
 **See also**:
@@ -94,11 +78,9 @@ Please note that we are seriously considering to change this behavior in order t
 
 This command compiles a statement string into a [sqlite statement][sqlite_stmt] and associate such statement to an identifier.
 
-The same limitation of [REDISQL.EXEC][exec] regarding multiple statements in the same string. Only the first SQL statement (from the beginning to the first semicolon `;`) get compiled into a sqlite statement.
+Using this command you can insert parameters using the special symbol `?NNN`, those parameters will be bind to the statements when you are executing the statement itself.
 
-Using this command you can insert parameters using the special symbol `?`, those parameters will be bind to the statements when you are executing the statement itself.
-
-For now only the `?` syntax is supported.
+For now only the `?NNN` syntax is supported, where `N` is a digit (Ex. `?1`, `?2`, `?3` ...)
 
 This command does not execute anything against the database, but simply store the sqlite statements into a dictionary associated with the identifier provided (`stmt_identifier`). Then it stores the information regarding the statement in the metadata table in order to provide a simple way to restore also the statements.
 
@@ -109,12 +91,23 @@ You can execute the statement with [`REDISQL.EXEC_STATEMENT`][exec_statement].
 You cannot overwrite a statement using this command.
 
 If you need to change the implementation of a statement you have two options:
+
 1. Delete the statement using [`REDISQL.DELETE_STATEMENT`][delete_statement] and the create a new one.
 2. Use [`REDISQL.UPDATE_STATEMENT`][update_statement]
 
 Suppose that a service needs a particular statement to be defined in order to work, this safety measure allows the users to simply go ahead, try to create it, and in case catch the error.
 
 Also, this command is not blocking, meaning that all the work happens in a separate thread respect the redis one.
+
+Please keep in mind that the parameters should be named in order and that there should not be any gap.
+
+```SQL
+INSERT INTO foo VALUES(?1, ?2, ?3); -- this one is fine and we work as you expect
+
+INSERT INTO foo VALUES(?1, ?123, ?564); -- this one will be more problematic, and you should avoid it
+```
+
+Keep in mind that SQLite start to count the bounding parameters from 1 and not from 0, using `?0` is an error.
 
 **Complexity**: If we assume that the time necessary to compile a string into a sqlite statement is constant, overall the complexity is O(1), again constant, not necessarily _fast_.
 
@@ -134,8 +127,24 @@ Also, this command is not blocking, meaning that all the work happens in a separ
 
 This command binds all the parameters to the statement created using [`REDISQL.CREATE_STATEMENT`][create_statement] and identified by `stmt_identifier`. Then the module executes the statement against the database associated to `db_key`.
 
-The number of parameters must be coherent with the number expected by the statement. If there were 3 `?` you need to provide 3 binding parameters.
-The bindings are associated in order to the statement.
+For each parameter in the query of the form `?nnn` the engine will look for the `nnn-th` binding_parameters.
+So if the statements is from the following query:
+
+``` SQL
+INSERT INTO foo VALUES(?1, ?2, ?3);
+```
+
+You will only need to provide 3 parameters and they will be bound, in order to `?1`, `?2` and `?3`.
+
+If your statements looks like this:
+
+``` SQL
+INSERT INTO foo VALUES(?1, ?123, ?564);
+```
+
+You will need to provide 564 parameters and only the first, the 123-rd and the 564-th will be considered.
+
+SQLite starts to count the binding parameters from 0, not from 1. Using `?0` is an error.
 
 Redis works using a text protocol, all the arguments are encoded as text, hence the module is forced to use the procedure `sqlite3_bind_text`, however, SQLite is smart enough to recognize numbers and treat them correctly. Numbers will be treated as numbers and text will be treated as text.
 
