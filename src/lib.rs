@@ -9,8 +9,6 @@ use std::fs::{remove_file, File};
 use std::thread;
 use std::sync::mpsc::{channel, Sender};
 
-use std::collections::HashMap;
-
 use uuid::Uuid;
 
 mod redisql_error;
@@ -32,8 +30,11 @@ extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::ffi::RedisModuleString,
                          _argc: ::std::os::raw::c_int)
                          -> i32 {
-    let result =
-        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<r::QueryResult, sql::SQLite3Error>};
+    let result = unsafe {
+        r::ffi::RedisModule_GetBlockedClientPrivateData
+            .unwrap()(ctx) as
+        *mut Result<r::QueryResult, sql::SQLite3Error>
+    };
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
@@ -42,26 +43,34 @@ extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
     }
 }
 
-extern "C" fn reply_exec_statement(ctx: *mut r::ffi::RedisModuleCtx,
-                         _argv: *mut *mut r::ffi::RedisModuleString,
-                         _argc: ::std::os::raw::c_int)
-                         -> i32 {
-    let result =
-        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<r::QueryResult, sql::SQLite3Error>};
+extern "C" fn reply_exec_statement(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    _argv: *mut *mut r::ffi::RedisModuleString,
+    _argc: ::std::os::raw::c_int,
+) -> i32{
+    let result = unsafe {
+        r::ffi::RedisModule_GetBlockedClientPrivateData
+            .unwrap()(ctx) as
+        *mut Result<r::QueryResult, sql::SQLite3Error>
+    };
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
         Ok(query_result) => query_result.reply(ctx),
         Err(error) => error.reply(ctx),
-   }
+    }
 }
 
-extern "C" fn reply_create_statement(ctx: *mut r::ffi::RedisModuleCtx,
-                         _argv: *mut *mut r::ffi::RedisModuleString,
-                         _argc: ::std::os::raw::c_int)
-                         -> i32 {
-    let result =
-        unsafe { r::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(ctx) as *mut Result<r::QueryResult, sql::SQLite3Error>};
+extern "C" fn reply_create_statement(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    _argv: *mut *mut r::ffi::RedisModuleString,
+    _argc: ::std::os::raw::c_int,
+) -> i32{
+    let result = unsafe {
+        r::ffi::RedisModule_GetBlockedClientPrivateData
+            .unwrap()(ctx) as
+        *mut Result<r::QueryResult, sql::SQLite3Error>
+    };
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
@@ -85,22 +94,25 @@ fn get_db_channel_from_name(ctx: *mut r::ffi::RedisModuleCtx,
                             name: String)
                             -> Result<Sender<r::Command>, i32> {
     let key_name = r::create_rm_string(ctx, name);
-    let key =
-        unsafe {
-            r::ffi::Export_RedisModule_OpenKey(ctx,
-                                               key_name,
-                                               r::ffi::REDISMODULE_WRITE)
-        };
+    let key = unsafe {
+        r::ffi::Export_RedisModule_OpenKey(
+            ctx,
+            key_name,
+            r::ffi::REDISMODULE_WRITE,
+        )
+    };
     let safe_key = r::RedisKey { key: key };
     let key_type =
         unsafe { r::ffi::RedisModule_KeyType.unwrap()(safe_key.key) };
     if unsafe {
-        r::ffi::DBType ==
-        r::ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key)
-    } {
+           r::ffi::DBType ==
+           r::ffi::RedisModule_ModuleTypeGetType
+               .unwrap()(safe_key.key)
+       } {
         let db_ptr = unsafe {
-                    r::ffi::RedisModule_ModuleTypeGetValue.unwrap()(safe_key.key) as *mut r::DBKey
-                };
+            r::ffi::RedisModule_ModuleTypeGetValue
+                .unwrap()(safe_key.key) as *mut r::DBKey
+        };
         let db: Box<r::DBKey> = unsafe { Box::from_raw(db_ptr) };
         let channel = db.tx.clone();
         std::mem::forget(db);
@@ -119,51 +131,57 @@ fn reply_with_error_from_key_type(ctx: *mut r::ffi::RedisModuleCtx,
             let error = CString::new("ERR - Error the key is empty")
                 .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
             }
         }
         _ => {
-            let error = CStr::from_bytes_with_nul(r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
+            let error = CStr::from_bytes_with_nul(
+                r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
+            ).unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
             }
         }
     }
 }
 
 #[allow(non_snake_case)]
-extern "C" fn ExecStatement(ctx: *mut r::ffi::RedisModuleCtx,
-                            argv: *mut *mut r::ffi::RedisModuleString,
-                            argc: ::std::os::raw::c_int)
-                            -> i32 {
+extern "C" fn ExecStatement(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    argv: *mut *mut r::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32{
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
 
     match argvector.len() {
         0...2 => {
             let error = CString::new("Wrong number of arguments, it \
                                       needs at least 3")
-                .unwrap();
+                    .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
-                                                       error.as_ptr())
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
             }
         }
         _ => {
-            match get_db_channel_from_name(ctx, argvector[1].clone()) {
+            match get_db_channel_from_name(ctx,
+                                           argvector[1].clone()) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
                 Ok(ch) => {
-                    let blocked_client = r::BlockedClient {
-                    client:
-                        unsafe {
-                        r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                    let blocked_client =
+                        r::BlockedClient {
+                            client: unsafe {
+                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_exec_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
                                                               10000)
-                    },
-                };
+                            },
+                        };
 
                     let cmd = r::Command::ExecStatement {
                         identifier: argvector[2].clone(),
@@ -189,18 +207,23 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         3 => {
-            match get_db_channel_from_name(ctx, argvector[1].clone()) {
+            match get_db_channel_from_name(ctx,
+                                           argvector[1].clone()) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
                 Ok(ch) => {
                     let blocked_client = r::BlockedClient {
-                        client: unsafe { r::ffi::RedisModule_BlockClient.unwrap()(ctx, 
-                                                                                  Some(reply_exec),
-                                                                                  Some(timeout), 
-                                                                                  Some(free_privdata), 
-                                                                                  10000)},
-                };
+                        client:
+                            unsafe {
+                                r::ffi::RedisModule_BlockClient
+                                    .unwrap()(ctx,
+                                              Some(reply_exec),
+                                              Some(timeout),
+                                              Some(free_privdata),
+                                              10000)
+                            },
+                    };
                     mem::forget(ctx);
                     let cmd = r::Command::Exec {
                         query: argvector[2].clone(),
@@ -216,9 +239,10 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
         _ => {
             let error = CString::new("Wrong number of arguments, it \
                                       accepts 3")
-                .unwrap();
+                    .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,error.as_ptr())
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
             }
         }
     }
@@ -227,28 +251,30 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
 
 
 #[allow(non_snake_case)]
-extern "C" fn CreateStatement(ctx: *mut r::ffi::RedisModuleCtx,
-                              argv: *mut *mut r::ffi::RedisModuleString,
-                              argc: ::std::os::raw::c_int)
-                              -> i32 {
+extern "C" fn CreateStatement(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    argv: *mut *mut r::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32{
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         4 => {
-            match get_db_channel_from_name(ctx, argvector[1].clone()) {
+            match get_db_channel_from_name(ctx,
+                                           argvector[1].clone()) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
                 Ok(ch) => {
-                    let blocked_client = r::BlockedClient {
-                        client:
-                            unsafe {
+                    let blocked_client =
+                        r::BlockedClient {
+                            client: unsafe {
                                 r::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_create_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
                                                               10000)
                             },
-                    };
+                        };
                     let cmd = r::Command::CompileStatement {
                         identifier: argvector[2].clone(),
                         statement: argvector[3].clone(),
@@ -267,10 +293,10 @@ extern "C" fn CreateStatement(ctx: *mut r::ffi::RedisModuleCtx,
         _ => {
             let error = CString::new("Wrong number of arguments, it \
                                       accepts 4")
-                .unwrap();
+                    .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
-                                                       error.as_ptr())
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
             }
         }
     }
@@ -279,28 +305,30 @@ extern "C" fn CreateStatement(ctx: *mut r::ffi::RedisModuleCtx,
 
 
 #[allow(non_snake_case)]
-extern "C" fn UpdateStatement(ctx: *mut r::ffi::RedisModuleCtx,
-                              argv: *mut *mut r::ffi::RedisModuleString,
-                              argc: ::std::os::raw::c_int)
-                              -> i32 {
+extern "C" fn UpdateStatement(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    argv: *mut *mut r::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32{
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         4 => {
-            match get_db_channel_from_name(ctx, argvector[1].clone()) {
+            match get_db_channel_from_name(ctx,
+                                           argvector[1].clone()) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
                 Ok(ch) => {
-                    let blocked_client = r::BlockedClient {
-                    client:
-                        unsafe {
-                        r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                    let blocked_client =
+                        r::BlockedClient {
+                            client: unsafe {
+                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_create_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
                                                               10000)
-                    },
-                };
+                            },
+                        };
 
                     let cmd = r::Command::UpdateStatement {
                         identifier: argvector[2].clone(),
@@ -320,36 +348,38 @@ extern "C" fn UpdateStatement(ctx: *mut r::ffi::RedisModuleCtx,
         _ => {
             let error = CString::new("Wrong number of arguments, it \
                                       accepts 4")
-                .unwrap();
+                    .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
-                                                       error.as_ptr())
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
             }
         } 
     }
 }
 
 #[allow(non_snake_case)]
-extern "C" fn DeleteStatement(ctx: *mut r::ffi::RedisModuleCtx,
-                              argv: *mut *mut r::ffi::RedisModuleString,
-                              argc: ::std::os::raw::c_int)
-                              -> i32 {
+extern "C" fn DeleteStatement(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    argv: *mut *mut r::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32{
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         3 => {
-            match get_db_channel_from_name(ctx, argvector[1].clone()) {
+            match get_db_channel_from_name(ctx,
+                                           argvector[1].clone()) {
                 Ok(ch) => {
-                    let blocked_client = r::BlockedClient {
-                    client:
-                        unsafe {
-                        
-                            r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                    let blocked_client =
+                        r::BlockedClient {
+                            client: unsafe {
+
+                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_create_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
                                                               10000)
-                        },
-                    };
+                            },
+                        };
                     let cmd = r::Command::DeleteStatement {
                         identifier: argvector[2].clone(),
                         client: blocked_client,
@@ -367,10 +397,10 @@ extern "C" fn DeleteStatement(ctx: *mut r::ffi::RedisModuleCtx,
         _ => {
             let error = CString::new("Wrong number of arguments, it \
                                       accepts 3")
-                .unwrap();
+                    .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
-                                                       error.as_ptr())
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
             }
         }
     }
@@ -388,30 +418,39 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
 
     match argvector.len() {
         2 | 3 => {
-            let key_name = r::create_rm_string(ctx, argvector[1].clone());
+            let key_name = r::create_rm_string(ctx,
+                                               argvector[1].clone());
             let key = unsafe {
-                r::ffi::Export_RedisModule_OpenKey(ctx,
-                                              key_name,
-                                              r::ffi::REDISMODULE_WRITE)
+                r::ffi::Export_RedisModule_OpenKey(
+                    ctx,
+                    key_name,
+                    r::ffi::REDISMODULE_WRITE,
+                )
             };
             let safe_key = r::RedisKey { key: key };
             match unsafe {
-                r::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
-            } {
+                      r::ffi::RedisModule_KeyType
+                          .unwrap()(safe_key.key)
+                  } {
                 r::ffi::REDISMODULE_KEYTYPE_EMPTY => {
                     let (path, in_memory) = match argvector.len() {
-                        3 => (String::from(argvector[2].clone()), false),
+                        3 => {
+                            (String::from(argvector[2].clone()),
+                             false)
+                        }
                         _ => (String::from(":memory:"), true),
                     };
                     match sql::open_connection(path.clone()) {
                         Ok(rc) => {
                             match r::create_metadata_table(&rc)
-                                .and_then(|_| {
-                                    r::insert_metadata(&rc,
-                                                       "setup".to_owned(),
-                                                       "path".to_owned(),
-                                                       path)
-                                }) {
+                                      .and_then(|_| {
+                                r::insert_metadata(
+                                        &rc,
+                                        "setup".to_owned(),
+                                        "path".to_owned(),
+                                        path,
+                                    )
+                            }) {
                                 Err(e) => e.reply(ctx),
                                 Ok(()) => {
                                     let (tx, rx) = channel();
@@ -454,14 +493,19 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                                       opening the in \
                                                       memory databade")
                                 .unwrap();
-                            unsafe { r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr()) }
+                            unsafe {
+                                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                            }
                         }
                     }
                 }
                 _ => {
-                    let error = CStr::from_bytes_with_nul(r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE).unwrap();
+                    let error = CStr::from_bytes_with_nul(
+                        r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
+                    ).unwrap();
                     unsafe {
-                        r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                        r::ffi::RedisModule_ReplyWithError
+                            .unwrap()(ctx, error.as_ptr())
                     }
                 }
             }
@@ -469,10 +513,10 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
         _ => {
             let error = CString::new("Wrong number of arguments, it \
                                       accepts 2 or 3")
-                .unwrap();
+                    .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx,
-                                                       error.as_ptr())
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
             }
         }
     }
@@ -502,7 +546,8 @@ unsafe extern "C" fn rdb_save(rdb: *mut r::ffi::RedisModuleIO,
 
         match r::create_backup(&(*db).db, path.clone()) {
             Err(e) => println!("{}", e),
-            Ok(not_done) if !sql::backup_complete_with_done(not_done) => {
+            Ok(not_done)
+                if !sql::backup_complete_with_done(not_done) => {
                 println!("Return NOT DONE: {}", not_done)
             }
             Ok(_) => {
@@ -589,13 +634,14 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
 }
 
 
-fn register_function(ctx: *mut r::ffi::RedisModuleCtx,
-                    name: String,
-                    f: extern "C" fn (*mut r::ffi::RedisModuleCtx,
-                       *mut *mut r::ffi::RedisModuleString,
-                       ::std::os::raw::c_int)
-                       -> i32)
-                    -> Result<(), i32> {
+fn register_function(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    name: String,
+    f: extern "C" fn(*mut r::ffi::RedisModuleCtx,
+                     *mut *mut r::ffi::RedisModuleString,
+                     ::std::os::raw::c_int)
+                     -> i32,
+) -> Result<(), i32>{
 
     let create_db: r::ffi::RedisModuleCmdFunc = Some(f);
 
@@ -606,14 +652,15 @@ fn register_function(ctx: *mut r::ffi::RedisModuleCtx,
     let flag_ptr_name = flag_c_name.as_ptr();
 
     if unsafe {
-        r::ffi::RedisModule_CreateCommand.unwrap()(ctx,
-                                                   command_ptr_name,
-                                                   create_db,
-                                                   flag_ptr_name,
-                                                   0,
-                                                   0,
-                                                   0)
-    } == r::ffi::REDISMODULE_ERR {
+           r::ffi::RedisModule_CreateCommand
+               .unwrap()(ctx,
+                         command_ptr_name,
+                         create_db,
+                         flag_ptr_name,
+                         0,
+                         0,
+                         0)
+       } == r::ffi::REDISMODULE_ERR {
         return Err(r::ffi::REDISMODULE_ERR);
     }
     Ok(())
@@ -623,13 +670,14 @@ fn register_function(ctx: *mut r::ffi::RedisModuleCtx,
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub extern "C" fn RedisModule_OnLoad(ctx: *mut r::ffi::RedisModuleCtx,
-                                     _argv: *mut *mut r::ffi::RedisModuleString,
-                                     _argc: i32)
-                                     -> i32 {
+pub extern "C" fn RedisModule_OnLoad(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    _argv: *mut *mut r::ffi::RedisModuleString,
+    _argc: i32,
+) -> i32{
 
     sql::disable_global_memory_statistics();
-                                         
+
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();
 
@@ -646,21 +694,21 @@ pub extern "C" fn RedisModule_OnLoad(ctx: *mut r::ffi::RedisModuleCtx,
     let module_c_name = CString::new("rediSQL").unwrap();
     let module_ptr_name = module_c_name.as_ptr();
     if unsafe {
-        r::ffi::Export_RedisModule_Init(ctx,
-                                        module_ptr_name,
-                                        1,
-                                        r::ffi::REDISMODULE_APIVER_1)
-    } == r::ffi::REDISMODULE_ERR {
+        r::ffi::Export_RedisModule_Init(
+            ctx,
+            module_ptr_name,
+            1,
+            r::ffi::REDISMODULE_APIVER_1,
+        )
+    } == r::ffi::REDISMODULE_ERR
+    {
         return r::ffi::REDISMODULE_ERR;
     }
 
 
     unsafe {
-        r::ffi::DBType =
-            r::ffi::RedisModule_CreateDataType.unwrap()(ctx,
-                                                   ptr_data_type_name,
-                                                   1,
-                                                   &mut types);
+        r::ffi::DBType = r::ffi::RedisModule_CreateDataType
+            .unwrap()(ctx, ptr_data_type_name, 1, &mut types);
     }
 
 
@@ -681,7 +729,7 @@ pub extern "C" fn RedisModule_OnLoad(ctx: *mut r::ffi::RedisModuleCtx,
     }
 
     match register_function(ctx,
-                            String::from("REDISQL.CREATE_STATEMENT"),
+                            String::from("REDISQL.CREATE_STATEMENT",),
                             CreateStatement) {
         Ok(()) => (),
         Err(e) => return e,
@@ -695,14 +743,14 @@ pub extern "C" fn RedisModule_OnLoad(ctx: *mut r::ffi::RedisModuleCtx,
     }
 
     match register_function(ctx,
-                            String::from("REDISQL.UPDATE_STATEMENT"),
+                            String::from("REDISQL.UPDATE_STATEMENT",),
                             UpdateStatement) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
     match register_function(ctx,
-                            String::from("REDISQL.DELETE_STATEMENT"),
+                            String::from("REDISQL.DELETE_STATEMENT",),
                             DeleteStatement) {
         Ok(()) => (),
         Err(e) => return e,
