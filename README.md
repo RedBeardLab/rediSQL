@@ -6,7 +6,7 @@ _With great powers comes great responsability_ (cit. Uncle Ben)
 
 # Documentation
 
-This readme will provide you with the basis, however for deeper documentation you should look here: [siscia.github.io/rediSQL](https://siscia.github.io/rediSQL/)
+This readme will provide you with the basis, however for deeper documentation you should look here: [redbeardlab.tech/rediSQL/](http://redbeardlab.tech/rediSQL/)
 
 ## Motivation
 
@@ -162,7 +162,7 @@ Now you can create tables, insert data on those tables, make queries, remove ele
 
 ## API
 
-The complete API are explained in the official documentation that you can access here: [api]
+The complete API are explained in the official documentation that you can access here: [API References]
 
 ## Contributing
 
@@ -190,4 +190,4 @@ This software is licensed under the AGPL-v3, it is possible to purchase more per
 <RediSQL, SQL capabilities to redis.>
 Copyright (C) 2016  Simone Mosciatti
 
-[api]: https://siscia.github.io/rediSQL/references/
+[api]: http://redbeardlab.tech/rediSQL/references/
