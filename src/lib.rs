@@ -1,6 +1,9 @@
 extern crate libc;
 extern crate uuid;
 
+#[macro_use]
+extern crate log;
+
 use std::ffi::{CString, CStr};
 use std::mem;
 use std::ptr;

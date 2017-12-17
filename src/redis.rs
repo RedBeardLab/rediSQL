@@ -419,6 +419,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
     loop {
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
+                debug!("Exec | Query = {:?}", query);
                 let result = execute_query(&db, query);
                 return_value(client, result);
             }
@@ -427,6 +428,9 @@ pub fn listen_and_execute(db: sql::RawConnection,
                    statement,
                    client,
                }) => {
+                debug!("UpdateStatement | Identifier = {:?} Statement = {:?}",
+                       identifier,
+                       statement);
                 let result = match statements_cache
                           .entry(identifier.clone()) {
                     Entry::Vacant(_) => {
@@ -456,6 +460,8 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 return_value(client, result)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
+                debug!("DeleteStatement | Identifier = {:?}",
+                       identifier);
                 let result = match statements_cache
                           .entry(identifier.clone()) {
                     Entry::Vacant(_) => {
@@ -484,7 +490,9 @@ pub fn listen_and_execute(db: sql::RawConnection,
                    statement,
                    client,
                }) => {
-
+                debug!("CompileStatement | Identifier = {:?} Statement = {:?}",
+                       identifier,
+                       statement);
                 let result = compile_and_insert_statement(
                     identifier,
                     statement,
@@ -499,6 +507,9 @@ pub fn listen_and_execute(db: sql::RawConnection,
                    arguments,
                    client,
                }) => {
+                debug!("ExecStatement | Identifier = {:?} Arguments = {:?}",
+                       identifier,
+                       arguments);
                 let result = match statements_cache
                           .get(&identifier) {
                     None => {
