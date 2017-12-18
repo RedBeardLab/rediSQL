@@ -17,6 +17,7 @@ libc = "0.2.21"
 fnv = "1.0.5"
 uuid = { version = "0.4", features = ["v4"] }
 log = "0.3.8"
+env_logger = "0.4.3"
 
 [features]
 default = []

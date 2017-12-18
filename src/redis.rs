@@ -172,7 +172,9 @@ fn parse_args(argv: *mut *mut ffi::RedisModuleString,
     let mut args: Vec<String> = Vec::with_capacity(argc as usize);
     for i in 0..argc {
         let redis_str = unsafe { *argv.offset(i as isize) };
-        args.push(string_ptr_len(redis_str));
+        let mut arg = string_ptr_len(redis_str);
+        arg = arg.replace("\\", "");
+        args.push(arg);
     }
     Ok(args)
 }
