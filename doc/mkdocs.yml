@@ -8,3 +8,7 @@ pages:
     References: references.md
   -
     Motivations: motivations.md
+  - 
+    Blog:
+      - 'Analytics': 'blog/analytics.md' 
+
