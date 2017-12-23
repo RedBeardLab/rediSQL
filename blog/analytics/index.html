@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../../img/favicon.ico">
+
+	<title>Analytics - RediSQL</title>
+
+        <link href="../../css/bootstrap-custom.min.css" rel="stylesheet">
+        <link href="../../css/font-awesome-4.0.3.css" rel="stylesheet">
+        <link href="../../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="../../css/highlight.css">
+
+        <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+        <!--[if lt IE 9]>
+            <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+            <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
+        <![endif]-->
+
+        
+    </head>
+
+    <body>
+
+        <div class="navbar navbar-default navbar-fixed-top" role="navigation">
+    <div class="container">
+
+        <!-- Collapsed navigation -->
+        <div class="navbar-header">
+            
+            <!-- Expander button -->
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            
+
+            <!-- Main title -->
+            <a class="navbar-brand" href="../..">RediSQL</a>
+        </div>
+
+        <!-- Expanded navigation -->
+        <div class="navbar-collapse collapse">
+            
+                <!-- Main navigation -->
+                <ul class="nav navbar-nav">
+                
+                
+                    <li >
+                        <a href="../..">Overview</a>
+                    </li>
+                
+                
+                
+                    <li >
+                        <a href="../../references/">References</a>
+                    </li>
+                
+                
+                
+                    <li >
+                        <a href="../../motivations/">Motivations</a>
+                    </li>
+                
+                
+                
+                    <li class="dropdown active">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Blog <b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                        
+                            
+<li class="active">
+    <a href="./">Analytics</a>
+</li>
+
+                        
+                        </ul>
+                    </li>
+                
+                
+                </ul>
+            
+
+            <ul class="nav navbar-nav navbar-right">
+                <li>
+                    <a href="#" data-toggle="modal" data-target="#mkdocs_search_modal">
+                        <i class="fa fa-search"></i> Search
+                    </a>
+                </li>
+                
+                    <li >
+                        <a rel="next" href="../../motivations/">
+                            <i class="fa fa-arrow-left"></i> Previous
+                        </a>
+                    </li>
+                    <li class="disabled">
+                        <a rel="prev" >
+                            Next <i class="fa fa-arrow-right"></i>
+                        </a>
+                    </li>
+                
+                
+                    <li>
+                        <a href="https://github.com/RedBeardLab/rediSQL">
+                            
+                                <i class="fa fa-github"></i>
+                            
+                            GitHub
+                        </a>
+                    </li>
+                
+            </ul>
+        </div>
+    </div>
+</div>
+
+        <div class="container">
+            
+                <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
+    <ul class="nav bs-sidenav">
+    
+        <li class="main active"><a href="#redisql-for-analytics">RediSQL for analytics</a></li>
+        
+            <li><a href="#problem">Problem</a></li>
+        
+            <li><a href="#data-structure">Data Structure</a></li>
+        
+            <li><a href="#solution-sketch">Solution Sketch</a></li>
+        
+            <li><a href="#move-the-data">Move the data</a></li>
+        
+            <li><a href="#recap">Recap</a></li>
+        
+    
+    </ul>
+</div></div>
+                <div class="col-md-9" role="main">
+
+<h1 id="redisql-for-analytics">RediSQL for analytics</h1>
+<p>RediSQL is a module for Redis that embed a completely functional SQLite database. </p>
+<p>RediSQL enables new paradigm where is possible to have several smaller decentralized databases instead of a single giant one.</p>
+<p>In this blog post, we are going to explore how RediSQL can be used for storing analytics data.</p>
+<p>Redis is always been used for storing fast data and so it is an extremely interesting software for analytics solution.</p>
+<p>We are now going to describe the problem, explore some data structures that may help and finally sketch a possible solution using RediSQL.</p>
+<p>At the end of the article, there is actual python code that you can run.</p>
+<h2 id="problem">Problem</h2>
+<p>Suppose you are interested in following the user around your website, and you will like to know what buttons they click, what events they trigger, what form the focus on and so on and so forth.</p>
+<p>All these events are quite simple to catch using javascript and client-side code, but then you need to store them in your database to analyze them further and extract new information and value for your business.</p>
+<p>However, you would prefer to avoid to put too much pressure on your main database that is already busy storing all the essential information for the business.</p>
+<h2 id="data-structure">Data Structure</h2>
+<p>One of the advantages of using SQL is the possibility to use and declare the shape of your data.</p>
+<p>For this specific problem, our data are quite simple.
+We want to store a user identifier (it may be its alias, nickname, ID in the main database or even something else), the IP address of the user, the timestamp when the event was triggered and finally the event itself.</p>
+<p>We are going to represent the identifier, the IP address and the timestamp as strings.
+Yes, unfortunately, SQLite does not provide a time type, to use a string is quite a reasonable choice, another one could be to use integers and to save the timestamp as Unix epoch of the event.</p>
+<h3 id="events">Events</h3>
+<p>Representing the events may be a little complex and it really depends on your use case.
+Suppose you are just listening to specific events like "Sales", "Register", "Login" or "Submit form" you could simply store them as strings.</p>
+<p>However you can be a little more sophisticated as well, and associate to every Sales some other data like "amount", "shipping cost" or "total elements sold" or again improve the "Submit form" with information about the web page, like the URL of the page or if it was the A or the B version of your A/B test. And so on and so forth.</p>
+<h3 id="json-or-tables">JSON or Tables</h3>
+<p>If your events are quite static and you already know what you are going to store the best approach is to use tables.</p>
+<p>An idea could be to use this representation for the table <code>Events</code>:</p>
+<pre><code class="SQL">| event_id | user_id | ip_address | timestamp |
+|----------|---------|------------|-----------|
+</code></pre>
+
+<p>And then different tables for each type of events, like:</p>
+<p><code>Sales</code>:</p>
+<pre><code class="SQL">| event_id | amount  | shipping_cost | total_elements_sold |
+|----------|---------|---------------|---------------------|
+</code></pre>
+
+<p><code>Submits</code>:</p>
+<pre><code class="SQL">| event_id | url_page | A/B_version |
+|----------|----------|-------------|
+</code></pre>
+
+<p>Where <code>event_id</code> is a Primary key to the table <code>Events</code> and a Foreign key on the table <code>Sales</code> and <code>Submits</code>.</p>
+<p>This approach works really well, the shape of your data will be always known and it will be fast, however, you actually need to know what you are saving in your DB and change the structure of the table is quite complex.</p>
+<p>A different approach will be to store directly JSON in your table.</p>
+<p>The new schema will be only a single table, <code>Events</code>:</p>
+<pre><code class="SQL">| event_id | user_id | ip_address | timestamp | data |
+|----------|---------|------------|-----------|------|
+</code></pre>
+
+<p>The column data will be of type <code>text</code> and it will store anything you want if encoded in JSON.</p>
+<p>Of course, it is also possible to run any kind of computation on the JSON data including filters and selection.</p>
+<p>Using JSON you gain a lot of flexibility but you are not sure anymore of the shape of your data and if you are not careful it may cause some headaches.</p>
+<h2 id="solution-sketch">Solution Sketch</h2>
+<p>In this section we are going to get through a possible implementation of the above solution, we are going to use the JSON variant since I believe that not everybody knew that SQLite could handle JSON so well.</p>
+<p>I am assuming you already know how to get a Redis instance and how to load a module into it, if not make sure to check out <a href="https://github.com/RedBeardLab/rediSQL#getting-start">the readme of the project</a></p>
+<p>We are going to automate as much as possible in this tutorial, in this way your analytic script will just run.</p>
+<p>The very first thing to do is to get a working connection to your Redis instance, any Redis binding should make this process quite simple, here an example in python.</p>
+<pre><code class="python">import redis
+r = redis.StrictRedis(host='localhost', port=6379, db=0)
+</code></pre>
+
+<p>Now that you have established a connection the next step is to create a RediSQL database, RediSQL can manage multiple, completely independent databases, each associated with a Redis key, for this simple example we are going to use only one database that, with a lot of fantasy, <code>DB</code>.</p>
+<pre><code class="python">ok = r.execute_command(&quot;REDISQL.CREATE_DB&quot;, &quot;DB&quot;)
+assert ok == &quot;OK&quot;
+</code></pre>
+
+<p>Now that we have created our database we can go ahead and create the table that will contain our data. We are going to create the table if and only if it does not exists yet.</p>
+<pre><code class="python">done = r.execute_command(&quot;REDISQL.EXEC&quot;, &quot;DB&quot;, 
+                         &quot;&quot;&quot;CREATE TABLE
+                            IF NOT EXISTS 
+                            Events(
+                                event_id INTEGER PRIMARY KEY,
+                                user_id STRING,
+                                ip_address STRING,
+                                timestamp STRING,
+                                data JSON
+                            );&quot;&quot;&quot;)
+assert done == [&quot;DONE&quot;, 0]
+</code></pre>
+
+<p>Setting the type of <code>event_id</code> as <code>INTEGER PRIMARY KEY</code> is synonymous with <code>ROWID</code> which is an autoincrement fields that do not need to be set during insert.</p>
+<p>At this point, the only thing left to do is to listen for events in your code and write them into the database.</p>
+<p>The simplest, and insecure, way to write the data is to use the <code>EXEC</code> function like so:</p>
+<pre><code class="python"># import datetime
+user_id = &quot;user_1234&quot;
+ip_address = &quot;a.simple.ip.address&quot;
+now = datetime.datetime.now()
+data = {&quot;type&quot; : &quot;sales&quot;, &quot;total&quot;: 1999, &quot;shipping_address&quot; : &quot;...&quot;}
+statement = &quot;&quot;&quot;INSERT INTO Events (user_id, ip_address, timestamp, data) 
+               VALUES(\&quot;{}\&quot;, \&quot;{}\&quot;, \&quot;{}\&quot;, \&quot;{}\&quot;)&quot;&quot;&quot; \
+               .format(user_id, ip_address, now, data)
+done = r.execute_command(&quot;REDISQL.EXEC&quot;, &quot;DB&quot;, statement)
+assert done == [&quot;DONE&quot;, 1]
+</code></pre>
+
+<p>As you may have guessed already the return value of <code>REDISQL.EXEC</code> is a list of two elements, the string <code>DONE</code> and the integer representing the number of rows modified (inserted, deleted or updated).</p>
+<p>However, this way of inserting data into the database is not optimal, especially if the same operation will be performed several times. And also because it is vulnerable to SQL injections attacks.</p>
+<p>The better and safer way to do this kind of operation is to define <strong>statements</strong>.</p>
+<pre><code class="python">ok = r.execute_command(&quot;REDISQL.CREATE_STATEMENT&quot;, &quot;DB&quot;, &quot;insert_event&quot;,
+                       &quot;&quot;&quot;INSERT INTO Events 
+                          (user_id, ip_address, timestamp, data) 
+                          VALUES(?1, ?2, ?3, ?4)&quot;&quot;&quot;)
+assert ok == &quot;OK&quot;
+</code></pre>
+
+<p>Once a statement is defined you can execute it using the following commands.</p>
+<pre><code class="python"># import datetime
+user_id = &quot;user_1234&quot;
+ip_address = &quot;a.simple.ip.address&quot;
+now = datetime.datetime.now()
+data = {&quot;type&quot; : &quot;sales&quot;, &quot;total&quot;: 1999, &quot;shipping_address&quot; : &quot;...&quot;}
+done = r.execute_command(&quot;REDISQL.EXEC_STATEMENT&quot;, &quot;DB&quot;, &quot;insert_event&quot;, user_id, ip_address, now, data)
+assert done == [&quot;DONE&quot;, 1]
+</code></pre>
+
+<p>The use of statements brings some benefits.</p>
+<ul>
+<li>It reduces code deduplication in your code base</li>
+<li>It puts a name on a particular procedure, decoupling the implementation and the goal</li>
+<li>It allows different microservices to invoke the always the exact same procedure</li>
+<li>It is faster to execute</li>
+</ul>
+<h3 id="use-the-json1-sqlite-module">Use the JSON1 SQLite module</h3>
+<p>Now that we have covered how to execute SQL against RediSQL let me quickly introduce you to the JSON1 syntax provide by SQLite.</p>
+<p>The ones that follow are plain SQL statements that you can execute <code>REDISQL.EXEC</code> against the database or that you can embed into a statement.</p>
+<p>The most interesting function provide is <code>json_extract</code>.</p>
+<pre><code class="SQL">SELECT user_id, json_extract(data, '$.total')
+FROM Events
+WHERE json_extract(data, '$.type') = &quot;sales&quot;;
+</code></pre>
+
+<p>This query will look inside the field <code>type</code> of the JSON stored into the columns <code>data</code> if this fields contains the string "sales" it will return the user who bought something and total of the sale. </p>
+<p><code>json_extract</code> works also on array using a simple syntax: <code>$.array[2]</code> (eg. extract the third element of the array)</p>
+<h2 id="move-the-data">Move the data</h2>
+<p>Running the above script will be extremely fast, I am talking about 10ks inserts per second fast.</p>
+<p>However, it is so fast for a variety of reason but maybe the most important is that it keeps all the data in memory and does not write them on disk.</p>
+<p>This can be just fine for some application (think about storing data that become useless in few days time) or it can be a big issue for some other use case, luckily there is a very simple solution.</p>
+<p>The simplest thing to do when you decide to dump the data in your persistent storage is just to query them all and push them, in batch, to your persistent system. Moving the data in all together will allow having an extremely high throughput and it will take a fraction of the time than if you moved just a row at the time.</p>
+<p>A quite simple practice is to simply dump all the content of your database in a CSV file and then let your RDBMS load it.</p>
+<p>This operation is quite simple and it can be done like so.</p>
+<pre><code class="python"># get the data
+values = r.execute_command(&quot;REDISQL.EXEC&quot;, &quot;DB&quot;, &quot;SELECT * FROM Events;&quot;)
+# iterate throught the list writing on file
+with open('csv_file', 'w') as csv_file:
+    # write the csv header
+    csv_file.write(&quot;event_id,user_id,ip_address,timestamp,data\n&quot;)
+    for row in values:
+        # create a single string with all the fields separated by a comma
+        elements = &quot;,&quot;.join(row) + &quot;\n&quot;
+        # write the result on the csv_file
+        csv_file.write(elements)
+</code></pre>
+
+<p>Now you can use tools like PostgreSQL COPY to load all the data into your database.</p>
+<p>This solution is not perfect and in a distributed setting with several concurrent workers it may result in some data duplication, however, we are getting ahead of ourselves and this topic will go far ahead of the scope of this post.</p>
+<h2 id="recap">Recap</h2>
+<p>In this blog post, we explored how to write a quite sophisticated analytics infrastructure using nothing more than RediSQL.</p>
+<p>Adding this tool to your existing infrastructure should be quite simple and painless while it provides a simple way to do powerful things in a fast and reliable way.</p>
+<p>Is worth to remember that RediSQL already provide RDB persistency so you already have some interesting level of safeness embed into this architecture.</p></div>
+            
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            
+            <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+
+        <script src="../../js/jquery-1.10.2.min.js"></script>
+        <script src="../../js/bootstrap-3.0.3.min.js"></script>
+        <script src="../../js/highlight.pack.js"></script>
+        <script>var base_url = '../..';</script>
+        <script data-main="../../mkdocs/js/search.js" src="../../mkdocs/js/require.js"></script>
+        <script src="../../js/base.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="Search Modal" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                        <h4 class="modal-title" id="exampleModalLabel">Search</h4>
+                    </div>
+                    <div class="modal-body">
+                        <p>
+                            From here you can search these documents. Enter
+                            your search terms below.
+                        </p>
+                        <form role="form">
+                            <div class="form-group">
+                                <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query">
+                            </div>
+                        </form>
+                        <div id="mkdocs-search-results"></div>
+                    </div>
+                    <div class="modal-footer">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </body>
+</html>
