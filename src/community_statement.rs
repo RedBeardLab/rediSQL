@@ -6,8 +6,7 @@ use std::ffi::{CString, CStr};
 use sqlite::ffi;
 
 use sqlite::StatementTrait;
-use sqlite::{SQLite3Error, Cursor, EntityType, RawConnection,
-             SQLiteOK};
+use sqlite::{SQLite3Error, Cursor, RawConnection, SQLiteOK};
 use sqlite::generate_sqlite3_error;
 
 #[cfg(feature = "pro")]
@@ -163,23 +162,9 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
                     unsafe {
                         ffi::sqlite3_column_count(self.stmt)
                     } as i32;
-                let mut types: Vec<EntityType> = Vec::new();
-                for i in 0..n_columns {
-                    types.push(match unsafe {
-                        ffi::sqlite3_column_type(self.stmt, i)
-                    } {
-                        ffi::SQLITE_INTEGER => EntityType::Integer,
-                        ffi::SQLITE_FLOAT => EntityType::Float,
-                        ffi::SQLITE_TEXT => EntityType::Text,
-                        ffi::SQLITE_BLOB => EntityType::Blob,
-                        ffi::SQLITE_NULL => EntityType::Null,
-                        _ => EntityType::Null,
-                    })
-                }
                 Ok(Cursor::RowsCursor {
                        stmt: self,
                        num_columns: n_columns,
-                       types: types,
                        previous_status: ffi::SQLITE_ROW,
                        to_replicate: self.to_replicate(),
                        modified_rows: 0,

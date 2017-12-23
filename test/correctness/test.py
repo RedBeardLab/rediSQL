@@ -216,7 +216,19 @@ class TestMultipleInserts(TestRediSQLWithExec):
               COMMIT;""")
         self.assertEquals(done, ["DONE", 6L])
 
-
+class TestJSON(TestRediSQLWithExec):
+  def test_multiple_insert_on_different_types(self):
+    with DB(self.client, "H"):
+      with Table(self.client, "j1", "(A text, B int)", key = "H"):
+        done = self.exec_naked("REDISQL.EXEC", "H", """BEGIN;
+              INSERT INTO j1 VALUES ('{\"foo\" : \"bar\"}', 1);
+              INSERT INTO j1 VALUES ('{\"foo\" : 3}', 2);
+              INSERT INTO j1 VALUES ('{\"foo\" : [1, 2, 3]}', 3);
+              INSERT INTO j1 VALUES ('{\"foo\" : {\"baz\" : [1, 2, 3]}}', 4);
+              COMMIT;""")
+        self.assertEquals(done, ["DONE", 4L])
+        result = self.exec_naked("REDISQL.EXEC", "H", "SELECT json_extract(A, '$.foo') FROM j1 ORDER BY B;")
+        self.assertEquals(result, [["bar"], [3], ["[1,2,3]"], ['{"baz":[1,2,3]}']])
 
 
 class TestStatements(TestRediSQLWithExec):

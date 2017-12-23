@@ -180,7 +180,6 @@ pub enum Cursor<'a> {
     },
     RowsCursor {
         num_columns: i32,
-        types: Vec<EntityType>,
         previous_status: i32,
         stmt: &'a Statement<'a>,
         modified_rows: i32,
@@ -221,6 +220,20 @@ impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
     }
 }
 
+fn get_entity_type(stmt: *mut ffi::sqlite3_stmt,
+                   i: i32)
+                   -> EntityType {
+    let entity_type = unsafe { ffi::sqlite3_column_type(stmt, i) };
+    match entity_type {
+        ffi::SQLITE_INTEGER => EntityType::Integer,
+        ffi::SQLITE_FLOAT => EntityType::Float,
+        ffi::SQLITE_TEXT => EntityType::Text,
+        ffi::SQLITE_BLOB => EntityType::Blob,
+        ffi::SQLITE_NULL => EntityType::Null,
+        _ => EntityType::Null,
+
+    }
+}
 
 impl<'a> Iterator for Cursor<'a> {
     type Item = Row;
@@ -243,7 +256,6 @@ impl<'a> Iterator for Cursor<'a> {
             Cursor::RowsCursor {
                 ref stmt,
                 num_columns,
-                ref types,
                 ref mut previous_status,
                 ..
             } => {
@@ -251,34 +263,41 @@ impl<'a> Iterator for Cursor<'a> {
                     ffi::SQLITE_ROW => {
                         let mut result = vec![];
                         for i in 0..num_columns {
-                            let entity_value = match types[i as
-                                  usize] {
+                            let entity_value = match get_entity_type(stmt.get_raw_stmt(), i) {
                                 EntityType::Integer => {
                                     let value =
                                             unsafe {
                                                 ffi::sqlite3_column_int(stmt.get_raw_stmt(), i)
                                             };
+                                    debug!("Got integer: {:?}",
+                                           value);
                                     Entity::Integer { int: value }
                                 }
                                 EntityType::Float => {
                                     let value = unsafe {
                                             ffi::sqlite3_column_double(stmt.get_raw_stmt(), i)
                                         };
+                                    debug!("Got float: {:?}", value);
                                     Entity::Float { float: value }
                                 }
                                 EntityType::Text => {
                                     let value = unsafe {
                                             CStr::from_ptr(ffi::sqlite3_column_text(stmt.get_raw_stmt(), i) as *const i8).to_string_lossy().into_owned()
                                         };
+                                    debug!("Got text: {:?}", value);
                                     Entity::Text { text: value }
                                 }
                                 EntityType::Blob => {
                                     let value = unsafe {
                                             CStr::from_ptr(ffi::sqlite3_column_blob(stmt.get_raw_stmt(), i) as *const i8).to_string_lossy().into_owned()
                                         };
+                                    debug!("Got blob: {:?}", value);
                                     Entity::Blob { blob: value }
                                 }
-                                EntityType::Null => Entity::Null {},
+                                EntityType::Null => {
+                                    debug!("Got null");
+                                    Entity::Null {}
+                                }
                             };
                             result.push(entity_value);
                         }
