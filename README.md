@@ -1,6 +1,7 @@
 # RediSQL
 
 RediSQL is a module for Redis that embed a completely functional SQLite database.
+
 RediSQL enables new paradigm where is possible to have several smaller decentralized databases instead of a single giant one.
 
 _With great powers comes great responsability_ (cit. Uncle Ben)
