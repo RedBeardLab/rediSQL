@@ -5,7 +5,7 @@ extern crate uuid;
 extern crate log;
 extern crate env_logger;
 
-use env_logger::{LogBuilder, LogTarget};
+// use env_logger::{LogBuilder, LogTarget};
 
 use std::ffi::{CString, CStr};
 use std::mem;
@@ -672,8 +672,6 @@ fn register_function(
     Ok(())
 }
 
-
-
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn RedisModule_OnLoad(
@@ -684,11 +682,13 @@ pub extern "C" fn RedisModule_OnLoad(
 
     sql::disable_global_memory_statistics();
 
+    /*
     LogBuilder::new()
         .filter(None, log::LogLevelFilter::Debug)
         .target(LogTarget::Stdout)
         .init()
         .unwrap();
+    */
 
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();

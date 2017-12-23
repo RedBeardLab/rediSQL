@@ -1,12 +1,9 @@
-FROM scorpil/rust:stable
+FROM redis:latest
 
-RUN apt update \
-  && apt install -y libclang-dev make
+# RUN apk update; apk add libgcc_s.so.1
 
-ENV REDIS_VERSION=4.0-rc3
-ENV REDIS_DOWNLOAD_URL=https://github.com/antirez/redis/archive/$REDIS_VERSION.tar.gz
+COPY /target/release/libredis_sql.so /usr/local/lib
 
-RUN curl -fsOSL $REDIS_DOWNLOAD_URL \
-  && tar xzf $REDIS_VERSION.tar.gz \
-  && cd redis-$REDIS_VERSION \
-  && make
+EXPOSE 6379
+
+CMD ["redis-server", "--loadmodule", "/usr/local/lib/libredis_sql.so"]

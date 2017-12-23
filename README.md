@@ -18,13 +18,25 @@ Between all the SQL implementation, the one that best fitted the need for this m
 
 ## Getting start
 
-You can download the `.so` directly from github following the [release link](https://github.com/RedBeardLab/rediSQL/releases)
+There are three main way to get RediSQL.
+
+The first way is to use docker, just pull the image and you are ready to go:
+
+`docker run siscia/redisql:latest` 
+
+the official docker hub repo is: [https://hub.docker.com/r/siscia/redisql/](https://hub.docker.com/r/siscia/redisql/)
+
+The second way is to download the public release directly from github following the [release link](https://github.com/RedBeardLab/rediSQL/releases)
 
 With the `.so` you can start redis passing the object as argument like so:
 
 ```
 ./redis-server --loadmodule librediSQL.so 
 ```
+
+Please note that you need to run redis > 4.0 to use modules and RediSQL is not an exception.
+
+The last way is to compile the module yourself:
 
 ## Compiling and contributing
 
@@ -43,7 +55,7 @@ Checking connectivity... done.
 Then move inside the directory and compile the module:
 
 ```
-$ cargo build --release --features=community
+$ cargo build --release 
 ```
 
 At this point you should have the `.so` inside the `target/release/` directory.
