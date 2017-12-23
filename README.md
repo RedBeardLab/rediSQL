@@ -1,20 +1,21 @@
 # RediSQL
 
-RediSQL is a redis module that embeded SQLite.
+RediSQL is a module for Redis that embed a completely functional SQLite database.
+RediSQL enables new paradigm where is possible to have several smaller decentralized databases instead of a single giant one.
 
 _With great powers comes great responsability_ (cit. Uncle Ben)
 
 # Documentation
 
-This readme will provide you with the basis, however for deeper documentation you should look here: [redbeardlab.tech/rediSQL/](http://redbeardlab.tech/rediSQL/)
+This readme will provide you with the basics, however for deeper documentation you should look here: [redbeardlab.tech/rediSQL/](http://redbeardlab.tech/rediSQL/)
 
 ## Motivation
 
 I love the agility provided by Redis, however, several times, I wished I had a little more structure in my in-memory database.
 
-Even basic SQL is very powerful and years upon years of experience on several SQL implementation have bring us very mature product that we can now exploit with confidence.
+Even basic SQL is very powerful and years upon years of experience on several SQL implementations have brought us a very mature product that we can now exploit with confidence.
 
-Between all the SQL implementation, the one that best fitted the need for this module is definitely SQLite, for its velocity, portability, simplicity and capability to work in memory.
+Between all the SQL implementation, the one that best fitted the need for this module is definitely SQLite, for its velocity, portability, simplicity, and capability to work in memory.
 
 ## Getting start
 
@@ -58,7 +59,7 @@ Then move inside the directory and compile the module:
 $ cargo build --release 
 ```
 
-At this point you should have the `.so` inside the `target/release/` directory.
+At this point, you should have the `.so` inside the `target/release/` directory.
 
 Now launch Redis with the module load will looks similarly to this:
 
@@ -180,10 +181,6 @@ The complete API are explained in the official documentation that you can access
 
 I am going to accept pull request here on github.
 
-However since I am going to sell premium version of this products I must ask to every contributer to assign all the rights of the contribution to me.
-
-A pull request template is in place.
-
 ## OpenSource and the necessity of real support and charge for my time.
 
 [How to Charge for your Open Source](http://www.mikeperham.com/2015/11/23/how-to-charge-for-your-open-source/) by Mike Perham brings good arguments on the necessity to charge for work done by developers, even in the Open Source world.
@@ -192,7 +189,7 @@ I myself have started a lot of Open Source project that, eventually, are all dea
 
 I am hoping to find the necessary funds to keep maintain this project.
 
-I am starting with only an Open Source version, and then move to an enterprise version adding the necessary features.
+I am starting with only an Open Source version and then move to an enterprise version adding the necessary features.
 
 
 ## License
@@ -200,6 +197,7 @@ I am starting with only an Open Source version, and then move to an enterprise v
 This software is licensed under the AGPL-v3, it is possible to purchase more permissive licenses.
 
 <RediSQL, SQL capabilities to redis.>
-Copyright (C) 2016  Simone Mosciatti
+Copyright (C) 2017  Simone Mosciatti
 
 [api]: http://redbeardlab.tech/rediSQL/references/
+
