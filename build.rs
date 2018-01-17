@@ -22,7 +22,7 @@ fn main() {
         .define("HAVE_USLEEP", Some("1"))
         .define("NDEBUG", Some("1"))
         .define("HAVE_FDATASYNC", Some("1"))
-        .define("SQLITE_THREADSAFE", Some("1"))
+        .define("SQLITE_THREADSAFE", Some("2"))
         .define("SQLITE_ENABLE_JSON1", Some("1"))
         .define("SQLITE_ENABLE_FTS3", Some("1"))
         .define("SQLITE_ENABLE_FTS4", Some("1"))
