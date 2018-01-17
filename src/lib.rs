@@ -455,7 +455,9 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                         "setup".to_owned(),
                                         "path".to_owned(),
                                         path,
-                                    )
+                                    ).and_then(|_| {
+                                r::enable_foreign_key(&rc)
+                                })
                             }) {
                                 Err(e) => e.reply(ctx),
                                 Ok(()) => {
