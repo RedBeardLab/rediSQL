@@ -222,7 +222,8 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
 
     #[cfg(feature = "pro")]
     fn to_replicate(&self) -> bool {
-        replication::to_replicate(self)
+        let v = replication::to_replicate(self);
+        v
     }
 }
 
@@ -301,6 +302,17 @@ impl<'a> StatementTrait<'a> for MultiStatement<'a> {
     }
     fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt {
         self.stmts[0].stmt
+    }
+
+    #[cfg(feature="pro")]
+    fn to_replicate(&self) -> bool {
+        for stmt in &self.stmts {
+            let v = stmt.to_replicate();
+            if v {
+                return true;
+            }
+        }
+        return false;
     }
 }
 

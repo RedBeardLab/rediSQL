@@ -5,6 +5,8 @@ use std::ffi::{CString, CStr};
 use std::error;
 use std::iter::FromIterator;
 
+use std::os::raw::c_char;
+
 use redisql_error as err;
 
 pub use community_statement;
@@ -197,13 +199,13 @@ impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
         for cursor in cursors {
             match cursor {
                 Cursor::OKCursor { to_replicate } => {
-                    to_replicate_acc &= to_replicate;
+                    to_replicate_acc |= to_replicate;
                 }
                 Cursor::DONECursor { to_replicate, .. } => {
-                    to_replicate_acc &= to_replicate;
+                    to_replicate_acc |= to_replicate;
                 }
                 Cursor::RowsCursor { to_replicate, .. } => {
-                    to_replicate_acc &= to_replicate;
+                    to_replicate_acc |= to_replicate;
                     result = Some(cursor);
                 }
             }
@@ -282,14 +284,14 @@ impl<'a> Iterator for Cursor<'a> {
                                 }
                                 EntityType::Text => {
                                     let value = unsafe {
-                                            CStr::from_ptr(ffi::sqlite3_column_text(stmt.get_raw_stmt(), i) as *const i8).to_string_lossy().into_owned()
+                                            CStr::from_ptr(ffi::sqlite3_column_text(stmt.get_raw_stmt(), i) as *const c_char).to_string_lossy().into_owned()
                                         };
                                     debug!("Got text: {:?}", value);
                                     Entity::Text { text: value }
                                 }
                                 EntityType::Blob => {
                                     let value = unsafe {
-                                            CStr::from_ptr(ffi::sqlite3_column_blob(stmt.get_raw_stmt(), i) as *const i8).to_string_lossy().into_owned()
+                                            CStr::from_ptr(ffi::sqlite3_column_blob(stmt.get_raw_stmt(), i) as *const c_char).to_string_lossy().into_owned()
                                         };
                                     debug!("Got blob: {:?}", value);
                                     Entity::Blob { blob: value }
