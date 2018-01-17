@@ -8,6 +8,9 @@ use std::string;
 use std::fs::File;
 use std::io::BufReader;
 
+use std::os::raw::c_char;
+use std::os::raw::c_long;
+
 use std::io::{Read, Write};
 
 use std::sync::mpsc::{Receiver, RecvError, Sender};
@@ -139,7 +142,7 @@ pub fn reply_with_done(ctx: *mut ffi::RedisModuleCtx,
 pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
                         array: Vec<sql::Row>)
                         -> i32 {
-    let len = array.len() as i64;
+    let len = array.len() as c_long;
     unsafe {
         ffi::RedisModule_ReplyWithArray.unwrap()(ctx, len);
     }
@@ -147,7 +150,7 @@ pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
         unsafe {
             ffi::RedisModule_ReplyWithArray.unwrap()(ctx,
                                                      row.len() as
-                                                     i64);
+                                                     c_long);
         }
         for entity in row {
             entity.reply(ctx);
@@ -160,7 +163,14 @@ pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
 impl RedisReply for sql::SQLite3Error {
     fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
         let error = format!("{}", self);
-        reply_with_string(ctx, error)
+        reply_with_error(ctx, error)
+    }
+}
+
+fn reply_with_error(ctx: *mut ffi::RedisModuleCtx, s: String) -> i32 {
+    let s = CString::new(s).unwrap();
+    unsafe {
+        ffi::RedisModule_ReplyWithError.unwrap()(ctx, s.as_ptr())
     }
 }
 
@@ -378,31 +388,6 @@ fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_ca
 
 fn return_value(client: BlockedClient,
                 result: Result<QueryResult, err::RediSQLError>) {
-    match result {
-        Err(_) => {}
-        Ok(ref query_result) => {
-            match query_result.to_replicate() {
-                false => {}
-                true => {
-                    /*
-                    // println!("It should replicate");
-                      unsafe {
-                        let ctx = ffi::RedisModule_GetThreadSafeContext.unwrap()(client.client);
-    
-                        let flags = ffi::RedisModule_GetContextFlags.unwrap()(ctx);
-                        // println!("Flags: {}", flags);
-
-                        ffi::RedisModule_ThreadSafeContextLock.unwrap()(ctx);
-                        ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx);
-                        ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(ctx);
-                        ffi::RedisModule_FreeThreadSafeContext.unwrap()(ctx);
-                    }
-                    */
-                }
-            }
-        }
-    }
-
     unsafe {
         ffi::RedisModule_UnblockClient
             .unwrap()(client.client,
@@ -640,6 +625,20 @@ pub fn insert_metadata(db: &sql::RawConnection,
     }
 }
 
+pub fn enable_foreign_key(db: &sql::RawConnection)
+                          -> Result<(), sql::SQLite3Error> {
+    let enable_foreign_key = String::from("PRAGMA foreign_keys = ON;",);
+    match sql::MultiStatement::new(db, enable_foreign_key) {
+        Err(e) => Err(e),
+        Ok(stmt) => {
+            match stmt.execute() {
+                Err(e) => Err(e),
+                Ok(_) => Ok(()),
+            }
+        }
+    }
+}
+
 pub fn update_statement_metadata(db: &sql::RawConnection,
                                  key: String,
                                  value: String)
@@ -737,7 +736,7 @@ pub fn write_file_to_rdb(f: File,
             Ok(n) => unsafe {
                 ffi::RedisModule_SaveStringBuffer
                     .unwrap()(rdb,
-                              tw.as_slice().as_ptr() as *const i8,
+                              tw.as_slice().as_ptr() as *const c_char,
                               n)
 
             },
