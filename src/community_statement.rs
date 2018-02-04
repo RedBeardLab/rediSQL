@@ -106,10 +106,10 @@ pub fn generate_statements<'a>
     }
 }
 
-impl<'a> StatementTrait<'a> for Statement<'a> {
-    fn new(conn: &'a RawConnection,
-           query: String)
-           -> Result<Statement, SQLite3Error> {
+impl<'a> Statement<'a> {
+    pub fn new(conn: &'a RawConnection,
+               query: String)
+               -> Result<Statement, SQLite3Error> {
         let raw_query = CString::new(query).unwrap();
 
         let mut stmt: *mut ffi::sqlite3_stmt =
@@ -133,20 +133,16 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
         }
     }
 
-    fn reset(&self) {
+    pub fn reset(&self) {
         unsafe {
             ffi::sqlite3_reset(self.stmt);
             ffi::sqlite3_clear_bindings(self.stmt);
         }
     }
 
-    fn execute(&self) -> Result<Cursor, SQLite3Error> {
+    pub fn execute(&self) -> Result<Cursor, SQLite3Error> {
         match unsafe { ffi::sqlite3_step(self.stmt) } {
-            ffi::SQLITE_OK => {
-                Ok(Cursor::OKCursor {
-                       to_replicate: self.to_replicate(),
-                   })
-            }
+            ffi::SQLITE_OK => Ok(Cursor::OKCursor {}),
             ffi::SQLITE_DONE => {
                 let modified_rows =
                     unsafe {
@@ -154,7 +150,6 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
                     };
                 Ok(Cursor::DONECursor {
                        modified_rows: modified_rows,
-                       to_replicate: self.to_replicate(),
                    })
             }
             ffi::SQLITE_ROW => {
@@ -166,7 +161,6 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
                        stmt: self,
                        num_columns: n_columns,
                        previous_status: ffi::SQLITE_ROW,
-                       to_replicate: self.to_replicate(),
                        modified_rows: 0,
                    })
             }
@@ -178,9 +172,9 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
         }
     }
 
-    fn bind_texts(&self,
-                  values: Vec<String>)
-                  -> Result<SQLiteOK, SQLite3Error> {
+    pub fn bind_texts(&self,
+                      values: Vec<String>)
+                      -> Result<SQLiteOK, SQLite3Error> {
         let mut index = 0;
         values
             .iter()
@@ -191,10 +185,10 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
             .collect()
     }
 
-    fn bind_index(&self,
-                  index: i32,
-                  value: &String)
-                  -> Result<SQLiteOK, SQLite3Error> {
+    pub fn bind_index(&self,
+                      index: i32,
+                      value: &String)
+                      -> Result<SQLiteOK, SQLite3Error> {
 
         #[allow(non_snake_case)]
         fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
@@ -216,22 +210,16 @@ impl<'a> StatementTrait<'a> for Statement<'a> {
         }
     }
 
-    fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt {
+    pub fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt {
         self.stmt
-    }
-
-    #[cfg(feature = "pro")]
-    fn to_replicate(&self) -> bool {
-        let v = replication::to_replicate(self);
-        v
     }
 }
 
-impl<'a> StatementTrait<'a> for MultiStatement<'a> {
-    fn reset(&self) {
+impl<'a> MultiStatement<'a> {
+    pub fn reset(&self) {
         self.stmts.iter().map(|stmt| stmt.reset()).count();
     }
-    fn execute(&self) -> Result<Cursor, SQLite3Error> {
+    pub fn execute(&self) -> Result<Cursor, SQLite3Error> {
         let rows_modified_before_executing =
             unsafe { ffi::sqlite3_total_changes(self.conn.get_db()) };
         match self.stmts.iter().map(|stmt| stmt.execute()).collect() {
@@ -260,19 +248,19 @@ impl<'a> StatementTrait<'a> for MultiStatement<'a> {
             }
         }
     }
-    fn bind_index(&self,
-                  index: i32,
-                  value: &String)
-                  -> Result<SQLiteOK, SQLite3Error> {
+    pub fn bind_index(&self,
+                      index: i32,
+                      value: &String)
+                      -> Result<SQLiteOK, SQLite3Error> {
         for stmt in &self.stmts {
             stmt.bind_index(index, value)?;
         }
         Ok(SQLiteOK::OK)
 
     }
-    fn bind_texts(&self,
-                  values: Vec<String>)
-                  -> Result<SQLiteOK, SQLite3Error> {
+    pub fn bind_texts(&self,
+                      values: Vec<String>)
+                      -> Result<SQLiteOK, SQLite3Error> {
         if values.len() != self.number_parameters as usize {
             return Err(SQLite3Error {
                            code: 2021,
@@ -295,24 +283,14 @@ impl<'a> StatementTrait<'a> for MultiStatement<'a> {
         }
         Ok(SQLiteOK::OK)
     }
-    fn new(conn: &'a RawConnection,
-           query: String)
-           -> Result<MultiStatement, SQLite3Error> {
+    pub fn new(conn: &'a RawConnection,
+               query: String)
+               -> Result<MultiStatement, SQLite3Error> {
         generate_statements(conn, query)
     }
-    fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt {
-        self.stmts[0].stmt
-    }
 
-    #[cfg(feature="pro")]
-    fn to_replicate(&self) -> bool {
-        for stmt in &self.stmts {
-            let v = stmt.to_replicate();
-            if v {
-                return true;
-            }
-        }
-        return false;
+    pub fn get_stmts(&self) -> &Vec<Statement<'a>> {
+        &self.stmts
     }
 }
 

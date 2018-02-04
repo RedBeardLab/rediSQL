@@ -144,7 +144,7 @@ pub trait StatementTrait<'a>: Sized {
                   index: i32,
                   value: &String)
                   -> Result<SQLiteOK, SQLite3Error>;
-    fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt;
+    fn get_raw_stmt(&self) -> Vec<*mut ffi::sqlite3_stmt>;
     fn to_replicate(&self) -> bool {
         false
     }
@@ -165,27 +165,20 @@ pub enum Entity {
     Blob { blob: String },
 
     Null,
-    OK { to_replicate: bool },
-    DONE {
-        modified_rows: i32,
-        to_replicate: bool,
-    },
+    OK,
+    DONE { modified_rows: i32 },
 }
 
 pub type Row = Vec<Entity>;
 
 pub enum Cursor<'a> {
-    OKCursor { to_replicate: bool },
-    DONECursor {
-        modified_rows: i32,
-        to_replicate: bool,
-    },
+    OKCursor,
+    DONECursor { modified_rows: i32 },
     RowsCursor {
         num_columns: i32,
         previous_status: i32,
         stmt: &'a Statement<'a>,
         modified_rows: i32,
-        to_replicate: bool,
     },
 }
 
@@ -198,25 +191,15 @@ impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
         let mut result: Option<Cursor<'a>> = None;
         for cursor in cursors {
             match cursor {
-                Cursor::OKCursor { to_replicate } => {
-                    to_replicate_acc |= to_replicate;
-                }
-                Cursor::DONECursor { to_replicate, .. } => {
-                    to_replicate_acc |= to_replicate;
-                }
-                Cursor::RowsCursor { to_replicate, .. } => {
-                    to_replicate_acc |= to_replicate;
+                Cursor::OKCursor {} => {}
+                Cursor::DONECursor { .. } => {}
+                Cursor::RowsCursor { .. } => {
                     result = Some(cursor);
                 }
             }
         }
         match result {
-            None => {
-                Cursor::DONECursor {
-                    to_replicate: to_replicate_acc,
-                    modified_rows: 0,
-                }
-            }
+            None => Cursor::DONECursor { modified_rows: 0 },
             Some(c) => c,
         }
     }
@@ -242,17 +225,9 @@ impl<'a> Iterator for Cursor<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match *self {
-            Cursor::OKCursor { to_replicate } => {
-                Some(vec![Entity::OK { to_replicate }])
-            }
-            Cursor::DONECursor {
-                modified_rows,
-                to_replicate,
-            } => {
-                Some(vec![Entity::DONE {
-                              modified_rows,
-                              to_replicate,
-                          }])
+            Cursor::OKCursor => Some(vec![Entity::OK]),
+            Cursor::DONECursor { modified_rows } => {
+                Some(vec![Entity::DONE { modified_rows }])
             }
 
             Cursor::RowsCursor {

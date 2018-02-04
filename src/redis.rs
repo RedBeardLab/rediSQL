@@ -79,18 +79,9 @@ impl RedisReply for sql::Entity {
                 sql::Entity::Null => {
                     ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
                 }
-                sql::Entity::OK { to_replicate } => {
-                    QueryResult::OK { to_replicate: to_replicate }
-                        .reply(ctx)
-                }                
-                sql::Entity::DONE {
-                    modified_rows,
-                    to_replicate,
-                } => {
-                    QueryResult::DONE {
-                            modified_rows: modified_rows,
-                            to_replicate: to_replicate,
-                        }
+                sql::Entity::OK {} => QueryResult::OK {}.reply(ctx),                
+                sql::Entity::DONE { modified_rows } => {
+                    QueryResult::DONE { modified_rows: modified_rows }
                         .reply(ctx)
                 }
             }
@@ -259,15 +250,9 @@ pub struct BlockedClient {
 unsafe impl Send for BlockedClient {}
 
 pub enum QueryResult {
-    OK { to_replicate: bool },
-    DONE {
-        modified_rows: i32,
-        to_replicate: bool,
-    },
-    Array {
-        array: Vec<sql::Row>,
-        to_replicate: bool,
-    },
+    OK,
+    DONE { modified_rows: i32 },
+    Array { array: Vec<sql::Row> },
 }
 
 #[cfg(feature = "community")]
@@ -290,36 +275,20 @@ impl QueryResult {
 
 fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     match cursor {
-        sql::Cursor::OKCursor { to_replicate } => {
-            QueryResult::OK { to_replicate }
+        sql::Cursor::OKCursor => QueryResult::OK,
+        sql::Cursor::DONECursor { modified_rows } => {
+            QueryResult::DONE { modified_rows }
         }
-        sql::Cursor::DONECursor {
-            modified_rows,
-            to_replicate,
-        } => {
-            QueryResult::DONE {
-                modified_rows,
-                to_replicate,
-            }
-        }
-        sql::Cursor::RowsCursor { to_replicate, .. } => {
+        sql::Cursor::RowsCursor { .. } => {
             let y = QueryResult::Array {
                 array: cursor.collect::<Vec<sql::Row>>(),
-                to_replicate: to_replicate,
             };
             return y;
         }
     }
 }
 
-fn execute_query(db: &sql::RawConnection,
-                 query: String)
-                 -> Result<QueryResult, err::RediSQLError> {
 
-    let stmt = sql::MultiStatement::new(&db, query)?;
-    let cursor = stmt.execute()?;
-    Ok(cursor_to_query_result(cursor))
-}
 
 fn bind_statement<'a>
     (stmt: &'a sql::MultiStatement,
@@ -397,8 +366,92 @@ fn return_value(client: BlockedClient,
     }
 }
 
-pub fn listen_and_execute(db: sql::RawConnection,
-                          rx: Receiver<Command>) {
+fn execute_query(db: &sql::RawConnection,
+                 query: String)
+                 -> Result<QueryResult, err::RediSQLError> {
+
+    let stmt = sql::MultiStatement::new(&db, query)?;
+    let cursor = stmt.execute()?;
+    Ok(cursor_to_query_result(cursor))
+}
+
+fn command_update_statement<'db>
+    (db: &'db sql::RawConnection,
+     statements_cache: &mut FnvHashMap<String,
+                                       sql::MultiStatement<'db>>,
+     identifier: String,
+     statement: String)
+     -> Result<QueryResult, err::RediSQLError> {
+    match statements_cache.entry(identifier.clone()) {
+        Entry::Vacant(_) => {
+            let err = RedisError {
+                msg: String::from("Statement does not exists yet, impossible to update.",),
+            };
+            Err(err::RediSQLError::from(err))
+        }
+        Entry::Occupied(mut o) => {
+            let stmt = update_statement(&db, identifier, statement)?;
+            o.insert(stmt);
+            Ok(QueryResult::OK)
+        }
+    }
+}
+
+fn command_delete_statement<'db>
+    (db: &'db sql::RawConnection,
+     statements_cache: &mut FnvHashMap<String,
+                                       sql::MultiStatement<'db>>,
+     identifier: String)
+     -> Result<QueryResult, err::RediSQLError> {
+
+    match statements_cache.entry(identifier.clone()) {
+        Entry::Vacant(_) => {
+            let err = RedisError {
+                msg: String::from("Statement does not \
+                                                   exists yet, \
+                                                   impossible to \
+                                                   delete."),
+            };
+            Err(err::RediSQLError::from(err))
+        }
+        Entry::Occupied(o) => {
+            remove_statement(&db, identifier)?;
+            o.remove_entry();
+            Ok(QueryResult::OK)
+        }
+    }
+}
+
+fn command_exec_statement<'db>
+    (db: &'db sql::RawConnection,
+     statements_cache: &mut FnvHashMap<String,
+                                       sql::MultiStatement<'db>>,
+     identifier: String,
+     arguments: Vec<String>)
+     -> Result<QueryResult, err::RediSQLError> {
+
+    match statements_cache.get(&identifier) {
+        None => {
+            let debug = String::from("No statement \
+                                                      found");
+            let description = String::from("The statement is not \
+                                              present in the \
+                                              database");
+            Err(err::RediSQLError::new(debug, description))
+        }
+        Some(stmt) => {
+            stmt.reset();
+            let stmt = bind_statement(stmt, arguments)?;
+            let cursor = stmt.execute()?;
+            Ok(cursor_to_query_result(cursor))
+        }
+    }
+
+
+}
+
+pub fn listen_and_execute<'db>(db: sql::RawConnection,
+                               rx: Receiver<Command>) {
 
     let mut statements_cache = FnvHashMap::default();
     restore_previous_statements(&db, &mut statements_cache);
@@ -418,58 +471,20 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 debug!("UpdateStatement | Identifier = {:?} Statement = {:?}",
                        identifier,
                        statement);
-                let result = match statements_cache
-                          .entry(identifier.clone()) {
-                    Entry::Vacant(_) => {
-                        let err = RedisError {
-                            msg: String::from("Statement does not \
-                                                   exists yet, \
-                                                   impossible to \
-                                                   update."),
-                        };
-                        Err(err::RediSQLError::from(err))
-                    }
-                    Entry::Occupied(mut o) => {
-                        match update_statement(&db,
-                                               identifier.clone(),
-                                               statement) {
-                            Ok(stmt) => {
-                                o.insert(stmt);
-                                Ok(QueryResult::OK {
-                                       to_replicate: true,
-                                   })
-                            }
-                            Err(e) => Err(e),
-                        }
-                    }
-                };
-
+                let result =
+                    command_update_statement(&db,
+                                             &mut statements_cache,
+                                             identifier.clone(),
+                                             statement);
                 return_value(client, result)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
                 debug!("DeleteStatement | Identifier = {:?}",
                        identifier);
-                let result = match statements_cache
-                          .entry(identifier.clone()) {
-                    Entry::Vacant(_) => {
-                        let err = RedisError {
-                            msg: String::from("Statement does not \
-                                                   exists yet, \
-                                                   impossible to \
-                                                   delete."),
-                        };
-                        Err(err::RediSQLError::from(err))
-                    }
-                    Entry::Occupied(o) => {
-                        match remove_statement(&db, identifier) {
-                            Ok(()) => {
-                                o.remove_entry();
-                                Ok(QueryResult::OK {to_replicate: true})
-                            }
-                            Err(e) => Err(err::RediSQLError::from(e)),
-                        }
-                    }
-                };
+                let result =
+                    command_delete_statement(&db,
+                                             &mut statements_cache,
+                                             identifier.clone());
                 return_value(client, result);
             }
             Ok(Command::CompileStatement {
@@ -497,38 +512,11 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 debug!("ExecStatement | Identifier = {:?} Arguments = {:?}",
                        identifier,
                        arguments);
-                let result = match statements_cache
-                          .get(&identifier) {
-                    None => {
-                        let debug = String::from("No statement \
-                                                      found");
-                        let description = String::from("The statement is not \
-                                              present in the \
-                                              database");
-                        Err(err::RediSQLError::new(debug,
-                                                   description))
-                    }
-                    Some(stmt) => {
-                        stmt.reset();
-                        let bind = bind_statement(stmt, arguments);
-                        match bind {
-                            Ok(stmt) => {
-                                let cursor = stmt.execute();
-                                match cursor {
-                                    Err(e) => Err(
-                                        err::RediSQLError::from(e),
-                                    ),
-                                    Ok(cursor) => {
-                                        Ok(
-                                            cursor_to_query_result(cursor),
-                                        )
-                                    }
-                                }
-                            }
-                            Err(e) => Err(err::RediSQLError::from(e)),
-                        }
-                    }
-                };
+                let result =
+                    command_exec_statement(&db,
+                                           &mut statements_cache,
+                                           identifier.clone(),
+                                           arguments);
                 return_value(client, result);
             }
             Ok(Command::Stop) => return,
@@ -538,10 +526,10 @@ pub fn listen_and_execute(db: sql::RawConnection,
 }
 
 
-fn compile_and_insert_statement<'a>(identifier: String,
+fn compile_and_insert_statement<'db>(identifier: String,
                                 statement: String,
-                                db: &'a sql::RawConnection,
-                                statements_cache: &mut HashMap<String, sql::MultiStatement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
+                                db: &'db sql::RawConnection,
+                                statements_cache: &mut HashMap<String, sql::MultiStatement<'db>, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
 -> Result<QueryResult, err::RediSQLError>{
     match statements_cache.entry(identifier.clone()) {
         Entry::Vacant(v) => {
@@ -550,7 +538,7 @@ fn compile_and_insert_statement<'a>(identifier: String,
                                    statement) {
                 Ok(stmt) => {
                     v.insert(stmt);
-                    Ok(QueryResult::OK { to_replicate: true })
+                    Ok(QueryResult::OK)
                 }
                 Err(e) => Err(e),
             }
@@ -809,8 +797,8 @@ fn create_statement
     Ok(stmt)
 }
 
-fn update_statement
-    (db: &sql::RawConnection,
+fn update_statement<'db>
+    (db: &'db sql::RawConnection,
      identifier: String,
      statement: String)
      -> Result<sql::MultiStatement, err::RediSQLError> {

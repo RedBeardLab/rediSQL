@@ -462,6 +462,7 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                 Err(e) => e.reply(ctx),
                                 Ok(()) => {
                                     let (tx, rx) = channel();
+
                                     let db = r::DBKey {
                                         tx: tx,
                                         db: rc.clone(),
@@ -478,7 +479,7 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                         
                                     match type_set {
                                         r::ffi::REDISMODULE_OK => {
-                                            let ok = r::QueryResult::OK {to_replicate: true};
+                                            let ok = r::QueryResult::OK;
                                             unsafe {
                                                 r::ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx);
                                             }
