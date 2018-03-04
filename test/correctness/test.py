@@ -7,7 +7,7 @@ import os
 import redis
 from rmtest import ModuleTestCase
     
-os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/release/libredis_sql.so"
+os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/debug/libredis_sql.so"
 os.environ["REDIS_PATH"] = "/home/simo/redis-4.0.2/src/redis-server"
  
 class Table():

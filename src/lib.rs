@@ -1,4 +1,4 @@
-extern crate libc;
+//extern crate libc;
 extern crate uuid;
 
 #[macro_use]
@@ -13,7 +13,10 @@ use std::ptr;
 use std::fs::{remove_file, File};
 
 use std::thread;
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender};
+
+use std::collections::HashMap;
 
 use uuid::Uuid;
 
@@ -31,6 +34,44 @@ use redis::RedisReply;
 #[cfg(feature = "pro")]
 mod replication;
 
+struct ReplicationBook {}
+
+trait ReplicationData {
+    fn to_replicate(&self) -> bool;
+}
+
+impl ReplicationData for ReplicationBook {
+    fn to_replicate(&self) -> bool {false}
+}
+
+#[derive(Clone)]
+pub struct Loop {
+    db: Arc<Mutex<sql::RawConnection>>,
+    statement_cache: Arc<Mutex<HashMap<String, sql::MultiStatement>>>,
+}
+
+trait LoopData {
+    fn new(sql::RawConnection) -> Self;
+    fn get_replication_data(&self) -> ReplicationBook;
+}
+
+impl LoopData for Loop {
+    fn new(db: sql::RawConnection) -> Self {
+        let db = Arc::new(Mutex::new(db));
+        let statement_cache = Arc::new(Mutex::new(HashMap::new()));
+        Loop {db, statement_cache}
+    }
+    fn get_replication_data(&self) -> ReplicationBook {
+        ReplicationBook {}
+    }
+}
+
+impl Loop {
+    fn new_from_arc(db: Arc<Mutex<sql::RawConnection>>) -> Loop {
+        let statement_cache = Arc::new(Mutex::new(HashMap::new()));
+        Loop {db, statement_cache}
+    }
+}
 
 extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::ffi::RedisModuleString,
@@ -446,30 +487,35 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                         }
                         _ => (String::from(":memory:"), true),
                     };
-                    match sql::open_connection(path.clone()) {
+                    match sql::get_arc_connection(path.clone()) {
                         Ok(rc) => {
-                            match r::create_metadata_table(&rc)
+                            match r::create_metadata_table(rc.clone())
                                       .and_then(|_| {
                                 r::insert_metadata(
-                                        &rc,
+                                        rc.clone(),
                                         "setup".to_owned(),
                                         "path".to_owned(),
                                         path,
                                     ).and_then(|_| {
-                                r::enable_foreign_key(&rc)
+                                r::enable_foreign_key(rc.clone())
                                 })
                             }) {
                                 Err(e) => e.reply(ctx),
                                 Ok(()) => {
                                     let (tx, rx) = channel();
+                                    /*
                                     let db = r::DBKey {
                                         tx: tx,
-                                        db: rc.clone(),
+                                        db: Arc::new(Mutex::new(rc)),
                                         in_memory: in_memory,
                                         //statements: HashMap::new(),
                                     };
+                                    */
+                                    let db = r::DBKey::new_from_arc(tx, rc, in_memory);
+                                    let loop_data = db.loop_data.clone();
+                                    println!("Spawning thread");
                                     thread::spawn(move || {
-                                        r::listen_and_execute(rc, rx);
+                                        r::listen_and_execute(loop_data, rx);
                                     });
                                     let ptr = Box::into_raw(Box::new(db));
                                     let type_set = unsafe {
@@ -551,8 +597,9 @@ unsafe extern "C" fn rdb_save(rdb: *mut r::ffi::RedisModuleIO,
     if (*db).in_memory {
 
         let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
-
-        match r::create_backup(&(*db).db, path.clone()) {
+        
+        let conn = &(*db).loop_data.db.lock().unwrap();
+        match r::create_backup(conn, path.clone()) {
             Err(e) => println!("{}", e),
             Ok(not_done)
                 if !sql::backup_complete_with_done(not_done) => {
@@ -616,15 +663,18 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
                                         }
                                         Ok(_) => {
                                             let (tx, rx) = channel();
+                                            let db = r::DBKey::new(tx, in_mem, true);
+                                            /*
                                             let db = r::DBKey {
                                                 tx: tx,
-                                                db: in_mem.clone(),
+                                                db: Arc::new(Mutex::new(in_mem)),
                                                 in_memory: true,
-                                                //statements: HashMap::new(),
                                             };
+                                            */
+                                            let loop_data = db.loop_data.clone();
 
                                             thread::spawn(move || { 
-                                                r::listen_and_execute(in_mem, rx)});
+                                                r::listen_and_execute(loop_data, rx)});
                                         
 
 

@@ -5,6 +5,8 @@ use std::ffi::{CString, CStr};
 use std::error;
 use std::iter::FromIterator;
 
+use std::sync::{Arc, Mutex};
+
 use std::os::raw::c_char;
 
 use redisql_error as err;
@@ -94,6 +96,7 @@ unsafe impl Send for RawConnection {}
 
 impl Drop for RawConnection {
     fn drop(&mut self) {
+        println!("Dropping connection");
         unsafe {
             ffi::sqlite3_close(self.db);
         }
@@ -104,6 +107,13 @@ impl RawConnection {
     pub fn get_db(&self) -> *mut ffi::sqlite3 {
         self.db
     }
+}
+
+pub fn get_arc_connection
+    (path: String)
+     -> Result<Arc<Mutex<RawConnection>>, SQLite3Error> {
+    let raw = open_connection(path)?;
+    Ok(Arc::new(Mutex::new(raw)))
 }
 
 pub fn open_connection(path: String)
@@ -132,7 +142,7 @@ pub fn open_connection(path: String)
 }
 
 pub trait StatementTrait<'a>: Sized {
-    fn new(conn: &'a RawConnection,
+    fn new(conn: Arc<Mutex<RawConnection>>,
            query: String)
            -> Result<Self, SQLite3Error>;
     fn reset(&self);
@@ -183,7 +193,7 @@ pub enum Cursor<'a> {
     RowsCursor {
         num_columns: i32,
         previous_status: i32,
-        stmt: &'a Statement<'a>,
+        stmt: &'a Statement,
         modified_rows: i32,
         to_replicate: bool,
     },

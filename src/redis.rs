@@ -13,6 +13,7 @@ use std::os::raw::c_long;
 
 use std::io::{Read, Write};
 
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 
 use std::collections::HashMap;
@@ -24,6 +25,9 @@ use std::fmt;
 use std::error;
 
 use redisql_error as err;
+
+use Loop;
+use LoopData;
 
 use sqlite::StatementTrait;
 
@@ -312,11 +316,11 @@ fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     }
 }
 
-fn execute_query(db: &sql::RawConnection,
+fn execute_query(db: &Arc<Mutex<sql::RawConnection>>,
                  query: String)
                  -> Result<QueryResult, err::RediSQLError> {
 
-    let stmt = sql::MultiStatement::new(&db, query)?;
+    let stmt = sql::MultiStatement::new(db.clone(), query)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
 }
@@ -324,7 +328,7 @@ fn execute_query(db: &sql::RawConnection,
 fn bind_statement<'a>
     (stmt: &'a sql::MultiStatement,
      arguments: Vec<String>)
-     -> Result<&'a sql::MultiStatement<'a>, sql::SQLite3Error> {
+     -> Result<&'a sql::MultiStatement, sql::SQLite3Error> {
 
     match stmt.bind_texts(arguments) {
         Err(e) => Err(e),
@@ -354,10 +358,11 @@ impl error::Error for RedisError {
     }
 }
 
-fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_cache: &mut HashMap<String, sql::MultiStatement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher
+fn restore_previous_statements<'a>(loopdata: Loop, mut statements_cache: &mut HashMap<String, sql::MultiStatement, std::hash::BuildHasherDefault<fnv::FnvHasher
                                >> )
 -> (){
-    let saved_statements = get_statement_metadata(db);
+    let saved_statements =
+        get_statement_metadata(loopdata.db.clone());
     match saved_statements {
         Ok(QueryResult::Array { array, .. }) => {
             for row in array {
@@ -369,11 +374,10 @@ fn restore_previous_statements<'a>(db: &'a sql::RawConnection, mut statements_ca
                     sql::Entity::Text { ref text } => text.clone(),
                     _ => continue,
                 };
-
                 match compile_and_insert_statement(
                     identifier,
                     statement,
-                    &db,
+                    loopdata.clone(),
                     &mut statements_cache,
                 ) {
                     Err(e) => println!("Error: {}", e),
@@ -397,17 +401,17 @@ fn return_value(client: BlockedClient,
     }
 }
 
-pub fn listen_and_execute(db: sql::RawConnection,
-                          rx: Receiver<Command>) {
-
+pub fn listen_and_execute(loopdata: Loop, rx: Receiver<Command>) {
+    println!("Start thread execution");
     let mut statements_cache = FnvHashMap::default();
-    restore_previous_statements(&db, &mut statements_cache);
-
+    restore_previous_statements(loopdata.clone(),
+                                &mut statements_cache);
     loop {
+        println!("Loop iteration");
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
-                let result = execute_query(&db, query);
+                let result = execute_query(&loopdata.db, query);
                 return_value(client, result);
             }
             Ok(Command::UpdateStatement {
@@ -430,7 +434,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
                         Err(err::RediSQLError::from(err))
                     }
                     Entry::Occupied(mut o) => {
-                        match update_statement(&db,
+                        match update_statement(&loopdata.db,
                                                identifier.clone(),
                                                statement) {
                             Ok(stmt) => {
@@ -461,7 +465,8 @@ pub fn listen_and_execute(db: sql::RawConnection,
                         Err(err::RediSQLError::from(err))
                     }
                     Entry::Occupied(o) => {
-                        match remove_statement(&db, identifier) {
+                        match remove_statement(&loopdata.db,
+                                               identifier) {
                             Ok(()) => {
                                 o.remove_entry();
                                 Ok(QueryResult::OK {to_replicate: true})
@@ -483,7 +488,7 @@ pub fn listen_and_execute(db: sql::RawConnection,
                 let result = compile_and_insert_statement(
                     identifier,
                     statement,
-                    &db,
+                    loopdata.clone(),
                     &mut statements_cache,
                 );
                 return_value(client, result);
@@ -540,11 +545,12 @@ pub fn listen_and_execute(db: sql::RawConnection,
 
 fn compile_and_insert_statement<'a>(identifier: String,
                                 statement: String,
-                                db: &'a sql::RawConnection,
-                                statements_cache: &mut HashMap<String, sql::MultiStatement<'a>, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
+                                loop_data: Loop,
+                                statements_cache: &mut HashMap<String, sql::MultiStatement, std::hash::BuildHasherDefault<fnv::FnvHasher>>)
 -> Result<QueryResult, err::RediSQLError>{
     match statements_cache.entry(identifier.clone()) {
         Entry::Vacant(v) => {
+            let db = loop_data.db;
             match create_statement(db,
                                    identifier.clone(),
                                    statement) {
@@ -569,18 +575,42 @@ fn compile_and_insert_statement<'a>(identifier: String,
 
 pub struct DBKey {
     pub tx: Sender<Command>,
-    pub db: sql::RawConnection,
-    pub in_memory: bool, /* pub statements: HashMap<String,
-                          * sql::MultiStatement<'a>>, */
+    pub in_memory: bool,
+    pub loop_data: Loop,
 }
 
-pub fn create_metadata_table(db: &sql::RawConnection)
+impl DBKey {
+    pub fn new(tx: Sender<Command>,
+               db: sql::RawConnection,
+               in_memory: bool)
+               -> DBKey {
+        let loop_data = Loop::new(db);
+        DBKey {
+            tx,
+            in_memory,
+            loop_data,
+        }
+    }
+    pub fn new_from_arc(tx: Sender<Command>,
+                        db: Arc<Mutex<sql::RawConnection>>,
+                        in_memory: bool)
+                        -> DBKey {
+        let loop_data = Loop::new_from_arc(db);
+        DBKey {
+            tx,
+            in_memory,
+            loop_data,
+        }
+    }
+}
+
+pub fn create_metadata_table(db: Arc<Mutex<sql::RawConnection>>)
                              -> Result<(), sql::SQLite3Error> {
     let statement = String::from("CREATE TABLE \
                                   RediSQLMetadata(data_type TEXT, \
                                   key TEXT, value TEXT);");
 
-    match sql::MultiStatement::new(&db, statement) {
+    match sql::MultiStatement::new(db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
             match stmt.execute() {
@@ -591,7 +621,7 @@ pub fn create_metadata_table(db: &sql::RawConnection)
     }
 }
 
-pub fn insert_metadata(db: &sql::RawConnection,
+pub fn insert_metadata(db: Arc<Mutex<sql::RawConnection>>,
                        data_type: String,
                        key: String,
                        value: String)
@@ -599,7 +629,7 @@ pub fn insert_metadata(db: &sql::RawConnection,
     let statement = String::from("INSERT INTO RediSQLMetadata \
                                   VALUES(?1, ?2, ?3);");
 
-    match sql::MultiStatement::new(&db, statement) {
+    match sql::MultiStatement::new(db, statement) {
         Err(e) => Err(e),
         Ok(stmt) => {
             match stmt.bind_index(1, &data_type) {
@@ -625,7 +655,7 @@ pub fn insert_metadata(db: &sql::RawConnection,
     }
 }
 
-pub fn enable_foreign_key(db: &sql::RawConnection)
+pub fn enable_foreign_key(db: Arc<Mutex<sql::RawConnection>>)
                           -> Result<(), sql::SQLite3Error> {
     let enable_foreign_key = String::from("PRAGMA foreign_keys = ON;",);
     match sql::MultiStatement::new(db, enable_foreign_key) {
@@ -639,7 +669,7 @@ pub fn enable_foreign_key(db: &sql::RawConnection)
     }
 }
 
-pub fn update_statement_metadata(db: &sql::RawConnection,
+pub fn update_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
                                  key: String,
                                  value: String)
                                  -> Result<(), sql::SQLite3Error> {
@@ -647,34 +677,34 @@ pub fn update_statement_metadata(db: &sql::RawConnection,
                                   = ?1 WHERE data_type = \
                                   'statement' AND key = ?2");
 
-    let stmt = sql::MultiStatement::new(&db, statement)?;
+    let stmt = sql::MultiStatement::new(db, statement)?;
     stmt.bind_index(1, &value)?;
     stmt.bind_index(2, &key)?;
     stmt.execute()?;
     Ok(())
 }
 
-pub fn remove_statement_metadata(db: &sql::RawConnection,
+pub fn remove_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
                                  key: String)
                                  -> Result<(), sql::SQLite3Error> {
     let statement = String::from("DELETE FROM RediSQLMetadata \
                                   WHERE data_type = 'statement' \
                                   AND key = ?1");
 
-    let stmt = sql::MultiStatement::new(&db, statement)?;
+    let stmt = sql::MultiStatement::new(db, statement)?;
     stmt.bind_index(1, &key)?;
     stmt.execute()?;
     Ok(())
 }
 
 pub fn get_statement_metadata
-    (db: &sql::RawConnection)
+    (db: Arc<Mutex<sql::RawConnection>>)
      -> Result<QueryResult, sql::SQLite3Error> {
 
     let statement = String::from("SELECT * FROM RediSQLMetadata \
                                   WHERE data_type = 'statement';");
 
-    let stmt = sql::MultiStatement::new(&db, statement)?;
+    let stmt = sql::MultiStatement::new(db, statement)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
 }
@@ -796,12 +826,13 @@ pub fn write_rdb_to_file(f: &mut File,
 }
 
 fn create_statement
-    (db: &sql::RawConnection,
+    (db: Arc<Mutex<sql::RawConnection>>,
      identifier: String,
      statement: String)
      -> Result<sql::MultiStatement, err::RediSQLError> {
 
-    let stmt = sql::MultiStatement::new(db, statement.clone())?;
+    let stmt = sql::MultiStatement::new(Arc::clone(&db),
+                                        statement.clone())?;
     insert_metadata(db,
                     String::from("statement"),
                     identifier.clone(),
@@ -810,19 +841,22 @@ fn create_statement
 }
 
 fn update_statement
-    (db: &sql::RawConnection,
+    (db: &Arc<Mutex<sql::RawConnection>>,
      identifier: String,
      statement: String)
      -> Result<sql::MultiStatement, err::RediSQLError> {
 
-    let stmt = sql::MultiStatement::new(db, statement.clone())?;
-    update_statement_metadata(db, identifier.clone(), statement)?;
+    let stmt = sql::MultiStatement::new(Arc::clone(db),
+                                        statement.clone())?;
+    update_statement_metadata(Arc::clone(db),
+                              identifier.clone(),
+                              statement)?;
     Ok(stmt)
 }
 
-fn remove_statement(db: &sql::RawConnection,
+fn remove_statement(db: &Arc<Mutex<sql::RawConnection>>,
                     identifier: String)
                     -> Result<(), err::RediSQLError> {
-    remove_statement_metadata(db, identifier.clone())?;
+    remove_statement_metadata(Arc::clone(db), identifier.clone())?;
     Ok(())
 }
