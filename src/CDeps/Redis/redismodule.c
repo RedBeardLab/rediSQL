@@ -1,6 +1,6 @@
 #include "redismodule.h"
 
-extern RedisModuleType *DBType = NULL;
+RedisModuleType *DBType = NULL;
 
 // RedisModule_Init is defined as a static function and so won't be exported as
 // a symbol. Export a version under a slightly different name so that we can
