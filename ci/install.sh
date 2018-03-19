@@ -5,6 +5,7 @@ main() {
     if [ $TRAVIS_OS_NAME = linux ]; then
         target=x86_64-unknown-linux-musl
         sort=sort
+        apt-get install llvm-3.9-dev libclang-3.9-dev clang-3.9
     else
         target=x86_64-apple-darwin
         sort=gsort  # for `sort --sort-version`, from brew's coreutils.
@@ -42,6 +43,7 @@ main() {
            --git japaric/cross \
            --tag $tag \
            --target $target
+
 }
 
 main
