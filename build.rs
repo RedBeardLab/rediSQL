@@ -12,6 +12,20 @@ fn main() {
     println!("cargo:rerun-if-changed=src/CDeps");
 
     cc::Build::new()
+        .file("src/CDeps/sqlite_dump.c")
+        .include("src/CDeps/SQLite/include")
+        .define("HAVE_USLEEP", Some("1"))
+        .define("NDEBUG", Some("1"))
+        .define("HAVE_FDATASYNC", Some("1"))
+        .define("SQLITE_THREADSAFE", Some("2"))
+        .define("SQLITE_ENABLE_JSON1", Some("1"))
+        .define("SQLITE_ENABLE_FTS3", Some("1"))
+        .define("SQLITE_ENABLE_FTS4", Some("1"))
+        .define("SQLITE_ENABLE_FTS5", Some("1"))
+        .define("SQLITE_ENABLE_RTREE", Some("1"))
+        .compile("libsqlite3_dump.a");
+
+    cc::Build::new()
         .file("src/CDeps/Redis/redismodule.c")
         .include("src/CDeps/Redis/include")
         .compile("libredismodule.a");
@@ -70,4 +84,5 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings_redis.rs"))
         .expect("Couldn't write bindings for Redis!");
+
 }

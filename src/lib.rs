@@ -1,11 +1,11 @@
-//extern crate libc;
+// extern crate libc;
 extern crate uuid;
 
-#[macro_use]
 extern crate log;
 extern crate env_logger;
 
-// use env_logger::{LogBuilder, LogTarget};
+
+use env_logger::{LogBuilder, LogTarget};
 
 use std::ffi::{CString, CStr};
 use std::mem;
@@ -13,64 +13,24 @@ use std::ptr;
 use std::fs::{remove_file, File};
 
 use std::thread;
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender};
-
-use std::collections::HashMap;
 
 use uuid::Uuid;
 
-mod redisql_error;
+extern crate redisql_lib;
 
-pub mod community_statement;
+use redisql_lib::sqlite as sql;
 
-mod sqlite;
-use sqlite as sql;
+use redisql_lib::redis as r;
+use redisql_lib::redis::RedisReply;
+use redisql_lib::redis::LoopData;
+use redisql_lib::redis::Loop;
 
-mod redis;
-use redis as r;
-use redis::RedisReply;
+use redisql_lib::dump_sqlite::WriteAOF;
 
-#[cfg(feature = "pro")]
-mod replication;
 
-struct ReplicationBook {}
-
-trait ReplicationData {
-    fn to_replicate(&self) -> bool;
-}
-
-impl ReplicationData for ReplicationBook {
-    fn to_replicate(&self) -> bool {false}
-}
-
-#[derive(Clone)]
-pub struct Loop {
-    db: Arc<Mutex<sql::RawConnection>>,
-    statement_cache: Arc<Mutex<HashMap<String, sql::MultiStatement>>>,
-}
-
-trait LoopData {
-    fn new(sql::RawConnection) -> Self;
-    fn get_replication_data(&self) -> ReplicationBook;
-}
-
-impl LoopData for Loop {
-    fn new(db: sql::RawConnection) -> Self {
-        let db = Arc::new(Mutex::new(db));
-        let statement_cache = Arc::new(Mutex::new(HashMap::new()));
-        Loop {db, statement_cache}
-    }
-    fn get_replication_data(&self) -> ReplicationBook {
-        ReplicationBook {}
-    }
-}
-
-impl Loop {
-    fn new_from_arc(db: Arc<Mutex<sql::RawConnection>>) -> Loop {
-        let statement_cache = Arc::new(Mutex::new(HashMap::new()));
-        Loop {db, statement_cache}
-    }
+fn replicate(ctx: *mut r::ffi::RedisModuleCtx) {
+    unsafe { r::ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx) };
 }
 
 extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
@@ -137,9 +97,9 @@ extern "C" fn timeout(ctx: *mut r::ffi::RedisModuleCtx,
 
 extern "C" fn free_privdata(_arg: *mut ::std::os::raw::c_void) {}
 
-fn get_db_channel_from_name(ctx: *mut r::ffi::RedisModuleCtx,
-                            name: String)
-                            -> Result<Sender<r::Command>, i32> {
+fn get_dbkey_from_name(ctx: *mut r::ffi::RedisModuleCtx,
+                       name: String)
+                       -> Result<Box<r::DBKey>, i32> {
     let key_name = r::create_rm_string(ctx, name);
     let key = unsafe {
         r::ffi::Export_RedisModule_OpenKey(
@@ -161,14 +121,32 @@ fn get_db_channel_from_name(ctx: *mut r::ffi::RedisModuleCtx,
                 .unwrap()(safe_key.key) as *mut r::DBKey
         };
         let db: Box<r::DBKey> = unsafe { Box::from_raw(db_ptr) };
-        let channel = db.tx.clone();
-        std::mem::forget(db);
-
-        Ok(channel)
+        Ok(db)
     } else {
         Err(key_type)
     }
 }
+
+fn get_db_channel_from_name(ctx: *mut r::ffi::RedisModuleCtx,
+                            name: String)
+                            -> Result<Sender<r::Command>, i32> {
+    let db: Box<r::DBKey> = get_dbkey_from_name(ctx, name)?;
+    let channel = db.tx.clone();
+    std::mem::forget(db);
+    Ok(channel)
+}
+
+fn get_db_and_loopdata_from_name
+    (ctx: *mut r::ffi::RedisModuleCtx,
+     name: String)
+     -> Result<(Sender<r::Command>, Loop), i32> {
+    let db: Box<r::DBKey> = get_dbkey_from_name(ctx, name)?;
+    let channel = db.tx.clone();
+    let loopdata = db.loop_data.clone();
+    std::mem::forget(db);
+    Ok((channel, loopdata))
+}
+
 
 fn reply_with_error_from_key_type(ctx: *mut r::ffi::RedisModuleCtx,
                                   key_type: i32)
@@ -213,12 +191,13 @@ extern "C" fn ExecStatement(
             }
         }
         _ => {
-            match get_db_channel_from_name(ctx,
-                                           argvector[1].clone()) {
+            match get_db_and_loopdata_from_name(ctx,
+                                                argvector[1]
+                                                    .clone()) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
-                Ok(ch) => {
+                Ok((ch, _)) => {
                     let blocked_client =
                         r::BlockedClient {
                             client: unsafe {
@@ -237,7 +216,10 @@ extern "C" fn ExecStatement(
                     };
 
                     match ch.send(cmd) {
-                        Ok(()) => r::ffi::REDISMODULE_OK,
+                        Ok(()) => {
+                            replicate(ctx);
+                            r::ffi::REDISMODULE_OK
+                        }
                         Err(_) => r::ffi::REDISMODULE_OK,
                     }
                 }
@@ -277,7 +259,10 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
                         client: blocked_client,
                     };
                     match ch.send(cmd) {
-                        Ok(()) => r::ffi::REDISMODULE_OK,
+                        Ok(()) => {
+                            replicate(ctx);
+                            r::ffi::REDISMODULE_OK
+                        }
                         Err(_) => r::ffi::REDISMODULE_OK,
                     }
                 }
@@ -329,7 +314,10 @@ extern "C" fn CreateStatement(
                     };
 
                     match ch.send(cmd) {
-                        Ok(()) => r::ffi::REDISMODULE_OK,
+                        Ok(()) => {
+                            replicate(ctx);
+                            r::ffi::REDISMODULE_OK
+                        }
                         Err(_) => r::ffi::REDISMODULE_OK,
                     }
 
@@ -384,7 +372,10 @@ extern "C" fn UpdateStatement(
                     };
 
                     match ch.send(cmd) {
-                        Ok(()) => r::ffi::REDISMODULE_OK,
+                        Ok(()) => {
+                            replicate(ctx);
+                            r::ffi::REDISMODULE_OK
+                        }
                         Err(_) => r::ffi::REDISMODULE_OK,
                     }
 
@@ -432,7 +423,10 @@ extern "C" fn DeleteStatement(
                         client: blocked_client,
                     };
                     match ch.send(cmd) {
-                        Ok(()) => r::ffi::REDISMODULE_OK,
+                        Ok(()) => {
+                            replicate(ctx);
+                            r::ffi::REDISMODULE_OK
+                        }
                         Err(_) => r::ffi::REDISMODULE_OK,
                     }
                 }
@@ -503,17 +497,8 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                 Err(e) => e.reply(ctx),
                                 Ok(()) => {
                                     let (tx, rx) = channel();
-                                    /*
-                                    let db = r::DBKey {
-                                        tx: tx,
-                                        db: Arc::new(Mutex::new(rc)),
-                                        in_memory: in_memory,
-                                        //statements: HashMap::new(),
-                                    };
-                                    */
                                     let db = r::DBKey::new_from_arc(tx, rc, in_memory);
                                     let loop_data = db.loop_data.clone();
-                                    println!("Spawning thread");
                                     thread::spawn(move || {
                                         r::listen_and_execute(loop_data, rx);
                                     });
@@ -525,9 +510,7 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                     match type_set {
                                         r::ffi::REDISMODULE_OK => {
                                             let ok = r::QueryResult::OK {to_replicate: true};
-                                            unsafe {
-                                                r::ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx);
-                                            }
+                                            replicate(ctx);
                                             ok.reply(ctx)
                                         }
                                         r::ffi::REDISMODULE_ERR => {
@@ -597,8 +580,9 @@ unsafe extern "C" fn rdb_save(rdb: *mut r::ffi::RedisModuleIO,
     if (*db).in_memory {
 
         let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
-        
-        let conn = &(*db).loop_data.db.lock().unwrap();
+
+        let db = (*db).loop_data.get_db();
+        let conn = &db.lock().unwrap();
         match r::create_backup(conn, path.clone()) {
             Err(e) => println!("{}", e),
             Ok(not_done)
@@ -734,13 +718,11 @@ pub extern "C" fn RedisModule_OnLoad(
 
     sql::disable_global_memory_statistics();
 
-    /*
     LogBuilder::new()
         .filter(None, log::LogLevelFilter::Debug)
         .target(LogTarget::Stdout)
         .init()
         .unwrap();
-    */
 
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();
@@ -749,7 +731,7 @@ pub extern "C" fn RedisModule_OnLoad(
         version: 1,
         rdb_load: Some(rdb_load),
         rdb_save: Some(rdb_save),
-        aof_rewrite: None,
+        aof_rewrite: Some(WriteAOF),
         mem_usage: None,
         digest: None,
         free: Some(free_db),

@@ -1,0 +1,15 @@
+[package]
+name = "redisql_lib"
+version = "0.1.0"
+authors = ["Simone Mosciatti <mweb.sim@gmail.com>"]
+
+[build-dependencies]
+bindgen = "0.30.0"
+cc = {version = "1.0.3", features = ["parallel"]}
+
+[dependencies]
+libc = "0.2.21"
+log = "0.3.8"
+env_logger = "0.4.3"
+fnv = "1.0.5"
+uuid = { version = "0.4", features = ["v4"] }
