@@ -22,11 +22,12 @@ extern crate redisql_lib;
 use redisql_lib::sqlite as sql;
 
 use redisql_lib::redis as r;
-use redisql_lib::redis::RedisReply;
-use redisql_lib::redis::LoopData;
-use redisql_lib::redis::Loop;
+use redisql_lib::redis::{RedisReply, Loop, LoopData,
+                         reply_with_error_from_key_type,
+                         get_db_channel_from_name,
+                         get_dbkey_from_name};
 
-use redisql_lib::dump_sqlite::WriteAOF;
+use redisql_lib::dump_sqlite::{WriteAOF, ExecNow};
 
 
 fn replicate(ctx: *mut r::ffi::RedisModuleCtx) {
@@ -97,45 +98,6 @@ extern "C" fn timeout(ctx: *mut r::ffi::RedisModuleCtx,
 
 extern "C" fn free_privdata(_arg: *mut ::std::os::raw::c_void) {}
 
-fn get_dbkey_from_name(ctx: *mut r::ffi::RedisModuleCtx,
-                       name: String)
-                       -> Result<Box<r::DBKey>, i32> {
-    let key_name = r::create_rm_string(ctx, name);
-    let key = unsafe {
-        r::ffi::Export_RedisModule_OpenKey(
-            ctx,
-            key_name,
-            r::ffi::REDISMODULE_WRITE,
-        )
-    };
-    let safe_key = r::RedisKey { key: key };
-    let key_type =
-        unsafe { r::ffi::RedisModule_KeyType.unwrap()(safe_key.key) };
-    if unsafe {
-           r::ffi::DBType ==
-           r::ffi::RedisModule_ModuleTypeGetType
-               .unwrap()(safe_key.key)
-       } {
-        let db_ptr = unsafe {
-            r::ffi::RedisModule_ModuleTypeGetValue
-                .unwrap()(safe_key.key) as *mut r::DBKey
-        };
-        let db: Box<r::DBKey> = unsafe { Box::from_raw(db_ptr) };
-        Ok(db)
-    } else {
-        Err(key_type)
-    }
-}
-
-fn get_db_channel_from_name(ctx: *mut r::ffi::RedisModuleCtx,
-                            name: String)
-                            -> Result<Sender<r::Command>, i32> {
-    let db: Box<r::DBKey> = get_dbkey_from_name(ctx, name)?;
-    let channel = db.tx.clone();
-    std::mem::forget(db);
-    Ok(channel)
-}
-
 fn get_db_and_loopdata_from_name
     (ctx: *mut r::ffi::RedisModuleCtx,
      name: String)
@@ -147,30 +109,6 @@ fn get_db_and_loopdata_from_name
     Ok((channel, loopdata))
 }
 
-
-fn reply_with_error_from_key_type(ctx: *mut r::ffi::RedisModuleCtx,
-                                  key_type: i32)
-                                  -> i32 {
-    match key_type {
-        r::ffi::REDISMODULE_KEYTYPE_EMPTY => {
-            let error = CString::new("ERR - Error the key is empty")
-                .unwrap();
-            unsafe {
-                r::ffi::RedisModule_ReplyWithError
-                    .unwrap()(ctx, error.as_ptr())
-            }
-        }
-        _ => {
-            let error = CStr::from_bytes_with_nul(
-                r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
-            ).unwrap();
-            unsafe {
-                r::ffi::RedisModule_ReplyWithError
-                    .unwrap()(ctx, error.as_ptr())
-            }
-        }
-    }
-}
 
 #[allow(non_snake_case)]
 extern "C" fn ExecStatement(
@@ -801,6 +739,14 @@ pub extern "C" fn RedisModule_OnLoad(
         Ok(()) => (),
         Err(e) => return e,
     }
+
+    match register_function(ctx,
+                            String::from("REDISQL.EXEC.NOW"),
+                            ExecNow) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
 
     r::ffi::REDISMODULE_OK
 }

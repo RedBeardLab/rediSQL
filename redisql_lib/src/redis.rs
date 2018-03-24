@@ -13,6 +13,8 @@ use std::os::raw::c_long;
 
 use std::io::{Read, Write};
 
+use std::clone::Clone;
+
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 
@@ -29,7 +31,7 @@ use redisql_error::RediSQLError;
 
 use sqlite::StatementTrait;
 
-use community_statement::{MultiStatement, Statement};
+use community_statement::MultiStatement;
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -184,21 +186,11 @@ pub struct Loop {
 }
 
 pub trait LoopData {
-    type Self: Sized + Clone;
-    fn new(sql::RawConnection) -> Self where Self: Sized + Clone;
     fn get_replication_book(&self) -> ReplicationBook;
     fn get_db(&self) -> Arc<Mutex<sql::RawConnection>>;
 }
 
 impl LoopData for Loop {
-    fn new(db: sql::RawConnection) -> Self {
-        let db = Arc::new(Mutex::new(db));
-        let replication_book = ReplicationBook::new(&db);
-        Loop {
-            db,
-            replication_book,
-        }
-    }
     fn get_replication_book(&self) -> ReplicationBook {
         self.replication_book.clone()
     }
@@ -208,6 +200,14 @@ impl LoopData for Loop {
 }
 
 impl Loop {
+    fn new(db: sql::RawConnection) -> Self {
+        let db = Arc::new(Mutex::new(db));
+        let replication_book = ReplicationBook::new(&db);
+        Loop {
+            db,
+            replication_book,
+        }
+    }
     fn new_from_arc(db: Arc<Mutex<sql::RawConnection>>) -> Loop {
         let replication_book = ReplicationBook::new(&db);
         Loop {
@@ -289,9 +289,9 @@ fn reply_with_string(ctx: *mut ffi::RedisModuleCtx,
     }
 }
 
-pub fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
-                                s: String)
-                                -> i32 {
+fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
+                            s: String)
+                            -> i32 {
     let s = CString::new(s).unwrap();
     unsafe {
         ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx,
@@ -299,13 +299,13 @@ pub fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
     }
 }
 
-pub fn reply_with_ok(ctx: *mut ffi::RedisModuleCtx) -> i32 {
+fn reply_with_ok(ctx: *mut ffi::RedisModuleCtx) -> i32 {
     reply_with_simple_string(ctx, String::from("OK"))
 }
 
-pub fn reply_with_done(ctx: *mut ffi::RedisModuleCtx,
-                       modified_rows: i32)
-                       -> i32 {
+fn reply_with_done(ctx: *mut ffi::RedisModuleCtx,
+                   modified_rows: i32)
+                   -> i32 {
     unsafe {
         ffi::RedisModule_ReplyWithArray.unwrap()(ctx, 2);
     }
@@ -318,9 +318,9 @@ pub fn reply_with_done(ctx: *mut ffi::RedisModuleCtx,
     ffi::REDISMODULE_OK
 }
 
-pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
-                        array: Vec<sql::Row>)
-                        -> i32 {
+fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
+                    array: Vec<sql::Row>)
+                    -> i32 {
     let len = array.len() as c_long;
     unsafe {
         ffi::RedisModule_ReplyWithArray.unwrap()(ctx, len);
@@ -340,6 +340,13 @@ pub fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
 
 
 impl RedisReply for sql::SQLite3Error {
+    fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
+        let error = format!("{}", self);
+        reply_with_error(ctx, error)
+    }
+}
+
+impl RedisReply for RediSQLError {
     fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
         let error = format!("{}", self);
         reply_with_error(ctx, error)
@@ -449,7 +456,6 @@ pub enum QueryResult {
     },
 }
 
-// [cfg(feature = "community")]
 impl QueryResult {
     pub fn reply(self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
         match self {
@@ -467,7 +473,7 @@ impl QueryResult {
     }
 }
 
-pub fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
+fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     match cursor {
         sql::Cursor::OKCursor { to_replicate } => {
             QueryResult::OK { to_replicate }
@@ -491,16 +497,16 @@ pub fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     }
 }
 
-fn execute_query(db: &Arc<Mutex<sql::RawConnection>>,
-                 query: String)
-                 -> Result<QueryResult, err::RediSQLError> {
+pub fn execute_query(db: &Arc<Mutex<sql::RawConnection>>,
+                     query: String)
+                     -> Result<QueryResult, err::RediSQLError> {
 
     let stmt = MultiStatement::new(db.clone(), query)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
 }
 
-pub fn bind_statement<'a>
+fn bind_statement<'a>
     (stmt: &'a MultiStatement,
      arguments: Vec<String>)
      -> Result<&'a MultiStatement, sql::SQLite3Error> {
@@ -532,10 +538,9 @@ impl error::Error for RedisError {
         self.msg.as_str()
     }
 }
-fn restore_previous_statements<'a>(loopdata: Loop) -> () {
+fn restore_previous_statements<'a, L: LoopData + Clone>(loopdata: L)
+                                                        -> () {
     let saved_statements = get_statement_metadata(loopdata.get_db());
-    // let stmt_cache = loopdata.get_stmt_cache();
-    // let statements_cache = *stmt_cache.lock().unwrap();
     match saved_statements {
         Ok(QueryResult::Array { array, .. }) => {
             for row in array {
@@ -571,8 +576,8 @@ fn return_value(client: BlockedClient,
     }
 }
 
-pub fn listen_and_execute(loopdata: LoopData,
-                          rx: Receiver<Command>) {
+pub fn listen_and_execute<L: LoopData + Clone>(loopdata: L,
+rx: Receiver<Command>){
     debug!("Start thread execution");
     restore_previous_statements(loopdata.clone());
     loop {
@@ -642,10 +647,10 @@ pub fn listen_and_execute(loopdata: LoopData,
 }
 
 
-fn compile_and_insert_statement<'a>
+fn compile_and_insert_statement<'a, L: LoopData + Clone>
     (identifier: String,
      statement: String,
-     loop_data: Loop)
+     loop_data: L)
      -> Result<QueryResult, err::RediSQLError> {
     let stmt_cache = loop_data.get_replication_book().data;
     let mut statements_cache = stmt_cache.write().unwrap();
@@ -730,30 +735,12 @@ pub fn insert_metadata(db: Arc<Mutex<sql::RawConnection>>,
     let statement = String::from("INSERT INTO RediSQLMetadata \
                                   VALUES(?1, ?2, ?3);");
 
-    match MultiStatement::new(db, statement) {
-        Err(e) => Err(e),
-        Ok(stmt) => {
-            match stmt.bind_index(1, &data_type) {
-                Err(e) => Err(e),
-                Ok(sql::SQLiteOK::OK) => {
-                    match stmt.bind_index(2, &key) {
-                        Err(e) => Err(e),
-                        Ok(sql::SQLiteOK::OK) => {
-                            match stmt.bind_index(3, &value) {
-                                Err(e) => Err(e),
-                                Ok(sql::SQLiteOK::OK) => {
-                                    match stmt.execute() {
-                                        Ok(_) => Ok(()),
-                                        Err(e) => Err(e),
-                                    }
-                                }
-                            }
-                        }    
-                    }
-                }
-            }
-        }
-    }
+    let stmt = MultiStatement::new(db, statement)?;
+    stmt.bind_index(1, &data_type)?;
+    stmt.bind_index(2, &key)?;
+    stmt.bind_index(3, &value)?;
+    stmt.execute()?;
+    Ok(())
 }
 
 pub fn enable_foreign_key(db: Arc<Mutex<sql::RawConnection>>)
@@ -770,10 +757,10 @@ pub fn enable_foreign_key(db: Arc<Mutex<sql::RawConnection>>)
     }
 }
 
-pub fn update_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
-                                 key: String,
-                                 value: String)
-                                 -> Result<(), sql::SQLite3Error> {
+fn update_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
+                             key: String,
+                             value: String)
+                             -> Result<(), sql::SQLite3Error> {
     let statement = String::from("UPDATE RediSQLMetadata SET value \
                                   = ?1 WHERE data_type = \
                                   'statement' AND key = ?2");
@@ -785,9 +772,9 @@ pub fn update_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
     Ok(())
 }
 
-pub fn remove_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
-                                 key: String)
-                                 -> Result<(), sql::SQLite3Error> {
+fn remove_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
+                             key: String)
+                             -> Result<(), sql::SQLite3Error> {
     let statement = String::from("DELETE FROM RediSQLMetadata \
                                   WHERE data_type = 'statement' \
                                   AND key = ?1");
@@ -798,7 +785,7 @@ pub fn remove_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
     Ok(())
 }
 
-pub fn get_statement_metadata
+fn get_statement_metadata
     (db: Arc<Mutex<sql::RawConnection>>)
      -> Result<QueryResult, sql::SQLite3Error> {
 
@@ -924,6 +911,68 @@ pub fn write_rdb_to_file(f: &mut File,
         }
     }
     Ok(())
+}
+
+pub fn get_dbkey_from_name(ctx: *mut ffi::RedisModuleCtx,
+                           name: String)
+                           -> Result<Box<DBKey>, i32> {
+    let key_name = create_rm_string(ctx, name);
+    let key = unsafe {
+        ffi::Export_RedisModule_OpenKey(
+            ctx,
+            key_name,
+            ffi::REDISMODULE_WRITE,
+        )
+    };
+    let safe_key = RedisKey { key: key };
+    let key_type =
+        unsafe { ffi::RedisModule_KeyType.unwrap()(safe_key.key) };
+    if unsafe {
+           ffi::DBType ==
+           ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key)
+       } {
+        let db_ptr = unsafe {
+            ffi::RedisModule_ModuleTypeGetValue
+                .unwrap()(safe_key.key) as *mut DBKey
+        };
+        let db: Box<DBKey> = unsafe { Box::from_raw(db_ptr) };
+        Ok(db)
+    } else {
+        Err(key_type)
+    }
+}
+
+pub fn get_db_channel_from_name(ctx: *mut ffi::RedisModuleCtx,
+                                name: String)
+                                -> Result<Sender<Command>, i32> {
+    let db: Box<DBKey> = get_dbkey_from_name(ctx, name)?;
+    let channel = db.tx.clone();
+    std::mem::forget(db);
+    Ok(channel)
+}
+
+pub fn reply_with_error_from_key_type(ctx: *mut ffi::RedisModuleCtx,
+                                      key_type: i32)
+                                      -> i32 {
+    match key_type {
+        ffi::REDISMODULE_KEYTYPE_EMPTY => {
+            let error = CString::new("ERR - Error the key is empty")
+                .unwrap();
+            unsafe {
+                ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
+            }
+        }
+        _ => {
+            let error = CStr::from_bytes_with_nul(
+                ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
+            ).unwrap();
+            unsafe {
+                ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
+            }
+        }
+    }
 }
 
 fn create_statement(db: Arc<Mutex<sql::RawConnection>>,

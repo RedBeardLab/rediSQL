@@ -1,8 +1,7 @@
 [package]
 name = "rediSQL"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Simone Mosciatti <simone@redbeardlab.tech>"]
-build = "build.rs"
 
 [lib]
 name = "redis_sql"

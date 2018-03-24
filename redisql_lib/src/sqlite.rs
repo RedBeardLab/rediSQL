@@ -11,8 +11,7 @@ use std::os::raw::c_char;
 
 use redisql_error as err;
 
-use community_statement;
-use community_statement::{MultiStatement, Statement};
+use community_statement::Statement;
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
