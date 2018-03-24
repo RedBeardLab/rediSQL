@@ -283,9 +283,9 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
                 }
             }
         }
-        _ => {
-            let error = CString::new("Wrong number of arguments, it \
-                                      accepts 3")
+        n => {
+            let error = CString::new(format!("Wrong number of arguments, it \
+                                      accepts 3, you provide {}", n))
                     .unwrap();
             unsafe {
                 r::ffi::RedisModule_ReplyWithError
