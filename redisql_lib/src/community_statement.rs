@@ -12,8 +12,6 @@ use sqlite::{SQLite3Error, Cursor, RawConnection, SQLiteOK};
 use sqlite::generate_sqlite3_error;
 use sqlite::SQLiteConnection;
 
-#[cfg(feature = "pro")]
-use replication;
 
 #[derive(Clone, Debug)]
 enum Parameters {
@@ -120,7 +118,7 @@ impl Statement {
         match unsafe { ffi::sqlite3_step(self.stmt) } {
             ffi::SQLITE_OK => {
                 Ok(Cursor::OKCursor {
-                       to_replicate: self.to_replicate(),
+                       to_replicate: !(self.is_read_only()),
                    })
             }
             ffi::SQLITE_DONE => {
@@ -128,7 +126,7 @@ impl Statement {
                     unsafe { ffi::sqlite3_changes(db.get_db()) };
                 Ok(Cursor::DONECursor {
                        modified_rows: modified_rows,
-                       to_replicate: self.to_replicate(),
+                       to_replicate: !(self.is_read_only()),
                    })
             }
             ffi::SQLITE_ROW => {
@@ -140,7 +138,7 @@ impl Statement {
                        stmt: self,
                        num_columns: n_columns,
                        previous_status: ffi::SQLITE_ROW,
-                       to_replicate: self.to_replicate(),
+                       to_replicate: !(self.is_read_only()),
                        modified_rows: 0,
                    })
             }
@@ -231,10 +229,9 @@ impl<'a> StatementTrait<'a> for Statement {
         self.stmt
     }
 
-    #[cfg(feature = "pro")]
-    fn to_replicate(&self) -> bool {
-        let v = replication::to_replicate(self);
-        v
+    fn is_read_only(&self) -> bool {
+        let v = unsafe { ffi::sqlite3_stmt_readonly(self.stmt) };
+        v != 0
     }
 }
 
@@ -321,15 +318,14 @@ impl<'a> StatementTrait<'a> for MultiStatement {
         self.stmts[0].stmt
     }
 
-    #[cfg(feature="pro")]
-    fn to_replicate(&self) -> bool {
+    fn is_read_only(&self) -> bool {
         for stmt in &self.stmts {
-            let v = stmt.to_replicate();
-            if v {
-                return true;
+            let v = stmt.is_read_only();
+            if !v {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 }
 

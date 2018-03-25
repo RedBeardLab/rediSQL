@@ -25,14 +25,12 @@ use redisql_lib::redis as r;
 use redisql_lib::redis::{RedisReply, Loop, LoopData,
                          reply_with_error_from_key_type,
                          get_db_channel_from_name,
-                         get_dbkey_from_name};
+                         get_dbkey_from_name, register_function,
+                         register_write_function, replicate};
 
-use redisql_lib::dump_sqlite::{WriteAOF, ExecNow};
+extern crate engine_pro;
+use engine_pro::{WriteAOF, register};
 
-
-fn replicate(ctx: *mut r::ffi::RedisModuleCtx) {
-    unsafe { r::ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx) };
-}
 
 extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::ffi::RedisModuleString,
@@ -158,6 +156,59 @@ extern "C" fn ExecStatement(
                             replicate(ctx);
                             r::ffi::REDISMODULE_OK
                         }
+                        Err(_) => r::ffi::REDISMODULE_OK,
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+extern "C" fn QueryStatement(
+    ctx: *mut r::ffi::RedisModuleCtx,
+    argv: *mut *mut r::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32{
+    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+
+    match argvector.len() {
+        0...2 => {
+            let error = CString::new("Wrong number of arguments, it \
+                                      needs at least 3")
+                    .unwrap();
+            unsafe {
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
+            }
+        }
+        _ => {
+            match get_db_and_loopdata_from_name(ctx,
+                                                argvector[1]
+                                                    .clone()) {
+                Err(key_type) => {
+                    reply_with_error_from_key_type(ctx, key_type)
+                }
+                Ok((ch, _)) => {
+                    let blocked_client =
+                        r::BlockedClient {
+                            client: unsafe {
+                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                                              Some(reply_exec_statement),
+                                                              Some(timeout),
+                                                              Some(free_privdata),
+                                                              10000)
+                            },
+                        };
+
+                    let cmd = r::Command::ExecStatement {
+                        identifier: argvector[2].clone(),
+                        arguments: argvector[3..].to_vec(),
+                        client: blocked_client,
+                    };
+
+                    match ch.send(cmd) {
+                        Ok(()) => r::ffi::REDISMODULE_OK,
                         Err(_) => r::ffi::REDISMODULE_OK,
                     }
                 }
@@ -614,38 +665,6 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
 }
 
 
-fn register_function(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    name: String,
-    f: extern "C" fn(*mut r::ffi::RedisModuleCtx,
-                     *mut *mut r::ffi::RedisModuleString,
-                     ::std::os::raw::c_int)
-                     -> i32,
-) -> Result<(), i32>{
-
-    let create_db: r::ffi::RedisModuleCmdFunc = Some(f);
-
-    let command_c_name = CString::new(name).unwrap();
-    let command_ptr_name = command_c_name.as_ptr();
-
-    let flag_c_name = CString::new("write").unwrap();
-    let flag_ptr_name = flag_c_name.as_ptr();
-
-    if unsafe {
-           r::ffi::RedisModule_CreateCommand
-               .unwrap()(ctx,
-                         command_ptr_name,
-                         create_db,
-                         flag_ptr_name,
-                         0,
-                         0,
-                         0)
-       } == r::ffi::REDISMODULE_ERR {
-        return Err(r::ffi::REDISMODULE_ERR);
-    }
-    Ok(())
-}
-
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn RedisModule_OnLoad(
@@ -700,53 +719,61 @@ pub extern "C" fn RedisModule_OnLoad(
         return r::ffi::REDISMODULE_ERR;
     }
 
+    match register_write_function(ctx,
+                                  String::from("REDISQL.CREATE_DB"),
+                                  CreateDB) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(ctx,
+                                  String::from("REDISQL.EXEC"),
+                                  Exec) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(ctx,
+                                  String::from("REDISQL.CREATE_STATEMENT",),
+                                  CreateStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(ctx,
+                                  String::from("REDISQL.EXEC_STATEMENT",),
+                                  ExecStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(ctx,
+                                  String::from("REDISQL.UPDATE_STATEMENT",),
+                                  UpdateStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(ctx,
+                                  String::from("REDISQL.DELETE_STATEMENT",),
+                                  DeleteStatement) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
     match register_function(ctx,
-                            String::from("REDISQL.CREATE_DB"),
-                            CreateDB) {
+                            String::from("REDISQL.QUERY_STATEMENT"),
+                            String::from("read"),
+                            QueryStatement) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
-    match register_function(ctx, String::from("REDISQL.EXEC"), Exec) {
+
+    match register(ctx) {
         Ok(()) => (),
         Err(e) => return e,
     }
-
-    match register_function(ctx,
-                            String::from("REDISQL.CREATE_STATEMENT",),
-                            CreateStatement) {
-        Ok(()) => (),
-        Err(e) => return e,
-    }
-
-    match register_function(ctx,
-                            String::from("REDISQL.EXEC_STATEMENT"),
-                            ExecStatement) {
-        Ok(()) => (),
-        Err(e) => return e,
-    }
-
-    match register_function(ctx,
-                            String::from("REDISQL.UPDATE_STATEMENT",),
-                            UpdateStatement) {
-        Ok(()) => (),
-        Err(e) => return e,
-    }
-
-    match register_function(ctx,
-                            String::from("REDISQL.DELETE_STATEMENT",),
-                            DeleteStatement) {
-        Ok(()) => (),
-        Err(e) => return e,
-    }
-
-    match register_function(ctx,
-                            String::from("REDISQL.EXEC.NOW"),
-                            ExecNow) {
-        Ok(()) => (),
-        Err(e) => return e,
-    }
-
 
     r::ffi::REDISMODULE_OK
 }

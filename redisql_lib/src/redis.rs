@@ -54,7 +54,7 @@ trait ReplicationData {
     fn to_replicate(&self) -> bool;
 }
 
-trait StatementCache {
+pub trait StatementCache {
     fn new(&Arc<Mutex<sql::RawConnection>>) -> Self;
     fn is_statement_present(&self, String) -> bool;
     fn insert_new_statement(&mut self,
@@ -72,6 +72,10 @@ trait StatementCache {
                       String,
                       Vec<String>)
                       -> Result<QueryResult, RediSQLError>;
+    fn query_statement(&self,
+                       String,
+                       Vec<String>)
+                       -> Result<QueryResult, RediSQLError>;
     fn to_replicate(&self, String) -> bool;
 }
 
@@ -168,6 +172,37 @@ impl StatementCache for ReplicationBook {
             }
         }
     }
+
+    fn query_statement(&self,
+                       identifier: String,
+                       args: Vec<String>)
+                       -> Result<QueryResult, RediSQLError> {
+        let map = self.data.read().unwrap();
+        match map.get(&identifier) {
+            None => {
+                let debug = String::from("No statement found");
+                let description = String::from("The statement is not present in the database",);
+                Err(RediSQLError::new(debug, description))
+            }
+            Some(&(ref stmt, _)) => {
+                match stmt.is_read_only() {
+                    true => {
+                        stmt.reset();
+                        let stmt = bind_statement(&stmt, args)?;
+                        let cursor = stmt.execute()?;
+                        Ok(cursor_to_query_result(cursor))
+                    }
+                    false => {
+                        let debug = String::from("Not read only statement",);
+                        let description = String::from("Statement is not read only but it may modify the database, use `EXEC_STATEMENT` instead.",);
+                        Err(RediSQLError::new(debug, description))
+                    }
+                }
+            }
+        }
+    }
+
+
     fn to_replicate(&self, identifier: String) -> bool {
         false
     }
@@ -436,6 +471,11 @@ pub enum Command {
         identifier: String,
         client: BlockedClient,
     },
+    QueryStatement {
+        identifier: String,
+        arguments: Vec<String>,
+        client: BlockedClient,
+    },
 }
 
 pub struct BlockedClient {
@@ -638,6 +678,17 @@ rx: Receiver<Command>){
                     loopdata
                         .get_replication_book()
                         .exec_statement(identifier, arguments);
+                return_value(client, result);
+            }
+            Ok(Command::QueryStatement {
+                   identifier,
+                   arguments,
+                   client,
+               }) => {
+                let result =
+                    loopdata
+                        .get_replication_book()
+                        .query_statement(identifier, arguments);
                 return_value(client, result);
             }
             Ok(Command::Stop) => return,
@@ -1007,4 +1058,52 @@ fn remove_statement(db: &Arc<Mutex<sql::RawConnection>>,
                     -> Result<(), err::RediSQLError> {
     remove_statement_metadata(Arc::clone(db), identifier.clone())
         .or_else(|e| Err(err::RediSQLError::from(e)))
+}
+
+pub fn replicate(ctx: *mut ffi::RedisModuleCtx) {
+    unsafe { ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx) };
+}
+
+
+pub fn register_function(
+    ctx: *mut ffi::RedisModuleCtx,
+    name: String,
+    flags: String,
+    f: extern "C" fn(*mut ffi::RedisModuleCtx,
+                     *mut *mut ffi::RedisModuleString,
+                     ::std::os::raw::c_int)
+                     -> i32,
+) -> Result<(), i32>{
+
+    let create_db: ffi::RedisModuleCmdFunc = Some(f);
+
+    let command_c_name = CString::new(name).unwrap();
+    let command_ptr_name = command_c_name.as_ptr();
+
+    let flag_c_name = CString::new("write").unwrap();
+    let flag_ptr_name = flag_c_name.as_ptr();
+
+    if unsafe {
+           ffi::RedisModule_CreateCommand.unwrap()(ctx,
+                                                   command_ptr_name,
+                                                   create_db,
+                                                   flag_ptr_name,
+                                                   0,
+                                                   0,
+                                                   0)
+       } == ffi::REDISMODULE_ERR {
+        return Err(ffi::REDISMODULE_ERR);
+    }
+    Ok(())
+}
+
+pub fn register_write_function(
+    ctx: *mut ffi::RedisModuleCtx,
+    name: String,
+    f: extern "C" fn(*mut ffi::RedisModuleCtx,
+                     *mut *mut ffi::RedisModuleString,
+                     ::std::os::raw::c_int)
+                     -> i32,
+) -> Result<(), i32>{
+    register_function(ctx, name, String::from("write"), f)
 }

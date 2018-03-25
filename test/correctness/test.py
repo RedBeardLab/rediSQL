@@ -309,6 +309,34 @@ class TestStatements(TestRediSQLWithExec):
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4], [103], [104]])
 
+class TestSynchronous(TestRediSQLWithExec):
+  def test_exec(self):
+    with DB(self, "A"):
+      done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE TABLE test(a INT, b TEXT);")
+      self.assertEquals(done, ["DONE", 0L])
+      done = self.exec_naked("REDISQL.EXEC.NOW", "A", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
+      self.assertEquals(done, ["DONE", 3L])
+      result = self.exec_naked("REDISQL.EXEC.NOW", "A", "SELECT * FROM test ORDER BY a ASC")
+      self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
+
+  def test_statements(self):
+    with DB(self, "A"):
+      with Table(self, "t1", "(A INTEGER)", key = "A"):
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT.NOW", "A", "insert+100", "INSERT INTO t1 VALUES(100 + ?1);")
+        self.assertEquals(ok, "OK")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert+100", 1)
+        self.assertEquals(done, ["DONE", 1L])
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT.NOW", "A", "insert+100", 9)
+        self.assertEquals(done, ["DONE", 1L])
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "query-100", "SELECT A-100 FROM t1 ORDER BY A ASC;")
+        self.assertEquals(ok, "OK")
+        result = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "query-100")
+        self.assertEquals(result, [[1], [9]])
+        result = self.exec_naked("REDISQL.EXEC_STATEMENT.NOW", "A", "query-100")
+        self.assertEquals(result, [[1], [9]])
+
+
+        
 
 if __name__ == '__main__':
    unittest.main()

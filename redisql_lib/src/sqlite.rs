@@ -157,7 +157,7 @@ pub trait StatementTrait<'a>: Sized {
                   value: &String)
                   -> Result<SQLiteOK, SQLite3Error>;
     fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt;
-    fn to_replicate(&self) -> bool {
+    fn is_read_only(&self) -> bool {
         false
     }
 }
