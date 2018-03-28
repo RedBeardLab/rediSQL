@@ -1,0 +1,3 @@
+[submodule "engine_pro"]
+	path = engine_pro
+	url = git@gitlab.com:RedBeardLab/engine_pro.git
