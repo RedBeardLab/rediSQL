@@ -1,6 +1,7 @@
 
 site_name: RediSQL
 repo_url: https://github.com/RedBeardLab/rediSQL
+google_analytics: ['UA-116709819-1', 'RediSQL']
 pages: 
   - 
     Overview: index.md
