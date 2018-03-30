@@ -10,25 +10,16 @@ use std::path::PathBuf;
 fn main() {
 
     println!("cargo:rerun-if-changed=src/CDeps");
-
-    cc::Build::new()
-        .file("src/CDeps/sqlite_dump.c")
-        .include("src/CDeps/SQLite/include")
-        .define("HAVE_USLEEP", Some("1"))
-        .define("NDEBUG", Some("1"))
-        .define("HAVE_FDATASYNC", Some("1"))
-        .define("SQLITE_THREADSAFE", Some("2"))
-        .define("SQLITE_ENABLE_JSON1", Some("1"))
-        .define("SQLITE_ENABLE_FTS3", Some("1"))
-        .define("SQLITE_ENABLE_FTS4", Some("1"))
-        .define("SQLITE_ENABLE_FTS5", Some("1"))
-        .define("SQLITE_ENABLE_RTREE", Some("1"))
-        .compile("libsqlite3_dump.a");
+    println!("cargo:rerun-if-changed=\"build.rs\"");
+    println!("cargo:rerun-if-changed=\"sqlite_dependencies.h\"");
+    println!("cargo:rerun-if-changed=\"redis_dependencies.h\"");
 
     cc::Build::new()
         .file("src/CDeps/Redis/redismodule.c")
         .include("src/CDeps/Redis/include")
         .compile("libredismodule.a");
+
+    let build_engine_pro = "1";
 
     cc::Build::new()
         .file("src/CDeps/SQLite/sqlite3.c")
@@ -42,6 +33,7 @@ fn main() {
         .define("SQLITE_ENABLE_FTS4", Some("1"))
         .define("SQLITE_ENABLE_FTS5", Some("1"))
         .define("SQLITE_ENABLE_RTREE", Some("1"))
+        .define("ENGINE_PRO", build_engine_pro)
         .compile("libsqlite3.a");
 
     #[derive(Debug)]
@@ -65,6 +57,7 @@ fn main() {
         bindgen::Builder::default()
             .parse_callbacks(Box::new(SqliteTypeChooser))
             .header("sqlite_dependencies.h")
+            .clang_arg("-DENGINE_PRO=1")
             .generate()
             .expect("Unable to generate bindings for SQLite");
 

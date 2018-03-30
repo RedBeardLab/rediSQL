@@ -18,10 +18,9 @@ uuid = { version = "0.4", features = ["v4"] }
 log = "0.3.8"
 env_logger = "0.4.3"
 redisql_lib = {path = "./redisql_lib"}
-engine_pro = {path = "./engine_pro"}
+engine_pro = {path = "./engine_pro", optional = true}
 
 [features]
-default = ["community"]
+default = []
 
-pro = []
-community = []
+pro = ["engine_pro"]
