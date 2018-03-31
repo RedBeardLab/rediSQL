@@ -15,7 +15,7 @@ cc = {version = "1.0.3", features = ["parallel"]}
 libc = "0.2.21"
 fnv = "1.0.5"
 uuid = { version = "0.4", features = ["v4"] }
-log = "0.3.8"
+log = {version = "0.3.8", features = ["release_max_level_warn"]}
 env_logger = "0.4.3"
 redisql_lib = {path = "./redisql_lib"}
 engine_pro = {path = "./engine_pro", optional = true}
