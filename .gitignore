@@ -1,4 +1,8 @@
 target
 test/correctness/lib/*
 test/correctness/*.sqlite
+test/correctness/bin/
+test/correctness/include/
+test/correctness/local/
+test/correctness/test.pyc
 

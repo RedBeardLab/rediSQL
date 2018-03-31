@@ -2,6 +2,10 @@
 
 [RediSQL][github] is a Redis module that embeds a fully functional SQLite database.
 
+At the best of our knowledge is the only system that provides SQL capabilities while being very fast so to be used as cache, simple to integrate with any programming language, since it can be used by every redis client, and with very very low maintenance.
+
+Moreover, for small, not critical services, it can also be used as main database, it can store data not only in memory but also on file and it can also use the same persistency mechanisms of redis itself.
+
 ## Motivation
 
 The main motivation behind the project is to provide a quick and hands-off environment to store structured data.
