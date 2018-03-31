@@ -1,9 +1,7 @@
-// extern crate libc;
 extern crate uuid;
 
 extern crate log;
 extern crate env_logger;
-
 
 use env_logger::{LogBuilder, LogTarget};
 
@@ -26,13 +24,18 @@ use redisql_lib::redis::{RedisReply, Loop, LoopData,
                          reply_with_error_from_key_type,
                          get_db_channel_from_name,
                          get_dbkey_from_name, register_function,
-                         register_write_function, replicate};
+                         register_write_function,
+                         replicate_verbatim, RMString};
 
 #[cfg(feature = "pro")]
 extern crate engine_pro;
 #[cfg(feature = "pro")]
 use engine_pro::{WriteAOF, register};
 
+#[cfg(feature = "pro")]
+use engine_pro::replicate;
+#[cfg(not(feature = "pro"))]
+use redisql_lib::redis::replicate;
 
 extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::ffi::RedisModuleString,
@@ -155,7 +158,7 @@ extern "C" fn ExecStatement(
 
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx);
+                            replicate(ctx, String::from("REDISQL.EXEC_STATEMENT.NOW"), argv, argc);
                             r::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::ffi::REDISMODULE_OK,
@@ -251,7 +254,7 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
                     };
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx);
+                            replicate(ctx, String::from("REDISQL.EXEC.NOW"), argv, argc);
                             r::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::ffi::REDISMODULE_OK,
@@ -306,7 +309,7 @@ extern "C" fn CreateStatement(
 
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx);
+                            replicate(ctx, String::from("REDISQL.CREATE_STATEMENT.NOW"), argv, argc);
                             r::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::ffi::REDISMODULE_OK,
@@ -364,7 +367,7 @@ extern "C" fn UpdateStatement(
 
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx);
+                            replicate(ctx, String::from("REDISQL.UPDATE_STATEMENT.NOW"), argv, argc);
                             r::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::ffi::REDISMODULE_OK,
@@ -415,7 +418,7 @@ extern "C" fn DeleteStatement(
                     };
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx);
+                            replicate(ctx, String::from("REDISQL.DELETE_STATEMENT.NOW"), argv, argc);
                             r::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::ffi::REDISMODULE_OK,
@@ -450,12 +453,12 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
 
     match argvector.len() {
         2 | 3 => {
-            let key_name = r::create_rm_string(ctx,
-                                               argvector[1].clone());
+            let key_name = r::RMString::new(ctx,
+                                            argvector[1].clone());
             let key = unsafe {
                 r::ffi::Export_RedisModule_OpenKey(
                     ctx,
-                    key_name,
+                    key_name.ptr,
                     r::ffi::REDISMODULE_WRITE,
                 )
             };
@@ -501,7 +504,7 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                     match type_set {
                                         r::ffi::REDISMODULE_OK => {
                                             let ok = r::QueryResult::OK {to_replicate: true};
-                                            replicate(ctx);
+                                            replicate_verbatim(ctx);
                                             ok.reply(ctx)
                                         }
                                         r::ffi::REDISMODULE_ERR => {
@@ -639,13 +642,6 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
                                         Ok(_) => {
                                             let (tx, rx) = channel();
                                             let db = r::DBKey::new(tx, in_mem, true);
-                                            /*
-                                            let db = r::DBKey {
-                                                tx: tx,
-                                                db: Arc::new(Mutex::new(in_mem)),
-                                                in_memory: true,
-                                            };
-                                            */
                                             let loop_data = db.loop_data.clone();
 
                                             thread::spawn(move || { 
