@@ -102,7 +102,8 @@ impl StatementCache for ReplicationBook {
             Entry::Vacant(v) => {
                 let stmt =
                     create_statement(db, identifier, statement)?;
-                v.insert((stmt, false));
+                let read_only = stmt.is_read_only();
+                v.insert((stmt, read_only));
                 Ok(QueryResult::OK { to_replicate: true })
             }
             Entry::Occupied(_) => {
@@ -147,7 +148,8 @@ impl StatementCache for ReplicationBook {
             Entry::Occupied(mut o) => {
                 let stmt =
                     update_statement(&db, identifier, statement)?;
-                o.insert((stmt, false));
+                let read_only = stmt.is_read_only();
+                o.insert((stmt, read_only));
                 Ok(QueryResult::OK { to_replicate: true })
             }
         }
@@ -184,24 +186,19 @@ impl StatementCache for ReplicationBook {
                 let description = String::from("The statement is not present in the database",);
                 Err(RediSQLError::new(debug, description))
             }
-            Some(&(ref stmt, _)) => {
-                match stmt.is_read_only() {
-                    true => {
-                        stmt.reset();
-                        let stmt = bind_statement(&stmt, args)?;
-                        let cursor = stmt.execute()?;
-                        Ok(cursor_to_query_result(cursor))
-                    }
-                    false => {
-                        let debug = String::from("Not read only statement",);
-                        let description = String::from("Statement is not read only but it may modify the database, use `EXEC_STATEMENT` instead.",);
-                        Err(RediSQLError::new(debug, description))
-                    }
-                }
+            Some(&(ref stmt, true)) => {
+                stmt.reset();
+                let stmt = bind_statement(&stmt, args)?;
+                let cursor = stmt.execute()?;
+                Ok(cursor_to_query_result(cursor))
+            }
+            Some(&(_, false)) => {
+                let debug = String::from("Not read only statement");
+                let description = String::from("Statement is not read only but it may modify the database, use `EXEC_STATEMENT` instead.",);
+                Err(RediSQLError::new(debug, description))
             }
         }
     }
-
 
     fn to_replicate(&self, identifier: String) -> bool {
         false
@@ -480,6 +477,10 @@ pub enum Command {
         query: String,
         client: BlockedClient,
     },
+    Query {
+        query: String,
+        client: BlockedClient,
+    },
     CompileStatement {
         identifier: String,
         statement: String,
@@ -565,13 +566,32 @@ fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     }
 }
 
-pub fn execute_query(db: &Arc<Mutex<sql::RawConnection>>,
-                     query: String)
-                     -> Result<QueryResult, err::RediSQLError> {
+pub fn do_execute(db: &Arc<Mutex<sql::RawConnection>>,
+                  query: String)
+                  -> Result<QueryResult, err::RediSQLError> {
 
     let stmt = MultiStatement::new(db.clone(), query)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
+}
+
+
+pub fn do_query(db: &Arc<Mutex<sql::RawConnection>>,
+                query: String)
+                -> Result<QueryResult, err::RediSQLError> {
+
+    let stmt = MultiStatement::new(db.clone(), query)?;
+    match stmt.is_read_only() {
+        true => {
+            let cursor = stmt.execute()?;
+            Ok(cursor_to_query_result(cursor))
+        }
+        false => {
+            let debug = String::from("Not read only statement");
+            let description = String::from("Statement is not read only but it may modify the database, use `EXEC_STATEMENT` instead.",);
+            Err(RediSQLError::new(debug, description))
+        }
+    }
 }
 
 fn bind_statement<'a>
@@ -653,7 +673,12 @@ rx: Receiver<Command>){
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
-                let result = execute_query(&loopdata.get_db(), query);
+                let result = do_execute(&loopdata.get_db(), query);
+                return_value(client, result);
+            }
+            Ok(Command::Query { query, client }) => {
+                debug!("Query | Query = {:?}", query);
+                let result = do_query(&loopdata.get_db(), query);
                 return_value(client, result);
             }
             Ok(Command::UpdateStatement {
@@ -1092,10 +1117,10 @@ pub fn replicate_verbatim(ctx: *mut ffi::RedisModuleCtx) {
     unsafe { ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx) };
 }
 
-pub fn replicate(ctx: *mut ffi::RedisModuleCtx,
-                 command: String,
-                 argv: *mut *mut ffi::RedisModuleString,
-                 argc: std::os::raw::c_int) {
+pub fn replicate(_ctx: *mut ffi::RedisModuleCtx,
+                 _command: String,
+                 _argv: *mut *mut ffi::RedisModuleString,
+                 _argc: std::os::raw::c_int) {
 }
 
 pub fn register_function(

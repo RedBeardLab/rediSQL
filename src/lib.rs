@@ -24,8 +24,7 @@ use redisql_lib::redis::{RedisReply, Loop, LoopData,
                          reply_with_error_from_key_type,
                          get_db_channel_from_name,
                          get_dbkey_from_name, register_function,
-                         register_write_function,
-                         replicate_verbatim, RMString};
+                         register_write_function, replicate_verbatim};
 
 #[cfg(feature = "pro")]
 extern crate engine_pro;
@@ -264,7 +263,61 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
         }
         n => {
             let error = CString::new(format!("Wrong number of arguments, it \
-                                      accepts 3, you provide {}", n))
+                                      accepts 3, you provide {}",
+                                             n))
+                    .unwrap();
+            unsafe {
+                r::ffi::RedisModule_ReplyWithError
+                    .unwrap()(ctx, error.as_ptr())
+            }
+        }
+    }
+}
+
+
+#[allow(non_snake_case)]
+extern "C" fn Query(ctx: *mut r::ffi::RedisModuleCtx,
+                    argv: *mut *mut r::ffi::RedisModuleString,
+                    argc: ::std::os::raw::c_int)
+                    -> i32 {
+    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+    match argvector.len() {
+        3 => {
+            match get_db_channel_from_name(ctx,
+                                           argvector[1].clone()) {
+                Err(key_type) => {
+                    reply_with_error_from_key_type(ctx, key_type)
+                }
+                Ok(ch) => {
+                    let blocked_client = r::BlockedClient {
+                        client:
+                            unsafe {
+                                r::ffi::RedisModule_BlockClient
+                                    .unwrap()(ctx,
+                                              Some(reply_exec),
+                                              Some(timeout),
+                                              Some(free_privdata),
+                                              10000)
+                            },
+                    };
+                    mem::forget(ctx);
+                    let cmd = r::Command::Query {
+                        query: argvector[2].clone(),
+                        client: blocked_client,
+                    };
+                    match ch.send(cmd) {
+                        Ok(()) => {
+                            r::ffi::REDISMODULE_OK
+                        }
+                        Err(_) => r::ffi::REDISMODULE_OK,
+                    }
+                }
+            }
+        }
+        n => {
+            let error = CString::new(format!("Wrong number of arguments, it \
+                                      accepts 3, you provide {}",
+                                             n))
                     .unwrap();
             unsafe {
                 r::ffi::RedisModule_ReplyWithError
@@ -743,6 +796,14 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
+    match register_function(ctx,
+                            String::from("REDISQL.QUERY"),
+                            String::from("readonly"),
+                            Query) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
     match register_write_function(ctx,
                                   String::from("REDISQL.CREATE_STATEMENT",),
                                   CreateStatement) {
@@ -773,7 +834,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function(ctx,
                             String::from("REDISQL.QUERY_STATEMENT"),
-                            String::from("read"),
+                            String::from("readonly"),
                             QueryStatement) {
         Ok(()) => (),
         Err(e) => return e,
