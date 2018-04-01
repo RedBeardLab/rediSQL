@@ -18,9 +18,8 @@ use std::clone::Clone;
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use self::fnv::FnvHashMap;
+use std::collections::hash_map::Entry;
 
 use std;
 use std::fmt;
@@ -46,7 +45,7 @@ use sqlite as sql;
 
 #[derive(Clone)]
 pub struct ReplicationBook {
-    data: Arc<RwLock<HashMap<String, (MultiStatement, bool)>>>,
+    data: Arc<RwLock<FnvHashMap<String, (MultiStatement, bool)>>>,
     db: Arc<Mutex<sql::RawConnection>>,
 }
 
@@ -76,13 +75,12 @@ pub trait StatementCache {
                        String,
                        Vec<String>)
                        -> Result<QueryResult, RediSQLError>;
-    fn to_replicate(&self, String) -> bool;
 }
 
 impl StatementCache for ReplicationBook {
     fn new(db: &Arc<Mutex<sql::RawConnection>>) -> Self {
         ReplicationBook {
-            data: Arc::new(RwLock::new(HashMap::new())),
+            data: Arc::new(RwLock::new(FnvHashMap::default())),
             db: Arc::clone(db),
         }
     }
@@ -198,10 +196,6 @@ impl StatementCache for ReplicationBook {
                 Err(RediSQLError::new(debug, description))
             }
         }
-    }
-
-    fn to_replicate(&self, identifier: String) -> bool {
-        false
     }
 }
 
@@ -1138,7 +1132,7 @@ pub fn register_function(
     let command_c_name = CString::new(name).unwrap();
     let command_ptr_name = command_c_name.as_ptr();
 
-    let flag_c_name = CString::new("write").unwrap();
+    let flag_c_name = CString::new(flags).unwrap();
     let flag_ptr_name = flag_c_name.as_ptr();
 
     if unsafe {

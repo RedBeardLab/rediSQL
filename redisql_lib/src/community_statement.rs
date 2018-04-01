@@ -202,7 +202,7 @@ impl<'a> StatementTrait<'a> for Statement {
 
     fn bind_index(&self,
                   index: i32,
-                  value: &String)
+                  value: &str)
                   -> Result<SQLiteOK, SQLite3Error> {
 
         #[allow(non_snake_case)]
@@ -276,7 +276,7 @@ impl<'a> StatementTrait<'a> for MultiStatement {
     }
     fn bind_index(&self,
                   index: i32,
-                  value: &String)
+                  value: &str)
                   -> Result<SQLiteOK, SQLite3Error> {
         for stmt in &self.stmts {
             stmt.bind_index(index, value)?;

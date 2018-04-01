@@ -56,8 +56,8 @@ pub fn generate_sqlite3_error(conn: *mut ffi::sqlite3)
         };
     SQLite3Error {
         code: error_code,
-        error_message: error_message,
-        error_string: error_string,
+        error_message,
+        error_string,
     }
 }
 
@@ -133,7 +133,7 @@ pub fn open_connection(path: String)
     match r {
         ffi::SQLITE_OK => {
             Ok(RawConnection {
-                   db: db,
+                   db,
                    modified_rows: 0,
                })
         }
@@ -154,7 +154,7 @@ pub trait StatementTrait<'a>: Sized {
                   -> Result<SQLiteOK, SQLite3Error>;
     fn bind_index(&self,
                   index: i32,
-                  value: &String)
+                  value: &str)
                   -> Result<SQLiteOK, SQLite3Error>;
     fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt;
     fn is_read_only(&self) -> bool {
