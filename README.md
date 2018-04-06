@@ -20,15 +20,11 @@ Between all the SQL implementation, the one that best fitted the need for this m
 
 ## Getting start
 
-There are three main way to get RediSQL.
+There are two main way to get RediSQL.
 
-The first way is to use docker, just pull the image and you are ready to go:
+The first way is to download the public release directly from [this link](https://plasso.com/s/epp4GbsJdp-redisql).
 
-`docker run siscia/redisql:latest` 
-
-the official docker hub repo is: [https://hub.docker.com/r/siscia/redisql/](https://hub.docker.com/r/siscia/redisql/)
-
-The second way is to download the public release directly from github following the [release link](https://github.com/RedBeardLab/rediSQL/releases)
+These will provide you with the community version that is free, however, you have the possibility to leave a donation (20€ would be the suggested ammount). Indeed, is not necessary to pay anything for the community edition and feel free to just input 0€.
 
 With the `.so` you can start redis passing the object as argument like so:
 
@@ -173,6 +169,55 @@ OK
 ``` 
 
 Now you can create tables, insert data on those tables, make queries, remove elements, everything.
+
+# PRO version
+
+The PRO version is available [here](https://plasso.com/s/epp4GbsJdp-redisql/signup/) it cost 990€ / years and of course you have 14 days money back if you are not satisfied with the product.
+
+The PRO version provides two main capabilities and **dedicated support** from the creators of RediSQL.
+    
+### Non blocking commands
+
+All (but `REDISQL.CREATE_DB`) commands in the module blocks the clients and execute the computation in a different thread. 
+
+This means that the redis engine is free to serve other clients and it doesn't freeze on long select and it can use more CPU power. 
+
+Blocking is the more sensible choice in the general case, however, in some case you may need `non blocking` command.
+
+The PRO version provide you with that.
+
+In the PRO version is enough to add the suffix `.NOW` to any command to invoke the blocking version.
+
+### AOF & Replication
+
+AOF and Replication in Redis works with the same underneath implementation.
+
+It is quite complex to implement and usefull mostly to companies where redis is a critical piece of infrastructure.
+
+For these reasone the AOF and the Replication are provide in the PRO version.
+
+## About the cost
+
+We set up the cost to make it a bargain for any company that actually use the product.
+
+If you consider the ammount of time necessary to replicate this features:
+    
+    1. Understand the code base of RediSQL
+    2. Understand how Redis itself works
+    3. Understand how SQLite works
+    4. Implement the features
+    5. Document it
+    6. Test it
+    7. Maintaint it
+
+And you multiply for the hour cost of an engineer (~100€/hour).
+
+You will see that RediSQL PRO will pay itself in a little more that 1 day of work.
+
+All this without considering the dedicated support that comes with the plan.
+
+Moreover, up to our knowledge we are the only one to provide a similar product (SQL, in memory inside a cache engine).
+
 
 ## API
 

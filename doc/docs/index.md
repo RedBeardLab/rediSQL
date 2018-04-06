@@ -58,6 +58,14 @@ Statements can also be used as an interface for different application using the 
 Once you define the interface of the statement and its behavior, then you are free to change it's implementation while maintaining all the legacy code working.
 This is quite useful especially if you have several services using the same RediSQL instance.
 
+## Query
+
+In most databases there are statements that modify the data and queries that simply reads.
+
+Of course, just reading, is usually a faster and simpler operation than modify the data. In order to take advantages of this we provide a different command `REDISQL.QUERY` and `REDISQL.QUERY_STATEMENT` that constraint you to don't modify the data.
+
+This commands allow you to have slaves serves query and to balance some load off the master node for better speed and reliability.
+
 # Persistency
 
 The module in the community version implements only RDB. However, the PRO version provides also AOF and replication.
@@ -72,10 +80,21 @@ When Redis starts to save the RDB file the status of the database get serialized
 
 AOF replication is provided only in the PRO edition.
 
-At the moment all the commands are replicated, this is quite a waste and we are moving to replicate only the commands that actually modify the codebase.
+All the commands are replicated, but the read only ones.
 
-With AOF replication you also get instance replication that allows replicating the same dataset into different Redis instances.
+With AOF replication you also get instance replication that allows replicating the same dataset into different Redis instances in a master slave fashion.
 
+# PRO
+
+The PRO edition is based on the Open Source one, however it provides one more class of commands that are necessary for bussinesses or where rediSQL is a critical piece of the infrastructure.
+
+Every command, but `REDISQL.CREATE_DB`, blocks the clients and it is executed in the background by a different thread.
+
+With the PRO edition we also provide the `.NOW` commands that are executed immediately without blocking the client.
+
+Basically every command in the PRO version provides the `.NOW` variant, but please refer to the [reference][ref].
+
+Moreover, the PRO version also provides AOF replication, that, indeed, necessitate of commands that don't block the clients.
 
 [github]: https://github.com/RedBeardLab/rediSQL
 [ref]: references.md
