@@ -7,9 +7,9 @@ import os
 import redis
 from rmtest import ModuleTestCase
     
-os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/debug/libredis_sql.so"
+os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/release/libredis_sql.so"
 os.environ["REDIS_PATH"] = "/home/simo/redis-4.0.2/src/redis-server"
-os.environ["RUST_BACKTRACE"] = "1"
+os.environ["RUST_BACKTRACE"] = "full"
 
 class Table():
   def __init__(self, redis, name, values, key = ""):
@@ -334,6 +334,27 @@ class TestSynchronous(TestRediSQLWithExec):
         self.assertEquals(result, [[1], [9]])
         result = self.exec_naked("REDISQL.EXEC_STATEMENT.NOW", "A", "query-100")
         self.assertEquals(result, [[1], [9]])
+
+class TestRead(TestRediSQLWithExec):
+  def test_read(self):
+    with DB(self, "A"):
+      with Table(self, "t1", "(A INTEGER)", key = "A"):
+        done = self.exec_naked("REDISQL.EXEC", "A", "INSERT INTO t1 VALUES(4);")
+        result = self.exec_naked("REDISQL.QUERY", "A", "SELECT A FROM t1 LIMIT 1;")
+        self.assertEquals(result, [[4]])
+        
+  def test_not_insert(self):
+    with DB(self, "B"):
+      with Table(self, "t1", "(A INTEGER)", key = "B"):
+        with self.assertRaises(redis.exceptions.ResponseError):
+          self.exec_naked("REDISQL.QUERY", "B", "INSERT INTO t1 VALUES(5);")
+        #self.assertEquals(err, )
+        #done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE TABLE test(a INT, b TEXT);")
+        #self.assertEquals(done, ["DONE", 0L])
+        #done = self.exec_naked("REDISQL.EXEC.NOW", "A", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
+        #self.assertEquals(done, ["DONE", 3L])
+        #result = self.exec_naked("REDISQL.EXEC.NOW", "A", "SELECT * FROM test ORDER BY a ASC")
+        #self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
 
 
         

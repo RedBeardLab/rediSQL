@@ -69,7 +69,7 @@ impl<'a> Drop for Statement {
     }
 }
 
-pub fn generate_statements<'a>
+pub fn generate_statements
     (db: Arc<Mutex<RawConnection>>,
      query: String)
      -> Result<MultiStatement, SQLite3Error> {
@@ -93,14 +93,14 @@ pub fn generate_statements<'a>
         };
         match r {
             ffi::SQLITE_OK => {
-                let stmt = Statement { stmt: stmt };
+                let stmt = Statement { stmt };
                 stmts.push(stmt);
                 if unsafe { *next_query } == 0 {
                     let (num_parameters, parameters) =
                         count_parameters(&stmts)?;
                     return Ok(MultiStatement {
-                                  stmts: stmts,
-                                  db: db,
+                                  stmts,
+                                  db,
                                   number_parameters: num_parameters,
                                   _parameters: parameters,
                               });
@@ -125,7 +125,7 @@ impl Statement {
                 let modified_rows =
                     unsafe { ffi::sqlite3_changes(db.get_db()) };
                 Ok(Cursor::DONECursor {
-                       modified_rows: modified_rows,
+                       modified_rows,
                        to_replicate: !(self.is_read_only()),
                    })
             }
@@ -175,7 +175,7 @@ impl<'a> StatementTrait<'a> for Statement {
                                     ptr::null_mut())
         };
         match r {
-            ffi::SQLITE_OK => Ok(Statement { stmt: stmt }),
+            ffi::SQLITE_OK => Ok(Statement { stmt }),
             _ => Err(generate_sqlite3_error(conn.get_db())),
         }
     }
@@ -195,7 +195,7 @@ impl<'a> StatementTrait<'a> for Statement {
             .iter()
             .map(|value| {
                      index += 1;
-                     self.bind_index(index, &value)
+                     self.bind_index(index, value)
                  })
             .collect()
     }
@@ -209,7 +209,7 @@ impl<'a> StatementTrait<'a> for Statement {
         fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
             Some(unsafe { mem::transmute(-1isize) })
         }
-        let value_c = CString::new(value.clone()).unwrap();
+        let value_c = CString::new(value).unwrap();
         match unsafe {
                   ffi::sqlite3_bind_text(self.stmt,
                                          index,
@@ -302,10 +302,8 @@ impl<'a> StatementTrait<'a> for MultiStatement {
                        });
         }
 
-        let mut i = 0;
-        for value in values {
-            i += 1;
-            self.bind_index(i, &value)?;
+        for (i, value) in values.iter().enumerate() {
+            self.bind_index(i as i32 + 1, value)?;
         }
         Ok(SQLiteOK::OK)
     }
@@ -329,8 +327,8 @@ impl<'a> StatementTrait<'a> for MultiStatement {
     }
 }
 
-fn count_parameters<'a>
-    (statements: &Vec<Statement>)
+fn count_parameters
+    (statements: &[Statement])
      -> Result<(i32, Vec<Vec<Parameters>>), SQLite3Error> {
     let error_wrong_paramenter = SQLite3Error {
         code: 1021,
@@ -377,7 +375,7 @@ fn count_parameters<'a>
                 .flat_map(|params| {
                     params
                         .iter()
-                        .map(|ref p| match **p {
+                        .map(|p| match *p {
                                  Parameters::Anonymous => 0,
                                  Parameters::Named { index } => index,
                              })
