@@ -4,7 +4,7 @@ This document explains all the API that RediSQL provide to the users.
 
 For each command, it exposes first the name and then the syntax and finally a brief explanation of what is going on inside the code.
 
-Where is possible it provides also an estimate of the complexity since we are talking about databases not all queries have the same time and spatial complexity.
+Where is possible, it provides also an estimate of the complexity but since we are talking about databases not all queries have the same time and spatial complexity.
 
 Finally, if it is appropriate the document also provides several references to external material that the interested reader can use to understand better the dynamics of every and each command.
 
@@ -49,7 +49,7 @@ If the database is backed by a file the file will be close.
 
 ## REDISQL.EXEC
 
-#### REDISQL.EXEC db_key "statement"
+#### REDISQL.EXEC[.NOW] db_key "statement"
 
 This command takes as input a Redis key created with [`REDISQL.CREATE_DB`][create_db] and a statement string.
 
@@ -61,6 +61,8 @@ This command is quite useful to execute [PRAGMA Statements][sqlite_pragma], for 
 
 Also, remember that there is only a single thread for database, execution of multiple `REDISQL.EXEC` against the same database will result in a serialization of the executions, one will be executed before the others.
 
+If you only need to query the database without modifying the data is a better idea to use [`REDISQL.QUERY`][query].
+
 **Complexity**: It depends entirely on the statement string. The use of a single thread for database is been chosen after several tests where the single thread configuration was faster than a multi-thread one. This is true in a write-intensive application and in a mixed write/read application.
 
 **See also**:
@@ -71,10 +73,36 @@ Also, remember that there is only a single thread for database, execution of mul
 4. [SQLite `PRAGMA`s][sqlite_pragma]
 5. [Redis Blocking Command][Redis Blocking Command]
 
+## REDISQL.QUERY
+
+#### REDISQL.QUERY[.NOW] db_key "statement"
+
+This command behaves similarly to [`REDISQL.EXEC`][exec] but it imposes an additional constraint on the statement it executes.
+
+It only executes the statement if it is a read-only operation, otherwise, it returns an error.
+
+A read-only operation is defined by the result of calling [`sqlite3_stmt_readonly`][sqlite_readonly] on the compiled statement.
+
+The statement is executed if and only if [`sqlite3_stmt_readonly`][sqlite_readonly] returns true.
+
+If you need to execute the same query over and over it is a good idea to create a statement and use [`REDISQL.QUERY_STATEMENT`][query_statement].
+
+**Complexity**: Similar to [`REDISQL.EXEC`][exec], however, if a statement is not read-only it is aborted immediately and it does return an appropriate error.
+
+**See also**:
+
+1. [SQLite `sqlite3_prepare_v2`][sqlite_prepare]
+2. [SQLite `statement` aka `sqlite3_stmt`][sqlite_stmt]
+3. [SQLite `sqlite3_step`][sqlite_step]
+4. [SQLite `PRAGMA`s][sqlite_pragma]
+5. [Redis Blocking Command][Redis Blocking Command] 
+6. [`REDISQL.EXEC`][exec]
+7. [SQLite `sqlite3_stmt_readonly`][sqlite_readonly]
+8. [`REDISQL.QUERY_STATEMENT`][query_statement] 
 
 ## REDISQL.CREATE_STATEMENT
 
-#### REDISQL.CREATE_STATEMENT db_key stmt_identifier "statement"
+#### REDISQL.CREATE_STATEMENT[.NOW] db_key stmt_identifier "statement"
 
 This command compiles a statement string into a [sqlite statement][sqlite_stmt] and associate such statement to an identifier.
 
@@ -123,7 +151,7 @@ Keep in mind that SQLite start to count the bounding parameters from 1 and not f
 
 ## REDISQL.EXEC_STATEMENT
 
-#### REDISQL.EXEC_STATEMENT db_key stmt_identifier [binding_parameters ...]
+#### REDISQL.EXEC_STATEMENT[.NOW] db_key stmt_identifier [binding_parameters ...]
 
 This command binds all the parameters to the statement created using [`REDISQL.CREATE_STATEMENT`][create_statement] and identified by `stmt_identifier`. Then the module executes the statement against the database associated to `db_key`.
 
@@ -152,6 +180,9 @@ Finally, once completed the binding part the statement is executed and its resul
 
 This command as well is not blocking, all the work happens in a different thread from the one of Redis.
 
+If you need to query your database, without modifying the data is a better idea to use [`REDISQL.QUERY_STATEMENT`][query_statement].
+ 
+
 **Complexity**: The complexity to retrieve and to bind the parameters is roughly constant for any practical purpose, however, the overall complexity will be dominated by the time to execute the query.
 
 **See also**:
@@ -160,10 +191,42 @@ This command as well is not blocking, all the work happens in a different thread
 2. [SQLite bindings, `sqlite3_bind_text`][sqlite_binding]
 3. [`REDISQL.CREATE_STATEMENT`][create_statement]
 4. [Redis Blocking Command][Redis Blocking Command]
+5. [`REDISQL.QUERY_STATEMENT`][query_statement] 
+
+
+## REDISQL.QUERY_STATEMENT
+
+#### REDISQL.QUERY_STATEMENT[.NOW] db_key stmt_identifier [binding_parameters ...]
+
+This command behaves similarly to [`REDISQL.EXEC_STATEMENT`][exec_statement] however it does impose an additional constraint.
+
+It executes the statement if it is a read-only operation, otherwise, it returns an error.
+
+A read-only operation is defined by the result of calling [`sqlite3_stmt_readonly`][sqlite_readonly] on the compiled statement.
+
+The statement is executed if and only if [`sqlite3_stmt_readonly`][sqlite_readonly] returns true.
+
+The result of [`sqlite3_stmt_readonly`][sqlite_readonly] is cached.
+
+If you don't want to create a statement to run a query just once you can use [`REDISQL.QUERY`][query].
+
+**Complexity**: Similar to [`REDISQL.EXEC_STATEMENT`][exec_statement], however, if a statement is not read-only it is aborted immediately and it does return an appropriate error.
+
+**See also**:
+
+1. [SQLite `sqlite3_prepare_v2`][sqlite_prepare]
+2. [SQLite `statement` aka `sqlite3_stmt`][sqlite_stmt]
+3. [SQLite `sqlite3_step`][sqlite_step]
+4. [SQLite `PRAGMA`s][sqlite_pragma]
+5. [Redis Blocking Command][Redis Blocking Command] 
+6. [`REDISQL.EXEC_STATEMENT`][exec_statement]
+7. [SQLite `sqlite3_stmt_readonly`][sqlite_readonly]
+8. [`REDISQL.QUERY`][query] 
+
 
 ## REDISQL.DELETE_STATEMENT
 
-#### REDISQL.DELETE_STATEMENT db_key stmt_identifier
+#### REDISQL.DELETE_STATEMENT[.NOW] db_key stmt_identifier
 
 This command eliminates a statement from the database.
 
@@ -183,7 +246,7 @@ Also, this command is not blocking and work in a different thread from the main 
 
 ## REDISQL.UPDATE_STATEMENT
 
-#### REDISQL.UPDATE_STATEMENT db_key stmt_identifier "statement"
+#### REDISQL.UPDATE_STATEMENT[.NOW] db_key stmt_identifier "statement"
 
 The command update and _existing_ statement changing its internal implementation to the one provide as string.
 
@@ -203,7 +266,6 @@ This command is not blocking as well.
 4. [`REDISQL.DELETE_STATEMENT`][delete_statement]
 5. [Redis Blocking Command][Redis Blocking Command]
 
-
 [sqlite3_close]: https://sqlite.org/c3ref/close.html
 [Redis DEL]: https://redis.io/commands/del
 [sqlite3_open]: https://sqlite.org/c3ref/open.html
@@ -219,3 +281,6 @@ This command is not blocking as well.
 [exec]: #redisqlexec
 [create_db]: #redisqlcreate_db
 [update_statement]: #redisqlupdate_statement
+[sqlite_readonly]: https://www.sqlite.org/c3ref/stmt_readonly.html
+[query]: #redisqlquery
+[query_statement]: #redisqlquery_statement

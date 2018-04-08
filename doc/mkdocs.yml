@@ -1,18 +1,21 @@
 
 site_name: RediSQL
 repo_url: https://github.com/RedBeardLab/rediSQL
-google_analytics: 
+google_analytics:
   - UA-116709819-1
   - auto
 
-pages: 
-  - 
+pages:
+  -
     Overview: index.md
   -
     References: references.md
   -
-    Motivations: motivations.md
-  - 
+    Pro: pro.md
+  -
+    Motivations:
+      - "Motivations": motivations.md
+      - "PRO Motivations": pro_motivations.md
+  -
     Blog:
-      - 'Analytics': 'blog/analytics.md' 
-
+      - 'Analytics': 'blog/analytics.md'
