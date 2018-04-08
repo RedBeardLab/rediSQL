@@ -163,6 +163,8 @@
         
             <li><a href="#motivation">Motivation</a></li>
         
+            <li><a href="#walkthrough">Walkthrough</a></li>
+        
     
         <li class="main "><a href="#overview">Overview</a></li>
         
@@ -204,6 +206,87 @@
 <p>The main motivation behind the project is to provide a quick and hands-off environment to store structured data.</p>
 <p>It also turns out that RediSQL is a great way to cache your content and data in a more structured way.</p>
 <p>The main history and motivation of the project are explained <a href="motivations/">in this page.</a></p>
+<h2 id="walkthrough">Walkthrough</h2>
+<p>You can start the module with:</p>
+<pre><code>./redis-server --loadmodule librediSQL.so 
+</code></pre>
+
+<p>After starting redis with the rediSQL module it will be just the redis you learn to love:</p>
+<pre><code>$ ~/redis-4.0-rc1/src/redis-cli 
+127.0.0.1:6379&gt; 
+127.0.0.1:6379&gt; SET A 3
+OK
+127.0.0.1:6379&gt; GET A
+&quot;3&quot;
+</code></pre>
+
+<p>But you will also able to use all the API described below:</p>
+<pre><code>127.0.0.1:6379&gt; REDISQL.CREATE_DB DB
+OK
+# Start creating a table on the default DB
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;CREATE TABLE foo(A INT, B TEXT);&quot;
+DONE
+# Insert some data into the table
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO foo VALUES(3, 'bar');&quot;
+OK
+# Retrieve the data you just inserted
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;SELECT * FROM foo;&quot;
+1) 1) (integer) 3
+   2) &quot;bar&quot;
+# Of course you can make multiple tables
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;CREATE TABLE baz(C INT, B TEXT);&quot;
+OK
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO baz VALUES(3, 'aaa');&quot;
+OK
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO baz VALUES(3, 'bbb');&quot;
+OK
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO baz VALUES(3, 'ccc');&quot;
+OK
+# And of course you can use joins
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;SELECT * FROM foo, baz WHERE foo.A = baz.C;&quot;
+
+1) 1) (integer) 3
+   2) &quot;bar&quot;
+   3) (integer) 3
+   4) &quot;aaa&quot;
+2) 1) (integer) 3
+   2) &quot;bar&quot;
+   3) (integer) 3
+   4) &quot;bbb&quot;
+3) 1) (integer) 3
+   2) &quot;bar&quot;
+   3) (integer) 3
+   4) &quot;ccc&quot;
+127.0.0.1:6379&gt; 
+</code></pre>
+
+<p>Also the <code>LIKE</code> operator is included:</p>
+<pre><code>127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;CREATE TABLE text_search(t TEXT);&quot;
+OK
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO text_search VALUES('hello');&quot;
+OK
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO text_search VALUES('banana');&quot;
+OK
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO text_search VALUES('apple');&quot;
+OK
+127.0.0.1:6379&gt; 
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;SELECT * FROM text_search WHERE t LIKE 'h_llo';&quot;
+1) 1) &quot;hello&quot;
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;SELECT * FROM text_search WHERE t LIKE '%anana';&quot;
+1) 1) &quot;banana&quot;
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO text_search VALUES('anana');&quot;
+OK
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;SELECT * FROM text_search;&quot;
+1) 1) &quot;hello&quot;
+2) 1) &quot;banana&quot;
+3) 1) &quot;apple&quot;
+4) 1) &quot;anana&quot;
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;SELECT * FROM text_search WHERE t LIKE 'a%';&quot;
+1) 1) &quot;apple&quot;
+2) 1) &quot;anana&quot;
+</code></pre>
+
+<p>Now you can create tables, insert data on those tables, make queries, remove elements, everything.</p>
 <h1 id="overview">Overview</h1>
 <p>In this section, we are going to explore the main concepts in the module.</p>
 <p>There is another section of the website, <a href="references/">the reference</a>, that explore every single command that the module provides giving a deeper explanation of every detail.</p>
@@ -290,5 +373,5 @@ This is quite useful especially if you have several services using the same Redi
 
 <!--
 MkDocs version : 0.14.0
-Build Date UTC : 2018-04-08 14:41:17.193791
+Build Date UTC : 2018-04-08 15:37:33.096868
 -->
