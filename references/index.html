@@ -76,7 +76,28 @@
                 
                 
                     <li >
-                        <a href="../motivations/">Motivations</a>
+                        <a href="../pro/">Pro</a>
+                    </li>
+                
+                
+                
+                    <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Motivations <b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                        
+                            
+<li >
+    <a href="../motivations/">Motivations</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../pro_motivations/">PRO Motivations</a>
+</li>
+
+                        
+                        </ul>
                     </li>
                 
                 
@@ -111,7 +132,7 @@
                         </a>
                     </li>
                     <li >
-                        <a rel="prev" href="../motivations/">
+                        <a rel="prev" href="../pro/">
                             Next <i class="fa fa-arrow-right"></i>
                         </a>
                     </li>
@@ -144,9 +165,13 @@
         
             <li><a href="#redisqlexec">REDISQL.EXEC</a></li>
         
+            <li><a href="#redisqlquery">REDISQL.QUERY</a></li>
+        
             <li><a href="#redisqlcreate_statement">REDISQL.CREATE_STATEMENT</a></li>
         
             <li><a href="#redisqlexec_statement">REDISQL.EXEC_STATEMENT</a></li>
+        
+            <li><a href="#redisqlquery_statement">REDISQL.QUERY_STATEMENT</a></li>
         
             <li><a href="#redisqldelete_statement">REDISQL.DELETE_STATEMENT</a></li>
         
@@ -160,7 +185,7 @@
 <h1 id="references">References</h1>
 <p>This document explains all the API that RediSQL provide to the users.</p>
 <p>For each command, it exposes first the name and then the syntax and finally a brief explanation of what is going on inside the code.</p>
-<p>Where is possible it provides also an estimate of the complexity since we are talking about databases not all queries have the same time and spatial complexity.</p>
+<p>Where is possible, it provides also an estimate of the complexity but since we are talking about databases not all queries have the same time and spatial complexity.</p>
 <p>Finally, if it is appropriate the document also provides several references to external material that the interested reader can use to understand better the dynamics of every and each command.</p>
 <h2 id="redisqlcreate_db">REDISQL.CREATE_DB</h2>
 <h4 id="redisqlcreate_db-db_key-path">REDISQL.CREATE_DB db_key [path]</h4>
@@ -188,12 +213,13 @@ If the file does not exist a new file will be created.</p>
 <li><a href="https://redis.io/commands/del">Redis <code>DEL</code></a></li>
 </ol>
 <h2 id="redisqlexec">REDISQL.EXEC</h2>
-<h4 id="redisqlexec-db_key-statement">REDISQL.EXEC db_key "statement"</h4>
+<h4 id="redisqlexecnow-db_key-statement">REDISQL.EXEC[.NOW] db_key "statement"</h4>
 <p>This command takes as input a Redis key created with <a href="#redisqlcreate_db"><code>REDISQL.CREATE_DB</code></a> and a statement string.</p>
 <p>Internally it transform the string into a <a href="https://sqlite.org/c3ref/stmt.html">sqlite statement</a> using <a href="https://sqlite.org/c3ref/prepare.html">sqlite3_prepare_v2</a>, execute it against the database, <a href="https://sqlite.org/c3ref/step.html">sqlite3_step</a>, and finally returns the results to the client.</p>
 <p>The compilation of the string into a statement and its execution happens in a different thread from the one used by Redis and so this command has a minimum impact on the overall Redis performance, however, it does block the client.</p>
 <p>This command is quite useful to execute <a href="https://sqlite.org/pragma.html">PRAGMA Statements</a>, for normal operations against the database is suggested to use <code>STATEMENTS</code>.</p>
 <p>Also, remember that there is only a single thread for database, execution of multiple <code>REDISQL.EXEC</code> against the same database will result in a serialization of the executions, one will be executed before the others.</p>
+<p>If you only need to query the database without modifying the data is a better idea to use <a href="#redisqlquery"><code>REDISQL.QUERY</code></a>.</p>
 <p><strong>Complexity</strong>: It depends entirely on the statement string. The use of a single thread for database is been chosen after several tests where the single thread configuration was faster than a multi-thread one. This is true in a write-intensive application and in a mixed write/read application.</p>
 <p><strong>See also</strong>:</p>
 <ol>
@@ -203,8 +229,27 @@ If the file does not exist a new file will be created.</p>
 <li><a href="https://sqlite.org/pragma.html">SQLite <code>PRAGMA</code>s</a></li>
 <li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
 </ol>
+<h2 id="redisqlquery">REDISQL.QUERY</h2>
+<h4 id="redisqlquerynow-db_key-statement">REDISQL.QUERY[.NOW] db_key "statement"</h4>
+<p>This command behaves similarly to <a href="#redisqlexec"><code>REDISQL.EXEC</code></a> but it imposes an additional constraint on the statement it executes.</p>
+<p>It only executes the statement if it is a read-only operation, otherwise, it returns an error.</p>
+<p>A read-only operation is defined by the result of calling <a href="https://www.sqlite.org/c3ref/stmt_readonly.html"><code>sqlite3_stmt_readonly</code></a> on the compiled statement.</p>
+<p>The statement is executed if and only if <a href="https://www.sqlite.org/c3ref/stmt_readonly.html"><code>sqlite3_stmt_readonly</code></a> returns true.</p>
+<p>If you need to execute the same query over and over it is a good idea to create a statement and use <a href="#redisqlquery_statement"><code>REDISQL.QUERY_STATEMENT</code></a>.</p>
+<p><strong>Complexity</strong>: Similar to <a href="#redisqlexec"><code>REDISQL.EXEC</code></a>, however, if a statement is not read-only it is aborted immediately and it does return an appropriate error.</p>
+<p><strong>See also</strong>:</p>
+<ol>
+<li><a href="https://sqlite.org/c3ref/prepare.html">SQLite <code>sqlite3_prepare_v2</code></a></li>
+<li><a href="https://sqlite.org/c3ref/stmt.html">SQLite <code>statement</code> aka <code>sqlite3_stmt</code></a></li>
+<li><a href="https://sqlite.org/c3ref/step.html">SQLite <code>sqlite3_step</code></a></li>
+<li><a href="https://sqlite.org/pragma.html">SQLite <code>PRAGMA</code>s</a></li>
+<li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a> </li>
+<li><a href="#redisqlexec"><code>REDISQL.EXEC</code></a></li>
+<li><a href="https://www.sqlite.org/c3ref/stmt_readonly.html">SQLite <code>sqlite3_stmt_readonly</code></a></li>
+<li><a href="#redisqlquery_statement"><code>REDISQL.QUERY_STATEMENT</code></a> </li>
+</ol>
 <h2 id="redisqlcreate_statement">REDISQL.CREATE_STATEMENT</h2>
-<h4 id="redisqlcreate_statement-db_key-stmt_identifier-statement">REDISQL.CREATE_STATEMENT db_key stmt_identifier "statement"</h4>
+<h4 id="redisqlcreate_statementnow-db_key-stmt_identifier-statement">REDISQL.CREATE_STATEMENT[.NOW] db_key stmt_identifier "statement"</h4>
 <p>This command compiles a statement string into a <a href="https://sqlite.org/c3ref/stmt.html">sqlite statement</a> and associate such statement to an identifier.</p>
 <p>Using this command you can insert parameters using the special symbol <code>?NNN</code>, those parameters will be bind to the statements when you are executing the statement itself.</p>
 <p>For now only the <code>?NNN</code> syntax is supported, where <code>N</code> is a digit (Ex. <code>?1</code>, <code>?2</code>, <code>?3</code> ...)</p>
@@ -238,7 +283,7 @@ INSERT INTO foo VALUES(?1, ?123, ?564); -- this one will be more problematic, an
 <li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
 </ol>
 <h2 id="redisqlexec_statement">REDISQL.EXEC_STATEMENT</h2>
-<h4 id="redisqlexec_statement-db_key-stmt_identifier-binding_parameters">REDISQL.EXEC_STATEMENT db_key stmt_identifier [binding_parameters ...]</h4>
+<h4 id="redisqlexec_statementnow-db_key-stmt_identifier-binding_parameters">REDISQL.EXEC_STATEMENT[.NOW] db_key stmt_identifier [binding_parameters ...]</h4>
 <p>This command binds all the parameters to the statement created using <a href="#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a> and identified by <code>stmt_identifier</code>. Then the module executes the statement against the database associated to <code>db_key</code>.</p>
 <p>For each parameter in the query of the form <code>?nnn</code> the engine will look for the <code>nnn-th</code> binding_parameters.
 So if the statements is from the following query:</p>
@@ -255,6 +300,7 @@ So if the statements is from the following query:</p>
 <p>Redis works using a text protocol, all the arguments are encoded as text, hence the module is forced to use the procedure <code>sqlite3_bind_text</code>, however, SQLite is smart enough to recognize numbers and treat them correctly. Numbers will be treated as numbers and text will be treated as text.</p>
 <p>Finally, once completed the binding part the statement is executed and its result is returned to the client.</p>
 <p>This command as well is not blocking, all the work happens in a different thread from the one of Redis.</p>
+<p>If you need to query your database, without modifying the data is a better idea to use <a href="#redisqlquery_statement"><code>REDISQL.QUERY_STATEMENT</code></a>.</p>
 <p><strong>Complexity</strong>: The complexity to retrieve and to bind the parameters is roughly constant for any practical purpose, however, the overall complexity will be dominated by the time to execute the query.</p>
 <p><strong>See also</strong>:</p>
 <ol>
@@ -262,9 +308,30 @@ So if the statements is from the following query:</p>
 <li><a href="https://sqlite.org/c3ref/bind_blob.html">SQLite bindings, <code>sqlite3_bind_text</code></a></li>
 <li><a href="#redisqlcreate_statement"><code>REDISQL.CREATE_STATEMENT</code></a></li>
 <li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
+<li><a href="#redisqlquery_statement"><code>REDISQL.QUERY_STATEMENT</code></a> </li>
+</ol>
+<h2 id="redisqlquery_statement">REDISQL.QUERY_STATEMENT</h2>
+<h4 id="redisqlquery_statementnow-db_key-stmt_identifier-binding_parameters">REDISQL.QUERY_STATEMENT[.NOW] db_key stmt_identifier [binding_parameters ...]</h4>
+<p>This command behaves similarly to <a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a> however it does impose an additional constraint.</p>
+<p>It executes the statement if it is a read-only operation, otherwise, it returns an error.</p>
+<p>A read-only operation is defined by the result of calling <a href="https://www.sqlite.org/c3ref/stmt_readonly.html"><code>sqlite3_stmt_readonly</code></a> on the compiled statement.</p>
+<p>The statement is executed if and only if <a href="https://www.sqlite.org/c3ref/stmt_readonly.html"><code>sqlite3_stmt_readonly</code></a> returns true.</p>
+<p>The result of <a href="https://www.sqlite.org/c3ref/stmt_readonly.html"><code>sqlite3_stmt_readonly</code></a> is cached.</p>
+<p>If you don't want to create a statement to run a query just once you can use <a href="#redisqlquery"><code>REDISQL.QUERY</code></a>.</p>
+<p><strong>Complexity</strong>: Similar to <a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a>, however, if a statement is not read-only it is aborted immediately and it does return an appropriate error.</p>
+<p><strong>See also</strong>:</p>
+<ol>
+<li><a href="https://sqlite.org/c3ref/prepare.html">SQLite <code>sqlite3_prepare_v2</code></a></li>
+<li><a href="https://sqlite.org/c3ref/stmt.html">SQLite <code>statement</code> aka <code>sqlite3_stmt</code></a></li>
+<li><a href="https://sqlite.org/c3ref/step.html">SQLite <code>sqlite3_step</code></a></li>
+<li><a href="https://sqlite.org/pragma.html">SQLite <code>PRAGMA</code>s</a></li>
+<li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a> </li>
+<li><a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a></li>
+<li><a href="https://www.sqlite.org/c3ref/stmt_readonly.html">SQLite <code>sqlite3_stmt_readonly</code></a></li>
+<li><a href="#redisqlquery"><code>REDISQL.QUERY</code></a> </li>
 </ol>
 <h2 id="redisqldelete_statement">REDISQL.DELETE_STATEMENT</h2>
-<h4 id="redisqldelete_statement-db_key-stmt_identifier">REDISQL.DELETE_STATEMENT db_key stmt_identifier</h4>
+<h4 id="redisqldelete_statementnow-db_key-stmt_identifier">REDISQL.DELETE_STATEMENT[.NOW] db_key stmt_identifier</h4>
 <p>This command eliminates a statement from the database.</p>
 <p>It first looks it up into the internal hash table, if it finds the statement the command removes it from the internal hash table and then remove it from an internal SQLite table.</p>
 <p>Also, this command is not blocking and work in a different thread from the main Redis one.</p>
@@ -278,7 +345,7 @@ So if the statements is from the following query:</p>
 <li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
 </ol>
 <h2 id="redisqlupdate_statement">REDISQL.UPDATE_STATEMENT</h2>
-<h4 id="redisqlupdate_statement-db_key-stmt_identifier-statement">REDISQL.UPDATE_STATEMENT db_key stmt_identifier "statement"</h4>
+<h4 id="redisqlupdate_statementnow-db_key-stmt_identifier-statement">REDISQL.UPDATE_STATEMENT[.NOW] db_key stmt_identifier "statement"</h4>
 <p>The command update and <em>existing</em> statement changing its internal implementation to the one provide as string.</p>
 <p>If the statement does not exist the command will fail and return an error, again this is a safety measure, you must be completely aware that you are changing the implementation of a statement and updating a not existing statement or creating an existing one will result in an error.</p>
 <p>Internally the command starts checking if the statement is already defined, then it tries to compile the string into a <a href="https://sqlite.org/c3ref/stmt.html"><code>sqlite3_stmt</code></a> and if everything went right it finally updates the metadata table and finally returns to the client.</p>
