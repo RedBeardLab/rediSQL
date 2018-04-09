@@ -20,6 +20,8 @@ A detailed coverage of the PRO version [is provided here][pro]
 
 The motivations of why we decided to sell a PRO version and about its price are [here][pro_motivations] and we hope that you agree on our points.
 
+Finally you can also obtain the software from [github releases][github_release]
+
 ## Motivation
 
 The main motivation behind the project is to provide a quick and hands-off environment to store structured data.
@@ -27,6 +29,98 @@ The main motivation behind the project is to provide a quick and hands-off envir
 It also turns out that RediSQL is a great way to cache your content and data in a more structured way.
 
 The main history and motivation of the project are explained [in this page.][motivations]
+
+## Walkthrough
+
+You can start the module with:
+
+```
+./redis-server --loadmodule librediSQL.so 
+```
+
+After starting redis with the rediSQL module it will be just the redis you learn to love:
+
+```
+$ ~/redis-4.0-rc1/src/redis-cli 
+127.0.0.1:6379> 
+127.0.0.1:6379> SET A 3
+OK
+127.0.0.1:6379> GET A
+"3"
+```
+
+But you will also able to use all the API described below:
+
+```
+127.0.0.1:6379> REDISQL.CREATE_DB DB
+OK
+# Start creating a table on the default DB
+127.0.0.1:6379> REDISQL.EXEC DB "CREATE TABLE foo(A INT, B TEXT);"
+DONE
+# Insert some data into the table
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO foo VALUES(3, 'bar');"
+OK
+# Retrieve the data you just inserted
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM foo;"
+1) 1) (integer) 3
+   2) "bar"
+# Of course you can make multiple tables
+127.0.0.1:6379> REDISQL.EXEC DB "CREATE TABLE baz(C INT, B TEXT);"
+OK
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO baz VALUES(3, 'aaa');"
+OK
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO baz VALUES(3, 'bbb');"
+OK
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO baz VALUES(3, 'ccc');"
+OK
+# And of course you can use joins
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM foo, baz WHERE foo.A = baz.C;"
+
+1) 1) (integer) 3
+   2) "bar"
+   3) (integer) 3
+   4) "aaa"
+2) 1) (integer) 3
+   2) "bar"
+   3) (integer) 3
+   4) "bbb"
+3) 1) (integer) 3
+   2) "bar"
+   3) (integer) 3
+   4) "ccc"
+127.0.0.1:6379> 
+```
+
+Also the `LIKE` operator is included:
+
+```
+127.0.0.1:6379> REDISQL.EXEC DB "CREATE TABLE text_search(t TEXT);"
+OK
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO text_search VALUES('hello');"
+OK
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO text_search VALUES('banana');"
+OK
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO text_search VALUES('apple');"
+OK
+127.0.0.1:6379> 
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM text_search WHERE t LIKE 'h_llo';"
+1) 1) "hello"
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM text_search WHERE t LIKE '%anana';"
+1) 1) "banana"
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO text_search VALUES('anana');"
+OK
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM text_search;"
+1) 1) "hello"
+2) 1) "banana"
+3) 1) "apple"
+4) 1) "anana"
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM text_search WHERE t LIKE 'a%';"
+1) 1) "apple"
+2) 1) "anana"
+``` 
+
+Now you can create tables, insert data on those tables, make queries, remove elements, everything.
+
 
 # Overview
 
@@ -119,3 +213,4 @@ More information about the PRO version are available [here.][pro]
 [signup]: https://plasso.com/s/epp4GbsJdp-redisql/signup/
 [pro]: pro.md
 [pro_motivations]: pro_motivations.md
+[github_release]: https://github.com/RedBeardLab/rediSQL/releases
