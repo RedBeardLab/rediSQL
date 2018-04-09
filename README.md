@@ -26,7 +26,7 @@ The first way is to download the public release directly from [this link](https:
 
 These will provide you with the community version that is free, however, you have the possibility to leave a donation (20€ would be the suggested ammount). Indeed, is not necessary to pay anything for the community edition and feel free to just input 0€.
 
-Another option is to download the module from [github release][https://github.com/RedBeardLab/rediSQL/releases]
+Another option is to download the module from [github release](https://github.com/RedBeardLab/rediSQL/releases)
 
 With the `.so` you can start redis passing the object as argument like so:
 
