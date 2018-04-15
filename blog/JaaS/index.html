@@ -163,7 +163,7 @@
                 <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
     <ul class="nav bs-sidenav">
     
-        <li class="main active"><a href="#jaas">JaaS</a></li>
+        <li class="main active"><a href="#jaas-json-on-redis-via-redisql">JaaS, JSON on Redis via RediSQL</a></li>
         
             <li><a href="#redisql-redis-on-sql-steroids">RediSQL, redis on SQL steroids.</a></li>
         
@@ -175,6 +175,8 @@
         
             <li><a href="#implementation">Implementation</a></li>
         
+            <li><a href="#recap">Recap</a></li>
+        
             <li><a href="#question">Question?</a></li>
         
     
@@ -182,19 +184,19 @@
 </div></div>
                 <div class="col-md-9" role="main">
 
-<h1 id="jaas">JaaS</h1>
+<h1 id="jaas-json-on-redis-via-redisql">JaaS, JSON on Redis via RediSQL</h1>
 <h4 id="redisql-redis-on-sql-steroids">RediSQL, redis on SQL steroids.</h4>
-<p>RediSQL is a redis module that embed SQLite to provide full SQL capabilities to redis.</p>
+<p>RediSQL is a redis module that embeds SQLite to provide full SQL capabilities to redis.</p>
 <p>The fastest introduction to RediSQL is <a href="../../">our homepage</a></p>
-<p>tl;dr; We build a JSON as a Service in less than 500 lines of javascript + RediSQL, you can check out the <a href="https://github.com/RedBeardLab/JaaS/blob/master/index.js">whole source file here.</a></p>
+<p>tl;dr; We build a <strong>JSON as a Service</strong> in less than 500 lines of javascript + RediSQL, you can check out the <a href="https://github.com/RedBeardLab/JaaS/blob/master/index.js">whole source file here.</a></p>
 <h2 id="json-as-a-service-in-500-lines-of-code-redisql">JSON as a Service in 500 lines of code + RediSQL</h2>
-<p>While building web services is common to have the need to store some un-structured or semi-structured data (aka JSON) somewhere.</p>
-<p>Unfortunately it is not always so easy.</p>
+<p>While building web services is common to have the need to store some un-structured or semi-structured data (aka <strong>JSON</strong>) somewhere.</p>
+<p>Unfortunately, it is not always so easy.</p>
 <p>If you are using a SQL database, think about postgres, you need to add a column or even a table to your database, you need to decide how to encode the data and to be sure that your drivers work correctly with this new type.</p>
-<p>If you are already using some kind of NoSQL database you may be a little luckier, but nevertheless you should be sure that your database support all the operation you may need on JSON and still you need your team on-board to add a new collection/fields/column to your actuall database.</p>
+<p>If you are already using some kind of NoSQL database you may be a little luckier, but nevertheless, you should be sure that your database support all the operation you may need on JSON and still you need your team on-board to add a new collection/fields/column to your actual database.</p>
 <h2 id="a-faster-solution">A faster solution</h2>
 <p>A faster solution could be to use RediSQL exploiting the <a href="https://www.sqlite.org/json1.html">JSON1</a> extension.</p>
-<p>SQLite provides several interesting extensions and one of our favourite is JSON1 that allow an efficient and fast manipolation of JSON data, all inside a full SQL engine.</p>
+<p>SQLite provides several interesting extensions and one of our favourites is JSON1 that allow an efficient and fast manipulation of JSON data, all inside a full SQL engine.</p>
 <p>We include this extension by default in RediSQL, so, if you are using RediSQL, you already have all the necessary function.</p>
 <h2 id="desiderata">Desiderata</h2>
 <p>In this example we assume that you are sharing your JSON data store between different part of the system, hence you need some form of hierarchy.</p>
@@ -216,7 +218,7 @@
 127.0.0.1:6379&gt; 
 </code></pre>
 
-<p>Of course we would also like to navigate complex JSONs and to add fields and values at will.</p>
+<p>Of course, we would also like to navigate complex JSONs and to add fields and values at will.</p>
 <pre><code>127.0.0.1:6379&gt; REDISQL.EXEC_STATEMENT DB create_namespace foo
 1) DONE
 2) (integer) 1
@@ -238,10 +240,10 @@
 1) 1) &quot;complex&quot;
 </code></pre>
 
-<p>In this specific example we are only showing JSON, but keep in mind that the JSON field can be stores alongside the regular SQL fields as a extra space to hold any kind of data.</p>
-<p>Also please note how this API is quite pleasent to work with, it seems almost native to redis but thanks to redis-module is quite more powerful.</p>
+<p>In this specific example we are only showing JSON, but keep in mind that the JSON field can be stored alongside the regular SQL fields as an extra field to hold any kind of unstructured data.</p>
+<p>Also please note how these APIs are quite pleasant to work with, they seem almost native to redis and thanks to redis-module we have the possibility to simply create more powerful commands. </p>
 <h2 id="implementation">Implementation</h2>
-<p>Now that we know what we are trying to achieve let's procede to the implementation that you will see being quite simple.</p>
+<p>Now that we know what we are trying to achieve let's proceed to the implementation that you will see is quite simple.</p>
 <p>Usually is a good idea to start from the data structure, and in our simple, but powerful, example, we need only a single table:</p>
 <pre><code class="SQL">CREATE TABLE IF NOT EXISTS namespace ( 
     namespace TEXT PRIMARY KEY 
@@ -256,8 +258,8 @@ CREATE TABLE IF NOT EXISTS json_data (
 );
 </code></pre>
 
-<p>We could have done everyting with just <code>json_data</code> and without <code>namespace</code>, but that would force to have namespace that always contains at least a single object and everything would become more complex.</p>
-<p>Now that we have our data structure we can procede with the procedures that I have show you above:</p>
+<p>We could have done everything with just <code>json_data</code> and without <code>namespace</code>, but that would force to have the namespace that always contains at least a single object and everything would become more complex.</p>
+<p>Now that we have our data structure we can proceed with the procedures that I have show you above:</p>
 <pre><code class="SQL">-- create_namespace
 INSERT INTO namespace VALUES(?1);
 
@@ -286,7 +288,7 @@ UPDATE json_data
         data != json_set(data, ?3, json(?4)); -- if no modification, don't change the object
 </code></pre>
 
-<p>In order to actuall create those table here is an example on RediSQL that is more difficult to read but simpler to just copy and paste into the redis-cli.</p>
+<p>In order to actually create those table here is an example on RediSQL that is more difficult to read but simpler to just copy and paste into the redis-cli.</p>
 <pre><code>127.0.0.1:6379&gt; REDISQL.CREATE_DB DB
 OK
 127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;CREATE TABLE IF NOT EXISTS namespace (namespace TEXT PRIMARY KEY);&quot; 
@@ -307,11 +309,14 @@ OK
 OK
 </code></pre>
 
-<p>Of course there are a lot more command in JSON1 API to use and explore, so I will simply <a href="https://www.sqlite.org/json1.html">leave you the reference</a>.</p>
-<p>I also prepare a simple node application which expose this exact same interface via REST API, it is a single, ~500 LOC, file that you can find <a href="https://github.com/RedBeardLab/JaaS/blob/master/index.js">here</a></p>
-<p>Feel free to use the node application as a blue print for your next project.</p>
+<p>Of course, there are a lot more commands in JSON1 API to use and explore, so I will simply <a href="https://www.sqlite.org/json1.html">leave you the reference</a>.</p>
+<p>I also prepare a simple node application which exposes this exact same interface via REST API, it is a single, ~500 LOC, file that you can find <a href="https://github.com/RedBeardLab/JaaS/blob/master/index.js">here</a></p>
+<p>Feel free to use the node application as a blueprint for your next project.</p>
+<h2 id="recap">Recap</h2>
+<p>In this brief tutorial, we have shown how quickly and easily is possible to build a fairly complex JSON store using Redis and RediSQL.</p>
+<p>Of course, similar structures, procedure and ideas can be used inside bigger structures and data table yielding powerful primitives for your application capable of sustain quite reasonable load without incurring in any extra operational cost.</p>
 <h2 id="question">Question?</h2>
-<p>Of course if you have any question on RediSQL either open a public issue or write me, siscia, a private email.</p>
+<p>Of course, if you have any question on RediSQL either open a public issue or write me, siscia, a private email.</p>
 <p>Cheers,</p>
 <p>;)</p></div>
             
