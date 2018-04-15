@@ -19,3 +19,4 @@ pages:
   -
     Blog:
       - 'Analytics': 'blog/analytics.md'
+      - 'JaaS': 'blog/JaaS.md'
