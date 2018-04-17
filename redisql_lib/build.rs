@@ -19,7 +19,6 @@ fn main() {
         .include("src/CDeps/Redis/include")
         .compile("libredismodule.a");
 
-    let build_engine_pro = "1";
 
     cc::Build::new()
         .file("src/CDeps/SQLite/sqlite3.c")
@@ -33,7 +32,6 @@ fn main() {
         .define("SQLITE_ENABLE_FTS4", Some("1"))
         .define("SQLITE_ENABLE_FTS5", Some("1"))
         .define("SQLITE_ENABLE_RTREE", Some("1"))
-        .define("ENGINE_PRO", build_engine_pro)
         .compile("libsqlite3.a");
 
     #[derive(Debug)]
@@ -53,11 +51,17 @@ fn main() {
         }
     }
 
+    let engine_pro = if cfg!(features = "pro") {
+        "-DENGINE_PRO=1"
+    } else {
+        "-DENGINE_PRO=0"
+    };
+
     let bindings =
         bindgen::Builder::default()
             .parse_callbacks(Box::new(SqliteTypeChooser))
             .header("sqlite_dependencies.h")
-            .clang_arg("-DENGINE_PRO=1")
+            .clang_arg(engine_pro)
             .generate()
             .expect("Unable to generate bindings for SQLite");
 
