@@ -25,21 +25,14 @@ use std;
 use std::fmt;
 use std::error;
 
+pub use redis_type as rm;
+
 use redisql_error as err;
 use redisql_error::RediSQLError;
 
 use sqlite::StatementTrait;
 
 use community_statement::MultiStatement;
-
-#[allow(dead_code)]
-#[allow(non_snake_case)]
-#[allow(non_camel_case_types)]
-#[allow(non_upper_case_globals)]
-#[allow(improper_ctypes)]
-pub mod ffi {
-    include!(concat!(env!("OUT_DIR"), "/bindings_redis.rs"));
-}
 
 use sqlite as sql;
 
@@ -243,40 +236,16 @@ impl Loop {
     }
 }
 
-pub struct RMString {
-    pub ptr: *mut ffi::RedisModuleString,
-    ctx: *mut ffi::RedisModuleCtx,
-}
 
-impl RMString {
-    pub fn new(ctx: *mut ffi::RedisModuleCtx, s: String) -> RMString {
-        let l = s.len();
-        let cs = CString::new(s).unwrap();
-        let ptr = unsafe {
-            ffi::RedisModule_CreateString.unwrap()(ctx,
-                                                   cs.as_ptr(),
-                                                   l)
-        };
-        RMString { ptr, ctx }
-    }
-}
-
-impl Drop for RMString {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::RedisModule_FreeString.unwrap()(self.ctx, self.ptr);
-        }
-    }
-}
 /*
-pub fn create_rm_string(ctx: *mut ffi::RedisModuleCtx,
+pub fn create_rm_string(ctx: *mut rm::ffi::RedisModuleCtx,
                         s: String)
-                        -> *mut ffi::RedisModuleString {
+                        -> *mut rm::ffi::RedisModuleString {
     let l = s.len();
     let cs = CString::new(s).unwrap();
 
     unsafe {
-        ffi::RedisModule_CreateString.unwrap()(ctx, cs.as_ptr(), l)
+        rm::ffi::RedisModule_CreateString.unwrap()(ctx, cs.as_ptr(), l)
     }
 }
 */
@@ -284,7 +253,7 @@ pub fn create_rm_string(ctx: *mut ffi::RedisModuleCtx,
 
 #[allow(dead_code)]
 pub struct Context {
-    ctx: *mut ffi::RedisModuleCtx,
+    ctx: *mut rm::ffi::RedisModuleCtx,
 }
 
 impl Drop for Context {
@@ -294,34 +263,33 @@ impl Drop for Context {
 }
 
 pub trait RedisReply {
-    fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32;
+    fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32;
 }
 
 impl RedisReply for sql::Entity {
-    fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
+    fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
         unsafe {
             match *self {
                 sql::Entity::Integer { int } => {
-                    ffi::RedisModule_ReplyWithLongLong.unwrap()(ctx,
-                                                                int as
-                                                                i64)
+                    rm::ffi::RedisModule_ReplyWithLongLong
+                        .unwrap()(ctx, int as i64)
                 }
                 sql::Entity::Float { float } => {
-                    ffi::RedisModule_ReplyWithDouble.unwrap()(ctx,
-                                                              float)
+                    rm::ffi::RedisModule_ReplyWithDouble
+                        .unwrap()(ctx, float)
                 }
                 sql::Entity::Text { ref text } => {
                     let text_c = CString::new(text.clone()).unwrap();
-                    ffi::RedisModule_ReplyWithStringBuffer
+                    rm::ffi::RedisModule_ReplyWithStringBuffer
                         .unwrap()(ctx, text_c.as_ptr(), text.len())
                 }
                 sql::Entity::Blob { ref blob } => {
                     let blob_c = CString::new(blob.clone()).unwrap();
-                    ffi::RedisModule_ReplyWithStringBuffer
+                    rm::ffi::RedisModule_ReplyWithStringBuffer
                         .unwrap()(ctx, blob_c.as_ptr(), blob.len())
                 }
                 sql::Entity::Null => {
-                    ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
+                    rm::ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
                 }
                 sql::Entity::OK { to_replicate } => {
                     QueryResult::OK { to_replicate: to_replicate }
@@ -342,90 +310,90 @@ impl RedisReply for sql::Entity {
     }
 }
 
-fn reply_with_string(ctx: *mut ffi::RedisModuleCtx,
+fn reply_with_string(ctx: *mut rm::ffi::RedisModuleCtx,
                      s: String)
                      -> i32 {
     let len = s.len();
     let s = CString::new(s).unwrap();
     unsafe {
-        ffi::RedisModule_ReplyWithStringBuffer.unwrap()(ctx,
-                                                        s.as_ptr(),
-                                                        len)
+        rm::ffi::RedisModule_ReplyWithStringBuffer
+            .unwrap()(ctx, s.as_ptr(), len)
     }
 }
 
-fn reply_with_simple_string(ctx: *mut ffi::RedisModuleCtx,
+fn reply_with_simple_string(ctx: *mut rm::ffi::RedisModuleCtx,
                             s: String)
                             -> i32 {
     let s = CString::new(s).unwrap();
     unsafe {
-        ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx,
-                                                        s.as_ptr())
+        rm::ffi::RedisModule_ReplyWithSimpleString
+            .unwrap()(ctx, s.as_ptr())
     }
 }
 
-fn reply_with_ok(ctx: *mut ffi::RedisModuleCtx) -> i32 {
+fn reply_with_ok(ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
     reply_with_simple_string(ctx, String::from("OK"))
 }
 
-fn reply_with_done(ctx: *mut ffi::RedisModuleCtx,
+fn reply_with_done(ctx: *mut rm::ffi::RedisModuleCtx,
                    modified_rows: i32)
                    -> i32 {
     unsafe {
-        ffi::RedisModule_ReplyWithArray.unwrap()(ctx, 2);
+        rm::ffi::RedisModule_ReplyWithArray.unwrap()(ctx, 2);
     }
     reply_with_simple_string(ctx, String::from("DONE"));
     unsafe {
-        ffi::RedisModule_ReplyWithLongLong.unwrap()(ctx,
-                                                    modified_rows as
-                                                    i64);
+        rm::ffi::RedisModule_ReplyWithLongLong
+            .unwrap()(ctx, modified_rows as i64);
     }
-    ffi::REDISMODULE_OK
+    rm::ffi::REDISMODULE_OK
 }
 
-fn reply_with_array(ctx: *mut ffi::RedisModuleCtx,
+fn reply_with_array(ctx: *mut rm::ffi::RedisModuleCtx,
                     array: Vec<sql::Row>)
                     -> i32 {
     let len = array.len() as c_long;
     unsafe {
-        ffi::RedisModule_ReplyWithArray.unwrap()(ctx, len);
+        rm::ffi::RedisModule_ReplyWithArray.unwrap()(ctx, len);
     }
     for row in array {
         unsafe {
-            ffi::RedisModule_ReplyWithArray.unwrap()(ctx,
-                                                     row.len() as
-                                                     c_long);
+            rm::ffi::RedisModule_ReplyWithArray.unwrap()(ctx,
+                                                         row.len() as
+                                                         c_long);
         }
         for entity in row {
             entity.reply(ctx);
         }
     }
-    ffi::REDISMODULE_OK
+    rm::ffi::REDISMODULE_OK
 }
 
 
 impl RedisReply for sql::SQLite3Error {
-    fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
+    fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
         let error = format!("{}", self);
         reply_with_error(ctx, error)
     }
 }
 
 impl RedisReply for RediSQLError {
-    fn reply(&self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
+    fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
         let error = format!("{}", self);
         reply_with_error(ctx, error)
     }
 }
 
-fn reply_with_error(ctx: *mut ffi::RedisModuleCtx, s: String) -> i32 {
+fn reply_with_error(ctx: *mut rm::ffi::RedisModuleCtx,
+                    s: String)
+                    -> i32 {
     let s = CString::new(s).unwrap();
     unsafe {
-        ffi::RedisModule_ReplyWithError.unwrap()(ctx, s.as_ptr())
+        rm::ffi::RedisModule_ReplyWithError.unwrap()(ctx, s.as_ptr())
     }
 }
 
-fn parse_args(argv: *mut *mut ffi::RedisModuleString,
+fn parse_args(argv: *mut *mut rm::ffi::RedisModuleString,
               argc: i32)
               -> Result<Vec<String>, string::FromUtf8Error> {
     mem::forget(argv);
@@ -440,8 +408,8 @@ fn parse_args(argv: *mut *mut ffi::RedisModuleString,
     Ok(args)
 }
 
-pub fn create_argument(ctx: *mut ffi::RedisModuleCtx,
-                       argv: *mut *mut ffi::RedisModuleString,
+pub fn create_argument(ctx: *mut rm::ffi::RedisModuleCtx,
+                       argv: *mut *mut rm::ffi::RedisModuleString,
                        argc: i32)
                        -> (Context, Vec<String>) {
     mem::forget(argv);
@@ -454,13 +422,13 @@ pub fn create_argument(ctx: *mut ffi::RedisModuleCtx,
 
 #[repr(C)]
 pub struct RedisKey {
-    pub key: *mut ffi::RedisModuleKey,
+    pub key: *mut rm::ffi::RedisModuleKey,
 }
 
 impl Drop for RedisKey {
     fn drop(&mut self) {
         unsafe {
-            ffi::RedisModule_CloseKey.unwrap()(self.key);
+            rm::ffi::RedisModule_CloseKey.unwrap()(self.key);
         }
     }
 }
@@ -502,7 +470,7 @@ pub enum Command {
 }
 
 pub struct BlockedClient {
-    pub client: *mut ffi::RedisModuleBlockedClient,
+    pub client: *mut rm::ffi::RedisModuleBlockedClient,
 }
 
 unsafe impl Send for BlockedClient {}
@@ -520,7 +488,7 @@ pub enum QueryResult {
 }
 
 impl QueryResult {
-    pub fn reply(self, ctx: *mut ffi::RedisModuleCtx) -> i32 {
+    pub fn reply(self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
         match self {
             QueryResult::OK { .. } => reply_with_ok(ctx),
             QueryResult::DONE { modified_rows, .. } => {
@@ -650,7 +618,7 @@ fn restore_previous_statements<'a, L: LoopData + Clone>(loopdata: L)
 fn return_value(client: BlockedClient,
                 result: Result<QueryResult, err::RediSQLError>) {
     unsafe {
-        ffi::RedisModule_UnblockClient
+        rm::ffi::RedisModule_UnblockClient
             .unwrap()(client.client,
                       Box::into_raw(Box::new(result)) as
                       *mut std::os::raw::c_void);
@@ -895,9 +863,10 @@ fn get_statement_metadata
     Ok(cursor_to_query_result(cursor))
 }
 
-pub fn string_ptr_len(str: *mut ffi::RedisModuleString) -> String {
+pub fn string_ptr_len(str: *mut rm::ffi::RedisModuleString)
+                      -> String {
     unsafe {
-        CStr::from_ptr(ffi::RedisModule_StringPtrLen
+        CStr::from_ptr(rm::ffi::RedisModule_StringPtrLen
                            .unwrap()(str, std::ptr::null_mut()))
                 .to_string_lossy()
                 .into_owned()
@@ -930,7 +899,7 @@ pub fn create_backup(conn: &sql::RawConnection,
 }
 
 pub fn write_file_to_rdb(f: File,
-                         rdb: *mut ffi::RedisModuleIO)
+                         rdb: *mut rm::ffi::RedisModuleIO)
                          -> Result<(), std::io::Error> {
 
     let block_size = 1024 * 4 as i64;
@@ -938,7 +907,7 @@ pub fn write_file_to_rdb(f: File,
     let blocks = lenght / block_size as u64;
 
     unsafe {
-        ffi::RedisModule_SaveSigned.unwrap()(rdb, blocks as i64);
+        rm::ffi::RedisModule_SaveSigned.unwrap()(rdb, blocks as i64);
     }
 
     let to_write: Vec<u8> = vec![0; block_size as usize];
@@ -950,7 +919,7 @@ pub fn write_file_to_rdb(f: File,
                 return Ok(());
             }
             Ok(n) => unsafe {
-                ffi::RedisModule_SaveStringBuffer
+                rm::ffi::RedisModule_SaveStringBuffer
                     .unwrap()(rdb,
                               tw.as_slice().as_ptr() as *const c_char,
                               n)
@@ -971,24 +940,25 @@ struct SafeRedisModuleString {
 impl Drop for SafeRedisModuleString {
     fn drop(&mut self) {
         unsafe {
-            ffi::RedisModule_Free.unwrap()(self.ptr as
-                                           *mut std::os::raw::c_void)
+            rm::ffi::RedisModule_Free
+                .unwrap()(self.ptr as *mut std::os::raw::c_void)
         }
     }
 }
 
 pub fn write_rdb_to_file(f: &mut File,
-                         rdb: *mut ffi::RedisModuleIO)
+                         rdb: *mut rm::ffi::RedisModuleIO)
                          -> Result<(), std::io::Error> {
 
-    let blocks =
-        unsafe { ffi::RedisModule_LoadSigned.unwrap()(rdb) as i64 };
+    let blocks = unsafe {
+        rm::ffi::RedisModule_LoadSigned.unwrap()(rdb) as i64
+    };
 
     for _ in 0..blocks {
         let mut dimension: libc::size_t = 0;
         let c_str_ptr = SafeRedisModuleString {
             ptr: unsafe {
-                ffi::RedisModule_LoadStringBuffer
+                rm::ffi::RedisModule_LoadStringBuffer
                     .unwrap()(rdb, &mut dimension)
             },
         };
@@ -1011,26 +981,28 @@ pub fn write_rdb_to_file(f: &mut File,
     Ok(())
 }
 
-pub fn get_dbkey_from_name(ctx: *mut ffi::RedisModuleCtx,
+pub fn get_dbkey_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
                            name: String)
                            -> Result<Box<DBKey>, i32> {
-    let key_name = RMString::new(ctx, name);
+    let key_name = rm::RMString::new(ctx, name);
     let key = unsafe {
-        ffi::Export_RedisModule_OpenKey(
+        rm::ffi::Export_RedisModule_OpenKey(
             ctx,
             key_name.ptr,
-            ffi::REDISMODULE_WRITE,
+            rm::ffi::REDISMODULE_WRITE,
         )
     };
     let safe_key = RedisKey { key: key };
-    let key_type =
-        unsafe { ffi::RedisModule_KeyType.unwrap()(safe_key.key) };
+    let key_type = unsafe {
+        rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
+    };
     if unsafe {
-           ffi::DBType ==
-           ffi::RedisModule_ModuleTypeGetType.unwrap()(safe_key.key)
+           rm::ffi::DBType ==
+           rm::ffi::RedisModule_ModuleTypeGetType
+               .unwrap()(safe_key.key)
        } {
         let db_ptr = unsafe {
-            ffi::RedisModule_ModuleTypeGetValue
+            rm::ffi::RedisModule_ModuleTypeGetValue
                 .unwrap()(safe_key.key) as *mut DBKey
         };
         let db: Box<DBKey> = unsafe { Box::from_raw(db_ptr) };
@@ -1040,7 +1012,7 @@ pub fn get_dbkey_from_name(ctx: *mut ffi::RedisModuleCtx,
     }
 }
 
-pub fn get_db_channel_from_name(ctx: *mut ffi::RedisModuleCtx,
+pub fn get_db_channel_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
                                 name: String)
                                 -> Result<Sender<Command>, i32> {
     let db: Box<DBKey> = get_dbkey_from_name(ctx, name)?;
@@ -1049,24 +1021,24 @@ pub fn get_db_channel_from_name(ctx: *mut ffi::RedisModuleCtx,
     Ok(channel)
 }
 
-pub fn reply_with_error_from_key_type(ctx: *mut ffi::RedisModuleCtx,
+pub fn reply_with_error_from_key_type(ctx: *mut rm::ffi::RedisModuleCtx,
                                       key_type: i32)
-                                      -> i32 {
+-> i32{
     match key_type {
-        ffi::REDISMODULE_KEYTYPE_EMPTY => {
+        rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
             let error = CString::new("ERR - Error the key is empty")
                 .unwrap();
             unsafe {
-                ffi::RedisModule_ReplyWithError
+                rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
         _ => {
             let error = CStr::from_bytes_with_nul(
-                ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
+                rm::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
             ).unwrap();
             unsafe {
-                ffi::RedisModule_ReplyWithError
+                rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
@@ -1107,27 +1079,27 @@ fn remove_statement(db: &Arc<Mutex<sql::RawConnection>>,
         .or_else(|e| Err(err::RediSQLError::from(e)))
 }
 
-pub fn replicate_verbatim(ctx: *mut ffi::RedisModuleCtx) {
-    unsafe { ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx) };
+pub fn replicate_verbatim(ctx: *mut rm::ffi::RedisModuleCtx) {
+    unsafe { rm::ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx) };
 }
 
-pub fn replicate(_ctx: *mut ffi::RedisModuleCtx,
+pub fn replicate(_ctx: *mut rm::ffi::RedisModuleCtx,
                  _command: String,
-                 _argv: *mut *mut ffi::RedisModuleString,
+                 _argv: *mut *mut rm::ffi::RedisModuleString,
                  _argc: std::os::raw::c_int) {
 }
 
 pub fn register_function(
-    ctx: *mut ffi::RedisModuleCtx,
+    ctx: *mut rm::ffi::RedisModuleCtx,
     name: String,
     flags: String,
-    f: extern "C" fn(*mut ffi::RedisModuleCtx,
-                     *mut *mut ffi::RedisModuleString,
+    f: extern "C" fn(*mut rm::ffi::RedisModuleCtx,
+                     *mut *mut rm::ffi::RedisModuleString,
                      ::std::os::raw::c_int)
                      -> i32,
 ) -> Result<(), i32>{
 
-    let create_db: ffi::RedisModuleCmdFunc = Some(f);
+    let create_db: rm::ffi::RedisModuleCmdFunc = Some(f);
 
     let command_c_name = CString::new(name).unwrap();
     let command_ptr_name = command_c_name.as_ptr();
@@ -1136,24 +1108,25 @@ pub fn register_function(
     let flag_ptr_name = flag_c_name.as_ptr();
 
     if unsafe {
-           ffi::RedisModule_CreateCommand.unwrap()(ctx,
-                                                   command_ptr_name,
-                                                   create_db,
-                                                   flag_ptr_name,
-                                                   0,
-                                                   0,
-                                                   0)
-       } == ffi::REDISMODULE_ERR {
-        return Err(ffi::REDISMODULE_ERR);
+           rm::ffi::RedisModule_CreateCommand
+               .unwrap()(ctx,
+                         command_ptr_name,
+                         create_db,
+                         flag_ptr_name,
+                         0,
+                         0,
+                         0)
+       } == rm::ffi::REDISMODULE_ERR {
+        return Err(rm::ffi::REDISMODULE_ERR);
     }
     Ok(())
 }
 
 pub fn register_write_function(
-    ctx: *mut ffi::RedisModuleCtx,
+    ctx: *mut rm::ffi::RedisModuleCtx,
     name: String,
-    f: extern "C" fn(*mut ffi::RedisModuleCtx,
-                     *mut *mut ffi::RedisModuleString,
+    f: extern "C" fn(*mut rm::ffi::RedisModuleCtx,
+                     *mut *mut rm::ffi::RedisModuleString,
                      ::std::os::raw::c_int)
                      -> i32,
 ) -> Result<(), i32>{

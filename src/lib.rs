@@ -36,12 +36,12 @@ use engine_pro::replicate;
 #[cfg(not(feature = "pro"))]
 use redisql_lib::redis::replicate;
 
-extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
-                         _argv: *mut *mut r::ffi::RedisModuleString,
+extern "C" fn reply_exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
+                         _argv: *mut *mut r::rm::ffi::RedisModuleString,
                          _argc: ::std::os::raw::c_int)
-                         -> i32 {
+-> i32{
     let result = unsafe {
-        r::ffi::RedisModule_GetBlockedClientPrivateData
+        r::rm::ffi::RedisModule_GetBlockedClientPrivateData
             .unwrap()(ctx) as
         *mut Result<r::QueryResult, sql::SQLite3Error>
     };
@@ -54,12 +54,12 @@ extern "C" fn reply_exec(ctx: *mut r::ffi::RedisModuleCtx,
 }
 
 extern "C" fn reply_exec_statement(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    _argv: *mut *mut r::ffi::RedisModuleString,
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    _argv: *mut *mut r::rm::ffi::RedisModuleString,
     _argc: ::std::os::raw::c_int,
 ) -> i32{
     let result = unsafe {
-        r::ffi::RedisModule_GetBlockedClientPrivateData
+        r::rm::ffi::RedisModule_GetBlockedClientPrivateData
             .unwrap()(ctx) as
         *mut Result<r::QueryResult, sql::SQLite3Error>
     };
@@ -72,12 +72,12 @@ extern "C" fn reply_exec_statement(
 }
 
 extern "C" fn reply_create_statement(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    _argv: *mut *mut r::ffi::RedisModuleString,
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    _argv: *mut *mut r::rm::ffi::RedisModuleString,
     _argc: ::std::os::raw::c_int,
 ) -> i32{
     let result = unsafe {
-        r::ffi::RedisModule_GetBlockedClientPrivateData
+        r::rm::ffi::RedisModule_GetBlockedClientPrivateData
             .unwrap()(ctx) as
         *mut Result<r::QueryResult, sql::SQLite3Error>
     };
@@ -90,18 +90,18 @@ extern "C" fn reply_create_statement(
 }
 
 
-extern "C" fn timeout(ctx: *mut r::ffi::RedisModuleCtx,
-                      _argv: *mut *mut r::ffi::RedisModuleString,
+extern "C" fn timeout(ctx: *mut r::rm::ffi::RedisModuleCtx,
+                      _argv: *mut *mut r::rm::ffi::RedisModuleString,
                       _argc: ::std::os::raw::c_int)
-                      -> i32 {
-    unsafe { r::ffi::RedisModule_ReplyWithNull.unwrap()(ctx) }
+-> i32{
+    unsafe { r::rm::ffi::RedisModule_ReplyWithNull.unwrap()(ctx) }
 }
 
 
 extern "C" fn free_privdata(_arg: *mut ::std::os::raw::c_void) {}
 
 fn get_db_and_loopdata_from_name
-    (ctx: *mut r::ffi::RedisModuleCtx,
+    (ctx: *mut r::rm::ffi::RedisModuleCtx,
      name: String)
      -> Result<(Sender<r::Command>, Loop), i32> {
     let db: Box<r::DBKey> = get_dbkey_from_name(ctx, name)?;
@@ -114,8 +114,8 @@ fn get_db_and_loopdata_from_name
 
 #[allow(non_snake_case)]
 extern "C" fn ExecStatement(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    argv: *mut *mut r::ffi::RedisModuleString,
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
@@ -126,7 +126,7 @@ extern "C" fn ExecStatement(
                                       needs at least 3")
                     .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError
+                r::rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
@@ -141,7 +141,7 @@ extern "C" fn ExecStatement(
                     let blocked_client =
                         r::BlockedClient {
                             client: unsafe {
-                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                r::rm::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_exec_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
@@ -158,9 +158,9 @@ extern "C" fn ExecStatement(
                     match ch.send(cmd) {
                         Ok(()) => {
                             replicate(ctx, String::from("REDISQL.EXEC_STATEMENT.NOW"), argv, argc);
-                            r::ffi::REDISMODULE_OK
+                            r::rm::ffi::REDISMODULE_OK
                         }
-                        Err(_) => r::ffi::REDISMODULE_OK,
+                        Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
             }
@@ -170,8 +170,8 @@ extern "C" fn ExecStatement(
 
 #[allow(non_snake_case)]
 extern "C" fn QueryStatement(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    argv: *mut *mut r::ffi::RedisModuleString,
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
@@ -182,7 +182,7 @@ extern "C" fn QueryStatement(
                                       needs at least 3")
                     .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError
+                r::rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
@@ -197,7 +197,7 @@ extern "C" fn QueryStatement(
                     let blocked_client =
                         r::BlockedClient {
                             client: unsafe {
-                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                r::rm::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_exec_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
@@ -212,8 +212,8 @@ extern "C" fn QueryStatement(
                     };
 
                     match ch.send(cmd) {
-                        Ok(()) => r::ffi::REDISMODULE_OK,
-                        Err(_) => r::ffi::REDISMODULE_OK,
+                        Ok(()) => r::rm::ffi::REDISMODULE_OK,
+                        Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
             }
@@ -222,8 +222,8 @@ extern "C" fn QueryStatement(
 }
 
 #[allow(non_snake_case)]
-extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
-                   argv: *mut *mut r::ffi::RedisModuleString,
+extern "C" fn Exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
+                   argv: *mut *mut r::rm::ffi::RedisModuleString,
                    argc: ::std::os::raw::c_int)
                    -> i32 {
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
@@ -238,7 +238,7 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
                     let blocked_client = r::BlockedClient {
                         client:
                             unsafe {
-                                r::ffi::RedisModule_BlockClient
+                                r::rm::ffi::RedisModule_BlockClient
                                     .unwrap()(ctx,
                                               Some(reply_exec),
                                               Some(timeout),
@@ -254,9 +254,9 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
                     match ch.send(cmd) {
                         Ok(()) => {
                             replicate(ctx, String::from("REDISQL.EXEC.NOW"), argv, argc);
-                            r::ffi::REDISMODULE_OK
+                            r::rm::ffi::REDISMODULE_OK
                         }
-                        Err(_) => r::ffi::REDISMODULE_OK,
+                        Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
             }
@@ -267,7 +267,7 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
                                              n))
                     .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError
+                r::rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
@@ -276,8 +276,8 @@ extern "C" fn Exec(ctx: *mut r::ffi::RedisModuleCtx,
 
 
 #[allow(non_snake_case)]
-extern "C" fn Query(ctx: *mut r::ffi::RedisModuleCtx,
-                    argv: *mut *mut r::ffi::RedisModuleString,
+extern "C" fn Query(ctx: *mut r::rm::ffi::RedisModuleCtx,
+                    argv: *mut *mut r::rm::ffi::RedisModuleString,
                     argc: ::std::os::raw::c_int)
                     -> i32 {
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
@@ -292,7 +292,7 @@ extern "C" fn Query(ctx: *mut r::ffi::RedisModuleCtx,
                     let blocked_client = r::BlockedClient {
                         client:
                             unsafe {
-                                r::ffi::RedisModule_BlockClient
+                                r::rm::ffi::RedisModule_BlockClient
                                     .unwrap()(ctx,
                                               Some(reply_exec),
                                               Some(timeout),
@@ -307,9 +307,9 @@ extern "C" fn Query(ctx: *mut r::ffi::RedisModuleCtx,
                     };
                     match ch.send(cmd) {
                         Ok(()) => {
-                            r::ffi::REDISMODULE_OK
+                            r::rm::ffi::REDISMODULE_OK
                         }
-                        Err(_) => r::ffi::REDISMODULE_OK,
+                        Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
             }
@@ -320,7 +320,7 @@ extern "C" fn Query(ctx: *mut r::ffi::RedisModuleCtx,
                                              n))
                     .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError
+                r::rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
@@ -331,8 +331,8 @@ extern "C" fn Query(ctx: *mut r::ffi::RedisModuleCtx,
 
 #[allow(non_snake_case)]
 extern "C" fn CreateStatement(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    argv: *mut *mut r::ffi::RedisModuleString,
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
@@ -347,7 +347,7 @@ extern "C" fn CreateStatement(
                     let blocked_client =
                         r::BlockedClient {
                             client: unsafe {
-                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                r::rm::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_create_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
@@ -363,9 +363,9 @@ extern "C" fn CreateStatement(
                     match ch.send(cmd) {
                         Ok(()) => {
                             replicate(ctx, String::from("REDISQL.CREATE_STATEMENT.NOW"), argv, argc);
-                            r::ffi::REDISMODULE_OK
+                            r::rm::ffi::REDISMODULE_OK
                         }
-                        Err(_) => r::ffi::REDISMODULE_OK,
+                        Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
 
                 }
@@ -377,7 +377,7 @@ extern "C" fn CreateStatement(
                                       accepts 4")
                     .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError
+                r::rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
@@ -388,8 +388,8 @@ extern "C" fn CreateStatement(
 
 #[allow(non_snake_case)]
 extern "C" fn UpdateStatement(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    argv: *mut *mut r::ffi::RedisModuleString,
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
@@ -404,7 +404,7 @@ extern "C" fn UpdateStatement(
                     let blocked_client =
                         r::BlockedClient {
                             client: unsafe {
-                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                r::rm::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_create_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
@@ -421,9 +421,9 @@ extern "C" fn UpdateStatement(
                     match ch.send(cmd) {
                         Ok(()) => {
                             replicate(ctx, String::from("REDISQL.UPDATE_STATEMENT.NOW"), argv, argc);
-                            r::ffi::REDISMODULE_OK
+                            r::rm::ffi::REDISMODULE_OK
                         }
-                        Err(_) => r::ffi::REDISMODULE_OK,
+                        Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
 
                 }
@@ -435,7 +435,7 @@ extern "C" fn UpdateStatement(
                                       accepts 4")
                     .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError
+                r::rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         } 
@@ -444,8 +444,8 @@ extern "C" fn UpdateStatement(
 
 #[allow(non_snake_case)]
 extern "C" fn DeleteStatement(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    argv: *mut *mut r::ffi::RedisModuleString,
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
@@ -458,7 +458,7 @@ extern "C" fn DeleteStatement(
                         r::BlockedClient {
                             client: unsafe {
 
-                                r::ffi::RedisModule_BlockClient.unwrap()(ctx,
+                                r::rm::ffi::RedisModule_BlockClient.unwrap()(ctx,
                                                               Some(reply_create_statement),
                                                               Some(timeout),
                                                               Some(free_privdata),
@@ -472,9 +472,9 @@ extern "C" fn DeleteStatement(
                     match ch.send(cmd) {
                         Ok(()) => {
                             replicate(ctx, String::from("REDISQL.DELETE_STATEMENT.NOW"), argv, argc);
-                            r::ffi::REDISMODULE_OK
+                            r::rm::ffi::REDISMODULE_OK
                         }
-                        Err(_) => r::ffi::REDISMODULE_OK,
+                        Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
                 Err(key_type) => {
@@ -487,7 +487,7 @@ extern "C" fn DeleteStatement(
                                       accepts 3")
                     .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError
+                r::rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
@@ -496,31 +496,31 @@ extern "C" fn DeleteStatement(
 
 
 #[allow(non_snake_case)]
-extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
-                       argv: *mut *mut r::ffi::RedisModuleString,
+extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
+                       argv: *mut *mut r::rm::ffi::RedisModuleString,
                        argc: ::std::os::raw::c_int)
-                       -> i32 {
+-> i32{
 
 
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
 
     match argvector.len() {
         2 | 3 => {
-            let key_name = r::RMString::new(ctx,
-                                            argvector[1].clone());
+            let key_name = r::rm::RMString::new(ctx,
+                                                argvector[1].clone());
             let key = unsafe {
-                r::ffi::Export_RedisModule_OpenKey(
+                r::rm::ffi::Export_RedisModule_OpenKey(
                     ctx,
                     key_name.ptr,
-                    r::ffi::REDISMODULE_WRITE,
+                    r::rm::ffi::REDISMODULE_WRITE,
                 )
             };
             let safe_key = r::RedisKey { key: key };
             match unsafe {
-                      r::ffi::RedisModule_KeyType
+                      r::rm::ffi::RedisModule_KeyType
                           .unwrap()(safe_key.key)
                   } {
-                r::ffi::REDISMODULE_KEYTYPE_EMPTY => {
+                r::rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
                     let (path, in_memory) = match argvector.len() {
                         3 => {
                             (String::from(argvector[2].clone()),
@@ -551,22 +551,22 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                     });
                                     let ptr = Box::into_raw(Box::new(db));
                                     let type_set = unsafe {
-                                        r::ffi::RedisModule_ModuleTypeSetValue.unwrap()(safe_key.key, r::ffi::DBType, ptr as *mut std::os::raw::c_void)
+                                        r::rm::ffi::RedisModule_ModuleTypeSetValue.unwrap()(safe_key.key, r::rm::ffi::DBType, ptr as *mut std::os::raw::c_void)
                                     };
                                         
                                     match type_set {
-                                        r::ffi::REDISMODULE_OK => {
+                                        r::rm::ffi::REDISMODULE_OK => {
                                             let ok = r::QueryResult::OK {to_replicate: true};
                                             replicate_verbatim(ctx);
                                             ok.reply(ctx)
                                         }
-                                        r::ffi::REDISMODULE_ERR => {
+                                        r::rm::ffi::REDISMODULE_ERR => {
                                             let err = CString::new("ERR - Error in saving the database inside Redis").unwrap();
-                                            unsafe { r::ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr()) }
+                                            unsafe { r::rm::ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr()) }
                                         }
                                         _ => {
                                             let err = CString::new("ERR - Error unknow").unwrap();
-                                            unsafe { r::ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr()) }
+                                            unsafe { r::rm::ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr()) }
                                         }
                                     }
                                 }
@@ -578,17 +578,17 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                                       memory databade")
                                 .unwrap();
                             unsafe {
-                                r::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
+                                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(ctx, error.as_ptr())
                             }
                         }
                     }
                 }
                 _ => {
                     let error = CStr::from_bytes_with_nul(
-                        r::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
+                        r::rm::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
                     ).unwrap();
                     unsafe {
-                        r::ffi::RedisModule_ReplyWithError
+                        r::rm::ffi::RedisModule_ReplyWithError
                             .unwrap()(ctx, error.as_ptr())
                     }
                 }
@@ -599,7 +599,7 @@ extern "C" fn CreateDB(ctx: *mut r::ffi::RedisModuleCtx,
                                       accepts 2 or 3")
                     .unwrap();
             unsafe {
-                r::ffi::RedisModule_ReplyWithError
+                r::rm::ffi::RedisModule_ReplyWithError
                     .unwrap()(ctx, error.as_ptr())
             }
         }
@@ -618,7 +618,7 @@ unsafe extern "C" fn free_db(db_ptr: *mut ::std::os::raw::c_void) {
 
 
 
-unsafe extern "C" fn rdb_save(rdb: *mut r::ffi::RedisModuleIO,
+unsafe extern "C" fn rdb_save(rdb: *mut r::rm::ffi::RedisModuleIO,
                               value: *mut std::os::raw::c_void) {
 
     let db: *mut r::DBKey =
@@ -658,7 +658,7 @@ unsafe extern "C" fn rdb_save(rdb: *mut r::ffi::RedisModuleIO,
     }
 }
 
-unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
+unsafe extern "C" fn rdb_load(rdb: *mut r::rm::ffi::RedisModuleIO,
                               _encoding_version: i32)
                               -> *mut std::os::raw::c_void {
 
@@ -719,8 +719,8 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::ffi::RedisModuleIO,
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn RedisModule_OnLoad(
-    ctx: *mut r::ffi::RedisModuleCtx,
-    _argv: *mut *mut r::ffi::RedisModuleString,
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    _argv: *mut *mut r::rm::ffi::RedisModuleString,
     _argc: i32,
 ) -> i32{
 
@@ -736,7 +736,7 @@ pub extern "C" fn RedisModule_OnLoad(
     let ptr_data_type_name = c_data_type_name.as_ptr();
 
     #[cfg(feature = "pro")]
-    let mut types = r::ffi::RedisModuleTypeMethods {
+    let mut types = r::rm::ffi::RedisModuleTypeMethods {
         version: 1,
         rdb_load: Some(rdb_load),
         rdb_save: Some(rdb_save),
@@ -747,7 +747,7 @@ pub extern "C" fn RedisModule_OnLoad(
     };
 
     #[cfg(not(feature = "pro"))]
-    let mut types = r::ffi::RedisModuleTypeMethods {
+    let mut types = r::rm::ffi::RedisModuleTypeMethods {
         version: 1,
         rdb_load: Some(rdb_load),
         rdb_save: Some(rdb_save),
@@ -760,26 +760,26 @@ pub extern "C" fn RedisModule_OnLoad(
     let module_c_name = CString::new("rediSQL").unwrap();
     let module_ptr_name = module_c_name.as_ptr();
     if unsafe {
-        r::ffi::Export_RedisModule_Init(
+        r::rm::ffi::Export_RedisModule_Init(
             ctx,
             module_ptr_name,
             1,
-            r::ffi::REDISMODULE_APIVER_1,
+            r::rm::ffi::REDISMODULE_APIVER_1,
         )
-    } == r::ffi::REDISMODULE_ERR
+    } == r::rm::ffi::REDISMODULE_ERR
     {
-        return r::ffi::REDISMODULE_ERR;
+        return r::rm::ffi::REDISMODULE_ERR;
     }
 
 
     unsafe {
-        r::ffi::DBType = r::ffi::RedisModule_CreateDataType
+        r::rm::ffi::DBType = r::rm::ffi::RedisModule_CreateDataType
             .unwrap()(ctx, ptr_data_type_name, 1, &mut types);
     }
 
 
-    if unsafe { r::ffi::DBType } == std::ptr::null_mut() {
-        return r::ffi::REDISMODULE_ERR;
+    if unsafe { r::rm::ffi::DBType } == std::ptr::null_mut() {
+        return r::rm::ffi::REDISMODULE_ERR;
     }
 
     match register_write_function(ctx,
@@ -847,5 +847,5 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
-    r::ffi::REDISMODULE_OK
+    r::rm::ffi::REDISMODULE_OK
 }
