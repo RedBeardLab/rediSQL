@@ -17,6 +17,8 @@ use uuid::Uuid;
 
 extern crate redisql_lib;
 
+use redisql_lib::redis_type::Context;
+
 use redisql_lib::sqlite as sql;
 
 use redisql_lib::redis as r;
@@ -506,8 +508,7 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
 
     match argvector.len() {
         2 | 3 => {
-            let key_name = r::rm::RMString::new(ctx,
-                                                argvector[1].clone());
+            let key_name = r::rm::RMString::new(ctx, &argvector[1]);
             let key = unsafe {
                 r::rm::ffi::Export_RedisModule_OpenKey(
                     ctx,
@@ -724,6 +725,8 @@ pub extern "C" fn RedisModule_OnLoad(
     _argc: i32,
 ) -> i32{
 
+    let ctx = Context::new(ctx);
+
     sql::disable_global_memory_statistics();
 
     LogBuilder::new()
@@ -761,7 +764,7 @@ pub extern "C" fn RedisModule_OnLoad(
     let module_ptr_name = module_c_name.as_ptr();
     if unsafe {
         r::rm::ffi::Export_RedisModule_Init(
-            ctx,
+            ctx.as_ptr(),
             module_ptr_name,
             1,
             r::rm::ffi::REDISMODULE_APIVER_1,
@@ -774,7 +777,10 @@ pub extern "C" fn RedisModule_OnLoad(
 
     unsafe {
         r::rm::ffi::DBType = r::rm::ffi::RedisModule_CreateDataType
-            .unwrap()(ctx, ptr_data_type_name, 1, &mut types);
+            .unwrap()(ctx.as_ptr(),
+                              ptr_data_type_name,
+                              1,
+                              &mut types);
     }
 
 

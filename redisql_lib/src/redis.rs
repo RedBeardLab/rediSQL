@@ -250,18 +250,6 @@ pub fn create_rm_string(ctx: *mut rm::ffi::RedisModuleCtx,
 }
 */
 
-
-#[allow(dead_code)]
-pub struct Context {
-    ctx: *mut rm::ffi::RedisModuleCtx,
-}
-
-impl Drop for Context {
-    fn drop(&mut self) {
-        mem::forget(self.ctx);
-    }
-}
-
 pub trait RedisReply {
     fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32;
 }
@@ -310,14 +298,12 @@ impl RedisReply for sql::Entity {
     }
 }
 
-fn reply_with_string(ctx: *mut rm::ffi::RedisModuleCtx,
-                     s: String)
-                     -> i32 {
+fn reply_with_string(ctx: rm::Context, s: String) -> i32 {
     let len = s.len();
     let s = CString::new(s).unwrap();
     unsafe {
         rm::ffi::RedisModule_ReplyWithStringBuffer
-            .unwrap()(ctx, s.as_ptr(), len)
+            .unwrap()(ctx.as_ptr(), s.as_ptr(), len)
     }
 }
 
@@ -411,11 +397,11 @@ fn parse_args(argv: *mut *mut rm::ffi::RedisModuleString,
 pub fn create_argument(ctx: *mut rm::ffi::RedisModuleCtx,
                        argv: *mut *mut rm::ffi::RedisModuleString,
                        argc: i32)
-                       -> (Context, Vec<String>) {
+                       -> (rm::Context, Vec<String>) {
     mem::forget(argv);
     mem::forget(argc);
     mem::forget(ctx);
-    let context = Context { ctx: ctx };
+    let context = rm::Context::new(ctx);
     let argvector = parse_args(argv, argc).unwrap();
     (context, argvector)
 }
@@ -984,7 +970,7 @@ pub fn write_rdb_to_file(f: &mut File,
 pub fn get_dbkey_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
                            name: String)
                            -> Result<Box<DBKey>, i32> {
-    let key_name = rm::RMString::new(ctx, name);
+    let key_name = rm::RMString::new(ctx, name.as_str());
     let key = unsafe {
         rm::ffi::Export_RedisModule_OpenKey(
             ctx,
@@ -1090,7 +1076,7 @@ pub fn replicate(_ctx: *mut rm::ffi::RedisModuleCtx,
 }
 
 pub fn register_function(
-    ctx: *mut rm::ffi::RedisModuleCtx,
+    context: rm::Context,
     name: String,
     flags: String,
     f: extern "C" fn(*mut rm::ffi::RedisModuleCtx,
@@ -1101,21 +1087,8 @@ pub fn register_function(
 
     let create_db: rm::ffi::RedisModuleCmdFunc = Some(f);
 
-    let command_c_name = CString::new(name).unwrap();
-    let command_ptr_name = command_c_name.as_ptr();
-
-    let flag_c_name = CString::new(flags).unwrap();
-    let flag_ptr_name = flag_c_name.as_ptr();
-
-    if unsafe {
-           rm::ffi::RedisModule_CreateCommand
-               .unwrap()(ctx,
-                         command_ptr_name,
-                         create_db,
-                         flag_ptr_name,
-                         0,
-                         0,
-                         0)
+    if {
+           rm::CreateCommand(context, name, create_db, flags)
        } == rm::ffi::REDISMODULE_ERR {
         return Err(rm::ffi::REDISMODULE_ERR);
     }
@@ -1123,7 +1096,7 @@ pub fn register_function(
 }
 
 pub fn register_write_function(
-    ctx: *mut rm::ffi::RedisModuleCtx,
+    ctx: rm::Context,
     name: String,
     f: extern "C" fn(*mut rm::ffi::RedisModuleCtx,
                      *mut *mut rm::ffi::RedisModuleString,
