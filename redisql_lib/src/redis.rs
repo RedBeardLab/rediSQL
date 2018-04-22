@@ -418,7 +418,7 @@ pub fn string_ptr_len(str: *mut rm::ffi::RedisModuleString)
 
         */
 
-        let mut slice = slice::from_raw_parts(base, len);
+        let slice = slice::from_raw_parts(base, len);
         str::from_utf8_unchecked(slice)
 
         /*
