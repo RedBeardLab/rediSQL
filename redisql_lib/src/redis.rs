@@ -18,6 +18,9 @@ use std::clone::Clone;
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 
+use std::slice;
+use std::str;
+
 use self::fnv::FnvHashMap;
 use std::collections::hash_map::Entry;
 
@@ -48,25 +51,25 @@ trait ReplicationData {
 
 pub trait StatementCache {
     fn new(&Arc<Mutex<sql::RawConnection>>) -> Self;
-    fn is_statement_present(&self, String) -> bool;
+    fn is_statement_present(&self, &str) -> bool;
     fn insert_new_statement(&mut self,
-                            identifier: String,
-                            statement: String)
+                            identifier: &str,
+                            statement: &str)
                             -> Result<QueryResult, RediSQLError>;
     fn delete_statement(&mut self,
-                        String)
+                        &str)
                         -> Result<QueryResult, RediSQLError>;
     fn update_statement(&mut self,
-                        identifier: String,
-                        statement: String)
+                        identifier: &str,
+                        statement: &str)
                         -> Result<QueryResult, RediSQLError>;
     fn exec_statement(&self,
-                      String,
-                      Vec<String>)
+                      &str,
+                      &[&str])
                       -> Result<QueryResult, RediSQLError>;
     fn query_statement(&self,
-                       String,
-                       Vec<String>)
+                       &str,
+                       &[&str])
                        -> Result<QueryResult, RediSQLError>;
 }
 
@@ -78,18 +81,18 @@ impl StatementCache for ReplicationBook {
         }
     }
 
-    fn is_statement_present(&self, identifier: String) -> bool {
-        self.data.read().unwrap().contains_key(&identifier)
+    fn is_statement_present(&self, identifier: &str) -> bool {
+        self.data.read().unwrap().contains_key(identifier)
     }
 
     fn insert_new_statement(&mut self,
-                            identifier: String,
-                            statement: String)
+                            identifier: &str,
+                            statement: &str)
                             -> Result<QueryResult, RediSQLError> {
 
         let db = self.db.clone();
         let mut map = self.data.write().unwrap();
-        match map.entry(identifier.clone()) {
+        match map.entry(identifier.to_owned()) {
             Entry::Vacant(v) => {
                 let stmt =
                     create_statement(db, identifier, statement)?;
@@ -106,11 +109,11 @@ impl StatementCache for ReplicationBook {
     }
 
     fn delete_statement(&mut self,
-                        identifier: String)
+                        identifier: &str)
                         -> Result<QueryResult, RediSQLError> {
         let db = self.db.clone();
         let mut map = self.data.write().unwrap();
-        match map.entry(identifier.clone()) {
+        match map.entry(identifier.to_owned()) {
             Entry::Vacant(_) => {
                 let debug = String::from("Statement not present.");
                 let description = String::from("The statement is not present in the database, impossible to delete it.",);
@@ -125,12 +128,12 @@ impl StatementCache for ReplicationBook {
     }
 
     fn update_statement(&mut self,
-                        identifier: String,
-                        statement: String)
+                        identifier: &str,
+                        statement: &str)
                         -> Result<QueryResult, RediSQLError> {
         let db = self.db.clone();
         let mut map = self.data.write().unwrap();
-        match map.entry(identifier.clone()) {
+        match map.entry(identifier.to_owned()) {
             Entry::Vacant(_) => {
                 let debug = String::from("Statement not present.");
                 let description = String::from("The statement is not present in the database, impossible to update it.",);
@@ -147,11 +150,11 @@ impl StatementCache for ReplicationBook {
     }
 
     fn exec_statement(&self,
-                      identifier: String,
-                      args: Vec<String>)
+                      identifier: &str,
+                      args: &[&str])
                       -> Result<QueryResult, RediSQLError> {
         let map = self.data.read().unwrap();
-        match map.get(&identifier) {
+        match map.get(identifier) {
             None => {
                 let debug = String::from("No statement found");
                 let description = String::from("The statement is not present in the database",);
@@ -167,11 +170,11 @@ impl StatementCache for ReplicationBook {
     }
 
     fn query_statement(&self,
-                       identifier: String,
-                       args: Vec<String>)
+                       identifier: &str,
+                       args: &[&str])
                        -> Result<QueryResult, RediSQLError> {
         let map = self.data.read().unwrap();
-        match map.get(&identifier) {
+        match map.get(identifier) {
             None => {
                 let debug = String::from("No statement found");
                 let description = String::from("The statement is not present in the database",);
@@ -192,6 +195,7 @@ impl StatementCache for ReplicationBook {
     }
 }
 
+// TODO XXX it is needed?
 impl ReplicationData for ReplicationBook {
     fn to_replicate(&self) -> bool {
         false
@@ -379,31 +383,52 @@ fn reply_with_error(ctx: *mut rm::ffi::RedisModuleCtx,
     }
 }
 
+pub fn create_argument(ctx: *mut rm::ffi::RedisModuleCtx,
+                       argv: *mut *mut rm::ffi::RedisModuleString,
+                       argc: i32)
+                       -> (rm::Context, Vec<&'static str>) {
+    let context = rm::Context::new(ctx);
+    let argvector = parse_args(argv, argc).unwrap();
+    (context, argvector)
+}
+
 fn parse_args(argv: *mut *mut rm::ffi::RedisModuleString,
               argc: i32)
-              -> Result<Vec<String>, string::FromUtf8Error> {
+              -> Result<Vec<&'static str>, string::FromUtf8Error> {
     mem::forget(argv);
     mem::forget(argc);
-    let mut args: Vec<String> = Vec::with_capacity(argc as usize);
+    let mut args: Vec<&'static str> = Vec::with_capacity(argc as
+                                                         usize);
     for i in 0..argc {
         let redis_str = unsafe { *argv.offset(i as isize) };
-        let mut arg = string_ptr_len(redis_str);
-        arg = arg.replace("\\", "");
+        let arg = string_ptr_len(redis_str);
         args.push(arg);
     }
     Ok(args)
 }
 
-pub fn create_argument(ctx: *mut rm::ffi::RedisModuleCtx,
-                       argv: *mut *mut rm::ffi::RedisModuleString,
-                       argc: i32)
-                       -> (rm::Context, Vec<String>) {
-    mem::forget(argv);
-    mem::forget(argc);
-    mem::forget(ctx);
-    let context = rm::Context::new(ctx);
-    let argvector = parse_args(argv, argc).unwrap();
-    (context, argvector)
+pub fn string_ptr_len(str: *mut rm::ffi::RedisModuleString)
+                      -> &'static str {
+    unsafe {
+        let mut len = 0;
+        let base = rm::ffi::RedisModule_StringPtrLen
+            .unwrap()(str, &mut len) as *mut u8;
+        /*
+        String::from_raw_parts(base, len, len)
+
+        */
+
+        let mut slice = slice::from_raw_parts(base, len);
+        str::from_utf8_unchecked(slice)
+
+        /*
+            CStr::from_ptr(rm::ffi::RedisModule_StringPtrLen
+                           .unwrap()(str, std::ptr::null_mut()))
+                .to_string_lossy()
+                .into_owned()
+                .as_str()
+        */
+    }
 }
 
 #[repr(C)]
@@ -422,35 +447,35 @@ impl Drop for RedisKey {
 pub enum Command {
     Stop,
     Exec {
-        query: String,
+        query: &'static str,
         client: BlockedClient,
     },
     Query {
-        query: String,
+        query: &'static str,
         client: BlockedClient,
     },
     CompileStatement {
-        identifier: String,
-        statement: String,
+        identifier: &'static str,
+        statement: &'static str,
         client: BlockedClient,
     },
     ExecStatement {
-        identifier: String,
-        arguments: Vec<String>,
+        identifier: &'static str,
+        arguments: Vec<&'static str>,
         client: BlockedClient,
     },
     UpdateStatement {
-        identifier: String,
-        statement: String,
+        identifier: &'static str,
+        statement: &'static str,
         client: BlockedClient,
     },
     DeleteStatement {
-        identifier: String,
+        identifier: &'static str,
         client: BlockedClient,
     },
     QueryStatement {
-        identifier: String,
-        arguments: Vec<String>,
+        identifier: &'static str,
+        arguments: Vec<&'static str>,
         client: BlockedClient,
     },
 }
@@ -515,7 +540,7 @@ fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
 }
 
 pub fn do_execute(db: &Arc<Mutex<sql::RawConnection>>,
-                  query: String)
+                  query: &str)
                   -> Result<QueryResult, err::RediSQLError> {
 
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -525,7 +550,7 @@ pub fn do_execute(db: &Arc<Mutex<sql::RawConnection>>,
 
 
 pub fn do_query(db: &Arc<Mutex<sql::RawConnection>>,
-                query: String)
+                query: &str)
                 -> Result<QueryResult, err::RediSQLError> {
 
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -544,10 +569,12 @@ pub fn do_query(db: &Arc<Mutex<sql::RawConnection>>,
 
 fn bind_statement<'a>
     (stmt: &'a MultiStatement,
-     arguments: Vec<String>)
+     arguments: &[&str])
      -> Result<&'a MultiStatement, sql::SQLite3Error> {
 
-    match stmt.bind_texts(arguments) {
+    // let args: Vec<&str> =
+    //    arguments.iter().map(|arg| arg.as_str()).collect();
+    match stmt.bind_texts(&arguments) {
         Err(e) => Err(e),
         Ok(_) => Ok(stmt),
     }
@@ -574,18 +601,19 @@ impl error::Error for RedisError {
         self.msg.as_str()
     }
 }
-fn restore_previous_statements<'a, L: LoopData + Clone>(loopdata: L)
-                                                        -> () {
+fn restore_previous_statements<'a, L: 'a + LoopData + Clone>
+    (loopdata: L)
+     -> () {
     let saved_statements = get_statement_metadata(loopdata.get_db());
     match saved_statements {
         Ok(QueryResult::Array { array, .. }) => {
             for row in array {
                 let identifier = match row[1] {
-                    sql::Entity::Text { ref text } => text.clone(),
+                    sql::Entity::Text { ref text } => text,
                     _ => continue,
                 };
                 let statement = match row[2] {
-                    sql::Entity::Text { ref text } => text.clone(),
+                    sql::Entity::Text { ref text } => text,
                     _ => continue,
                 };
                 match compile_and_insert_statement(identifier,
@@ -612,7 +640,7 @@ fn return_value(client: BlockedClient,
     }
 }
 
-pub fn listen_and_execute<L: LoopData + Clone>(loopdata: L,
+pub fn listen_and_execute<'a, L: 'a + LoopData + Clone>(loopdata: L,
 rx: Receiver<Command>){
     debug!("Start thread execution");
     restore_previous_statements(loopdata.clone());
@@ -621,12 +649,12 @@ rx: Receiver<Command>){
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
-                let result = do_execute(&loopdata.get_db(), query);
+                let result = do_execute(&loopdata.get_db(), &query);
                 return_value(client, result);
             }
             Ok(Command::Query { query, client }) => {
                 debug!("Query | Query = {:?}", query);
-                let result = do_query(&loopdata.get_db(), query);
+                let result = do_query(&loopdata.get_db(), &query);
                 return_value(client, result);
             }
             Ok(Command::UpdateStatement {
@@ -640,7 +668,7 @@ rx: Receiver<Command>){
                 let result =
                     loopdata
                         .get_replication_book()
-                        .update_statement(identifier, statement);
+                        .update_statement(&identifier, &statement);
                 return_value(client, result)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
@@ -648,7 +676,7 @@ rx: Receiver<Command>){
                        identifier);
                 let result = loopdata
                     .get_replication_book()
-                    .delete_statement(identifier);
+                    .delete_statement(&identifier);
 
                 return_value(client, result);
             }
@@ -663,7 +691,8 @@ rx: Receiver<Command>){
                 let result =
                     loopdata
                         .get_replication_book()
-                        .insert_new_statement(identifier, statement);
+                        .insert_new_statement(&identifier,
+                                              &statement);
                 return_value(client, result);
             }
 
@@ -678,7 +707,7 @@ rx: Receiver<Command>){
                 let result =
                     loopdata
                         .get_replication_book()
-                        .exec_statement(identifier, arguments);
+                        .exec_statement(&identifier, &arguments);
                 return_value(client, result);
             }
             Ok(Command::QueryStatement {
@@ -689,7 +718,8 @@ rx: Receiver<Command>){
                 let result =
                     loopdata
                         .get_replication_book()
-                        .query_statement(identifier, arguments);
+                        .query_statement(&identifier,
+                                         arguments.as_slice());
                 return_value(client, result);
             }
             Ok(Command::Stop) => return,
@@ -699,19 +729,21 @@ rx: Receiver<Command>){
 }
 
 
-fn compile_and_insert_statement<'a, L: LoopData + Clone>
-    (identifier: String,
-     statement: String,
+fn compile_and_insert_statement<'a, L: 'a + LoopData + Clone>
+    (identifier: &str,
+     statement: &str,
      loop_data: L)
      -> Result<QueryResult, err::RediSQLError> {
-    let stmt_cache = loop_data.get_replication_book().data;
+    let stmt_cache = &loop_data.get_replication_book().data;
     let mut statements_cache = stmt_cache.write().unwrap();
-    match statements_cache.entry(identifier.clone()) {
+    /* On the map (statements_cache) we need to own the value of
+     * identifiers, we are ok with this
+     * since it happens rarely.
+     * */
+    match statements_cache.entry(identifier.to_owned()) {
         Entry::Vacant(v) => {
             let db = loop_data.get_db();
-            match create_statement(db,
-                                   identifier.clone(),
-                                   statement) {
+            match create_statement(db, identifier, statement) {
                 Ok(stmt) => {
                     v.insert((stmt, false));
                     Ok(QueryResult::OK { to_replicate: true })
@@ -762,11 +794,10 @@ impl DBKey {
     }
 }
 
+// TODO XXX make it more idiomatic with ?
 pub fn create_metadata_table(db: Arc<Mutex<sql::RawConnection>>)
                              -> Result<(), sql::SQLite3Error> {
-    let statement = String::from("CREATE TABLE \
-                                  RediSQLMetadata(data_type TEXT, \
-                                  key TEXT, value TEXT);");
+    let statement = "CREATE TABLE RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
     match MultiStatement::new(db, statement) {
         Err(e) => Err(e),
@@ -780,24 +811,23 @@ pub fn create_metadata_table(db: Arc<Mutex<sql::RawConnection>>)
 }
 
 pub fn insert_metadata(db: Arc<Mutex<sql::RawConnection>>,
-                       data_type: String,
-                       key: String,
-                       value: String)
+                       data_type: &str,
+                       key: &str,
+                       value: &str)
                        -> Result<(), sql::SQLite3Error> {
-    let statement = String::from("INSERT INTO RediSQLMetadata \
-                                  VALUES(?1, ?2, ?3);");
+    let statement = "INSERT INTO RediSQLMetadata VALUES(?1, ?2, ?3);";
 
     let stmt = MultiStatement::new(db, statement)?;
-    stmt.bind_index(1, &data_type)?;
-    stmt.bind_index(2, &key)?;
-    stmt.bind_index(3, &value)?;
+    stmt.bind_index(1, data_type)?;
+    stmt.bind_index(2, key)?;
+    stmt.bind_index(3, value)?;
     stmt.execute()?;
     Ok(())
 }
 
 pub fn enable_foreign_key(db: Arc<Mutex<sql::RawConnection>>)
                           -> Result<(), sql::SQLite3Error> {
-    let enable_foreign_key = String::from("PRAGMA foreign_keys = ON;",);
+    let enable_foreign_key = "PRAGMA foreign_keys = ON;";
     match MultiStatement::new(db, enable_foreign_key) {
         Err(e) => Err(e),
         Ok(stmt) => {
@@ -810,29 +840,25 @@ pub fn enable_foreign_key(db: Arc<Mutex<sql::RawConnection>>)
 }
 
 fn update_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
-                             key: String,
-                             value: String)
+                             key: &str,
+                             value: &str)
                              -> Result<(), sql::SQLite3Error> {
-    let statement = String::from("UPDATE RediSQLMetadata SET value \
-                                  = ?1 WHERE data_type = \
-                                  'statement' AND key = ?2");
+    let statement = "UPDATE RediSQLMetadata SET value = ?1 WHERE data_type = 'statement' AND key = ?2";
 
     let stmt = MultiStatement::new(db, statement)?;
-    stmt.bind_index(1, &value)?;
-    stmt.bind_index(2, &key)?;
+    stmt.bind_index(1, value)?;
+    stmt.bind_index(2, key)?;
     stmt.execute()?;
     Ok(())
 }
 
 fn remove_statement_metadata(db: Arc<Mutex<sql::RawConnection>>,
-                             key: String)
+                             key: &str)
                              -> Result<(), sql::SQLite3Error> {
-    let statement = String::from("DELETE FROM RediSQLMetadata \
-                                  WHERE data_type = 'statement' \
-                                  AND key = ?1");
+    let statement = "DELETE FROM RediSQLMetadata WHERE data_type = 'statement' AND key = ?1";
 
     let stmt = MultiStatement::new(db, statement)?;
-    stmt.bind_index(1, &key)?;
+    stmt.bind_index(1, key)?;
     stmt.execute()?;
     Ok(())
 }
@@ -841,22 +867,11 @@ fn get_statement_metadata
     (db: Arc<Mutex<sql::RawConnection>>)
      -> Result<QueryResult, sql::SQLite3Error> {
 
-    let statement = String::from("SELECT * FROM RediSQLMetadata \
-                                  WHERE data_type = 'statement';");
+    let statement = "SELECT * FROM RediSQLMetadata WHERE data_type = 'statement';";
 
     let stmt = MultiStatement::new(db, statement)?;
     let cursor = stmt.execute()?;
     Ok(cursor_to_query_result(cursor))
-}
-
-pub fn string_ptr_len(str: *mut rm::ffi::RedisModuleString)
-                      -> String {
-    unsafe {
-        CStr::from_ptr(rm::ffi::RedisModule_StringPtrLen
-                           .unwrap()(str, std::ptr::null_mut()))
-                .to_string_lossy()
-                .into_owned()
-    }
 }
 
 pub fn make_backup(conn1: &sql::RawConnection,
@@ -876,7 +891,7 @@ pub fn make_backup(conn1: &sql::RawConnection,
 }
 
 pub fn create_backup(conn: &sql::RawConnection,
-                     path: String)
+                     path: &str)
                      -> Result<i32, sql::SQLite3Error> {
     match sql::open_connection(path) {
         Err(e) => Err(e),
@@ -968,9 +983,9 @@ pub fn write_rdb_to_file(f: &mut File,
 }
 
 pub fn get_dbkey_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
-                           name: String)
+                           name: &str)
                            -> Result<Box<DBKey>, i32> {
-    let key_name = rm::RMString::new(ctx, name.as_str());
+    let key_name = rm::RMString::new(ctx, name);
     let key = unsafe {
         rm::ffi::Export_RedisModule_OpenKey(
             ctx,
@@ -999,7 +1014,7 @@ pub fn get_dbkey_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
 }
 
 pub fn get_db_channel_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
-                                name: String)
+                                name: &str)
                                 -> Result<Sender<Command>, i32> {
     let db: Box<DBKey> = get_dbkey_from_name(ctx, name)?;
     let channel = db.tx.clone();
@@ -1032,36 +1047,29 @@ pub fn reply_with_error_from_key_type(ctx: *mut rm::ffi::RedisModuleCtx,
 }
 
 fn create_statement(db: Arc<Mutex<sql::RawConnection>>,
-                    identifier: String,
-                    statement: String)
+                    identifier: &str,
+                    statement: &str)
                     -> Result<MultiStatement, err::RediSQLError> {
 
-    let stmt = MultiStatement::new(Arc::clone(&db),
-                                   statement.clone())?;
-    insert_metadata(db,
-                    String::from("statement"),
-                    identifier.clone(),
-                    statement)?;
+    let stmt = MultiStatement::new(Arc::clone(&db), statement)?;
+    insert_metadata(db, "statement", identifier, statement)?;
     Ok(stmt)
 }
 
 fn update_statement(db: &Arc<Mutex<sql::RawConnection>>,
-                    identifier: String,
-                    statement: String)
+                    identifier: &str,
+                    statement: &str)
                     -> Result<MultiStatement, err::RediSQLError> {
 
-    let stmt = MultiStatement::new(Arc::clone(db),
-                                   statement.clone())?;
-    update_statement_metadata(Arc::clone(db),
-                              identifier.clone(),
-                              statement)?;
+    let stmt = MultiStatement::new(Arc::clone(db), statement)?;
+    update_statement_metadata(Arc::clone(db), identifier, statement)?;
     Ok(stmt)
 }
 
 fn remove_statement(db: &Arc<Mutex<sql::RawConnection>>,
-                    identifier: String)
+                    identifier: &str)
                     -> Result<(), err::RediSQLError> {
-    remove_statement_metadata(Arc::clone(db), identifier.clone())
+    remove_statement_metadata(Arc::clone(db), identifier)
         .or_else(|e| Err(err::RediSQLError::from(e)))
 }
 

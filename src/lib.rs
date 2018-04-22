@@ -104,7 +104,7 @@ extern "C" fn free_privdata(_arg: *mut ::std::os::raw::c_void) {}
 
 fn get_db_and_loopdata_from_name
     (ctx: *mut r::rm::ffi::RedisModuleCtx,
-     name: String)
+     name: &str)
      -> Result<(Sender<r::Command>, Loop), i32> {
     let db: Box<r::DBKey> = get_dbkey_from_name(ctx, name)?;
     let channel = db.tx.clone();
@@ -133,9 +133,7 @@ extern "C" fn ExecStatement(
             }
         }
         _ => {
-            match get_db_and_loopdata_from_name(ctx,
-                                                argvector[1]
-                                                    .clone()) {
+            match get_db_and_loopdata_from_name(ctx, &argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -152,7 +150,7 @@ extern "C" fn ExecStatement(
                         };
 
                     let cmd = r::Command::ExecStatement {
-                        identifier: argvector[2].clone(),
+                        identifier: argvector[2],
                         arguments: argvector[3..].to_vec(),
                         client: blocked_client,
                     };
@@ -189,9 +187,7 @@ extern "C" fn QueryStatement(
             }
         }
         _ => {
-            match get_db_and_loopdata_from_name(ctx,
-                                                argvector[1]
-                                                    .clone()) {
+            match get_db_and_loopdata_from_name(ctx, &argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -208,7 +204,7 @@ extern "C" fn QueryStatement(
                         };
 
                     let cmd = r::Command::ExecStatement {
-                        identifier: argvector[2].clone(),
+                        identifier: argvector[2],
                         arguments: argvector[3..].to_vec(),
                         client: blocked_client,
                     };
@@ -231,8 +227,7 @@ extern "C" fn Exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         3 => {
-            match get_db_channel_from_name(ctx,
-                                           argvector[1].clone()) {
+            match get_db_channel_from_name(ctx, &argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -250,7 +245,7 @@ extern "C" fn Exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
                     };
                     mem::forget(ctx);
                     let cmd = r::Command::Exec {
-                        query: argvector[2].clone(),
+                        query: argvector[2],
                         client: blocked_client,
                     };
                     match ch.send(cmd) {
@@ -285,8 +280,7 @@ extern "C" fn Query(ctx: *mut r::rm::ffi::RedisModuleCtx,
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         3 => {
-            match get_db_channel_from_name(ctx,
-                                           argvector[1].clone()) {
+            match get_db_channel_from_name(ctx, &argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -304,7 +298,7 @@ extern "C" fn Query(ctx: *mut r::rm::ffi::RedisModuleCtx,
                     };
                     mem::forget(ctx);
                     let cmd = r::Command::Query {
-                        query: argvector[2].clone(),
+                        query: argvector[2],
                         client: blocked_client,
                     };
                     match ch.send(cmd) {
@@ -340,8 +334,7 @@ extern "C" fn CreateStatement(
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         4 => {
-            match get_db_channel_from_name(ctx,
-                                           argvector[1].clone()) {
+            match get_db_channel_from_name(ctx, &argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -357,8 +350,8 @@ extern "C" fn CreateStatement(
                             },
                         };
                     let cmd = r::Command::CompileStatement {
-                        identifier: argvector[2].clone(),
-                        statement: argvector[3].clone(),
+                        identifier: argvector[2],
+                        statement: argvector[3],
                         client: blocked_client,
                     };
 
@@ -397,8 +390,7 @@ extern "C" fn UpdateStatement(
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         4 => {
-            match get_db_channel_from_name(ctx,
-                                           argvector[1].clone()) {
+            match get_db_channel_from_name(ctx, &argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -415,8 +407,8 @@ extern "C" fn UpdateStatement(
                         };
 
                     let cmd = r::Command::UpdateStatement {
-                        identifier: argvector[2].clone(),
-                        statement: argvector[3].clone(),
+                        identifier: argvector[2],
+                        statement: argvector[3],
                         client: blocked_client,
                     };
 
@@ -453,8 +445,7 @@ extern "C" fn DeleteStatement(
     let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         3 => {
-            match get_db_channel_from_name(ctx,
-                                           argvector[1].clone()) {
+            match get_db_channel_from_name(ctx, &argvector[1]) {
                 Ok(ch) => {
                     let blocked_client =
                         r::BlockedClient {
@@ -468,7 +459,7 @@ extern "C" fn DeleteStatement(
                             },
                         };
                     let cmd = r::Command::DeleteStatement {
-                        identifier: argvector[2].clone(),
+                        identifier: argvector[2],
                         client: blocked_client,
                     };
                     match ch.send(cmd) {
@@ -503,7 +494,6 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
                        argc: ::std::os::raw::c_int)
 -> i32{
 
-
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
 
     match argvector.len() {
@@ -522,21 +512,20 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
                           .unwrap()(safe_key.key)
                   } {
                 r::rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
-                    let (path, in_memory) = match argvector.len() {
-                        3 => {
-                            (String::from(argvector[2].clone()),
-                             false)
-                        }
-                        _ => (String::from(":memory:"), true),
-                    };
-                    match sql::get_arc_connection(path.clone()) {
+                    let (path, in_memory): (&str,
+                                            bool) =
+                        match argvector.len() {
+                            3 => (&argvector[2], false),
+                            _ => (":memory:", true),
+                        };
+                    match sql::get_arc_connection(path) {
                         Ok(rc) => {
                             match r::create_metadata_table(rc.clone())
                                       .and_then(|_| {
                                 r::insert_metadata(
                                         rc.clone(),
-                                        "setup".to_owned(),
-                                        "path".to_owned(),
+                                        "setup",
+                                        "path",
                                         path,
                                     ).and_then(|_| {
                                 r::enable_foreign_key(rc.clone())
@@ -631,7 +620,7 @@ unsafe extern "C" fn rdb_save(rdb: *mut r::rm::ffi::RedisModuleIO,
 
         let db = (*db).loop_data.get_db();
         let conn = &db.lock().unwrap();
-        match r::create_backup(conn, path.clone()) {
+        match r::create_backup(conn, &path) {
             Err(e) => println!("{}", e),
             Ok(not_done)
                 if !sql::backup_complete_with_done(not_done) => {
@@ -676,13 +665,13 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::rm::ffi::RedisModuleIO,
                     ptr::null_mut()
                 }
                 Ok(()) => {
-                    match sql::open_connection(":memory:".to_owned()) {
+                    match sql::open_connection(":memory:") {
                         Err(_) => {
                             println!("Was impossible to open the in memory db!");
                             ptr::null_mut()
                         },
                         Ok(in_mem) => {
-                            match sql::open_connection(path) {
+                            match sql::open_connection(&path) {
                                 Err(_) => {
                                     println!("Error in opening the rdb database");
                                     ptr::null_mut()

@@ -112,13 +112,13 @@ impl SQLiteConnection for RawConnection {
 }
 
 pub fn get_arc_connection
-    (path: String)
+    (path: &str)
      -> Result<Arc<Mutex<RawConnection>>, SQLite3Error> {
     let raw = open_connection(path)?;
     Ok(Arc::new(Mutex::new(raw)))
 }
 
-pub fn open_connection(path: String)
+pub fn open_connection(path: &str)
                        -> Result<RawConnection, SQLite3Error> {
     let mut db: *mut ffi::sqlite3 = unsafe { mem::uninitialized() };
     let c_path = CString::new(path).unwrap();
@@ -145,12 +145,12 @@ pub fn open_connection(path: String)
 
 pub trait StatementTrait<'a>: Sized {
     fn new(conn: Arc<Mutex<RawConnection>>,
-           query: String)
+           query: &str)
            -> Result<Self, SQLite3Error>;
     fn reset(&self);
     fn execute(&self) -> Result<Cursor, SQLite3Error>;
     fn bind_texts(&self,
-                  values: Vec<String>)
+                  values: &[&str])
                   -> Result<SQLiteOK, SQLite3Error>;
     fn bind_index(&self,
                   index: i32,
@@ -170,6 +170,7 @@ pub enum EntityType {
     Null,
 }
 
+// TODO XXX explore it is possible to change these String into &str
 pub enum Entity {
     Integer { int: i32 },
     Float { float: f64 },

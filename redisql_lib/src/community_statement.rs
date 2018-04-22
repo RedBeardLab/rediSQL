@@ -1,3 +1,5 @@
+extern crate libc;
+
 use std::mem;
 use std::ptr;
 use std::fmt;
@@ -71,10 +73,11 @@ impl<'a> Drop for Statement {
 
 pub fn generate_statements
     (db: Arc<Mutex<RawConnection>>,
-     query: String)
+     query: &str)
      -> Result<MultiStatement, SQLite3Error> {
 
-    let raw_query = CString::new(query).unwrap();
+    // TODO XXX change query to &str
+    let raw_query = CString::new(query.to_string()).unwrap();
     let mut next_query = raw_query.as_ptr();
     let mut stmts = Vec::new();
 
@@ -159,7 +162,7 @@ impl<'a> StatementTrait<'a> for Statement {
     }
 
     fn new(conn: Arc<Mutex<RawConnection>>,
-           query: String)
+           query: &str)
            -> Result<Statement, SQLite3Error> {
         let raw_query = CString::new(query).unwrap();
 
@@ -188,7 +191,7 @@ impl<'a> StatementTrait<'a> for Statement {
     }
 
     fn bind_texts(&self,
-                  values: Vec<String>)
+                  values: &[&str])
                   -> Result<SQLiteOK, SQLite3Error> {
         let mut index = 0;
         values
@@ -209,12 +212,12 @@ impl<'a> StatementTrait<'a> for Statement {
         fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
             Some(unsafe { mem::transmute(-1isize) })
         }
-        let value_c = CString::new(value).unwrap();
         match unsafe {
                   ffi::sqlite3_bind_text(self.stmt,
                                          index,
-                                         value_c.as_ptr(),
-                                         -1,
+                                         value.as_ptr() as
+                                         *const libc::c_char,
+                                         value.len() as i32,
                                          SQLITE_TRANSIENT())
               } {
             ffi::SQLITE_OK => Ok(SQLiteOK::OK),
@@ -285,7 +288,7 @@ impl<'a> StatementTrait<'a> for MultiStatement {
 
     }
     fn bind_texts(&self,
-                  values: Vec<String>)
+                  values: &[&str])
                   -> Result<SQLiteOK, SQLite3Error> {
         if values.len() != self.number_parameters as usize {
             return Err(SQLite3Error {
@@ -308,7 +311,7 @@ impl<'a> StatementTrait<'a> for MultiStatement {
         Ok(SQLiteOK::OK)
     }
     fn new(conn: Arc<Mutex<RawConnection>>,
-           query: String)
+           query: &str)
            -> Result<MultiStatement, SQLite3Error> {
         generate_statements(conn, query)
     }
