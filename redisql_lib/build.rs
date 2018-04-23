@@ -9,10 +9,9 @@ use std::path::PathBuf;
 
 fn main() {
 
-    println!("cargo:rerun-if-changed=src/CDeps");
-    println!("cargo:rerun-if-changed=\"build.rs\"");
-    println!("cargo:rerun-if-changed=\"sqlite_dependencies.h\"");
-    println!("cargo:rerun-if-changed=\"redis_dependencies.h\"");
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=sqlite_dependencies.h");
+    println!("cargo:rerun-if-changed=redis_dependencies.h");
 
     cc::Build::new()
         .file("src/CDeps/Redis/redismodule.c")
