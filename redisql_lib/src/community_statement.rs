@@ -76,7 +76,6 @@ pub fn generate_statements
      query: &str)
      -> Result<MultiStatement, SQLite3Error> {
 
-    // TODO XXX change query to &str
     let raw_query = CString::new(query.to_string()).unwrap();
     let mut next_query = raw_query.as_ptr();
     let mut stmts = Vec::new();
