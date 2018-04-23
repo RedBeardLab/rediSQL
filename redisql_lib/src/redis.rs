@@ -195,12 +195,6 @@ impl StatementCache for ReplicationBook {
     }
 }
 
-// TODO XXX it is needed?
-impl ReplicationData for ReplicationBook {
-    fn to_replicate(&self) -> bool {
-        false
-    }
-}
 
 #[derive(Clone)]
 pub struct Loop {
@@ -271,14 +265,16 @@ impl RedisReply for sql::Entity {
                         .unwrap()(ctx, float)
                 }
                 sql::Entity::Text { ref text } => {
-                    let text_c = CString::new(text.clone()).unwrap();
                     rm::ffi::RedisModule_ReplyWithStringBuffer
-                        .unwrap()(ctx, text_c.as_ptr(), text.len())
+                        .unwrap()(ctx,
+                                  text.as_ptr() as *const i8,
+                                  text.len())
                 }
                 sql::Entity::Blob { ref blob } => {
-                    let blob_c = CString::new(blob.clone()).unwrap();
                     rm::ffi::RedisModule_ReplyWithStringBuffer
-                        .unwrap()(ctx, blob_c.as_ptr(), blob.len())
+                        .unwrap()(ctx,
+                                  blob.as_ptr() as *const i8,
+                                  blob.len())
                 }
                 sql::Entity::Null => {
                     rm::ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
@@ -312,17 +308,16 @@ fn reply_with_string(ctx: rm::Context, s: String) -> i32 {
 }
 
 fn reply_with_simple_string(ctx: *mut rm::ffi::RedisModuleCtx,
-                            s: String)
+                            s: &str)
                             -> i32 {
-    let s = CString::new(s).unwrap();
     unsafe {
         rm::ffi::RedisModule_ReplyWithSimpleString
-            .unwrap()(ctx, s.as_ptr())
+            .unwrap()(ctx, s.as_ptr() as *const i8)
     }
 }
 
 fn reply_with_ok(ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
-    reply_with_simple_string(ctx, String::from("OK"))
+    reply_with_simple_string(ctx, "OK\0")
 }
 
 fn reply_with_done(ctx: *mut rm::ffi::RedisModuleCtx,
@@ -331,7 +326,7 @@ fn reply_with_done(ctx: *mut rm::ffi::RedisModuleCtx,
     unsafe {
         rm::ffi::RedisModule_ReplyWithArray.unwrap()(ctx, 2);
     }
-    reply_with_simple_string(ctx, String::from("DONE"));
+    reply_with_simple_string(ctx, "DONE\0");
     unsafe {
         rm::ffi::RedisModule_ReplyWithLongLong
             .unwrap()(ctx, modified_rows as i64);
@@ -401,34 +396,19 @@ fn parse_args(argv: *mut *mut rm::ffi::RedisModuleString,
                                                          usize);
     for i in 0..argc {
         let redis_str = unsafe { *argv.offset(i as isize) };
-        let arg = string_ptr_len(redis_str);
+        let arg = unsafe { string_ptr_len(redis_str) };
         args.push(arg);
     }
     Ok(args)
 }
 
-pub fn string_ptr_len(str: *mut rm::ffi::RedisModuleString)
-                      -> &'static str {
-    unsafe {
-        let mut len = 0;
-        let base = rm::ffi::RedisModule_StringPtrLen
-            .unwrap()(str, &mut len) as *mut u8;
-        /*
-        String::from_raw_parts(base, len, len)
-
-        */
-
-        let slice = slice::from_raw_parts(base, len);
-        str::from_utf8_unchecked(slice)
-
-        /*
-            CStr::from_ptr(rm::ffi::RedisModule_StringPtrLen
-                           .unwrap()(str, std::ptr::null_mut()))
-                .to_string_lossy()
-                .into_owned()
-                .as_str()
-        */
-    }
+pub unsafe fn string_ptr_len(str: *mut rm::ffi::RedisModuleString)
+                             -> &'static str {
+    let mut len = 0;
+    let base = rm::ffi::RedisModule_StringPtrLen
+        .unwrap()(str, &mut len) as *mut u8;
+    let slice = slice::from_raw_parts(base, len);
+    str::from_utf8_unchecked(slice)
 }
 
 #[repr(C)]
@@ -794,20 +774,13 @@ impl DBKey {
     }
 }
 
-// TODO XXX make it more idiomatic with ?
 pub fn create_metadata_table(db: Arc<Mutex<sql::RawConnection>>)
                              -> Result<(), sql::SQLite3Error> {
     let statement = "CREATE TABLE RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
-    match MultiStatement::new(db, statement) {
-        Err(e) => Err(e),
-        Ok(stmt) => {
-            match stmt.execute() {
-                Ok(_) => Ok(()),
-                Err(e) => Err(e),
-            }
-        }
-    }
+    let stmt = MultiStatement::new(db, statement)?;
+    stmt.execute()?;
+    Ok(())
 }
 
 pub fn insert_metadata(db: Arc<Mutex<sql::RawConnection>>,
@@ -932,7 +905,6 @@ pub fn write_file_to_rdb(f: File,
 
 }
 
-// TODO make sure of the deallocation
 
 struct SafeRedisModuleString {
     ptr: *mut std::os::raw::c_char,
