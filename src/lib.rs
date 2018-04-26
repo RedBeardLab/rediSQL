@@ -538,7 +538,7 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
                                     let db = r::DBKey::new_from_arc(tx, rc, in_memory);
                                     let loop_data = db.loop_data.clone();
                                     thread::spawn(move || {
-                                        r::listen_and_execute(loop_data, rx);
+                                        r::listen_and_execute(&loop_data, &rx);
                                     });
                                     let ptr = Box::into_raw(Box::new(db));
                                     let type_set = unsafe {
@@ -689,7 +689,7 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::rm::ffi::RedisModuleIO,
                                             let loop_data = db.loop_data.clone();
 
                                             thread::spawn(move || { 
-                                                r::listen_and_execute(loop_data, rx)});
+                                                r::listen_and_execute(&loop_data, &rx)});
                                         
 
 

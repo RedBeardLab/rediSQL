@@ -325,7 +325,7 @@ impl<'a> StatementTrait<'a> for MultiStatement {
                 return false;
             }
         }
-        return true;
+        true
     }
 }
 

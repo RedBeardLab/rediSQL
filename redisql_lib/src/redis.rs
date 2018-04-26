@@ -162,7 +162,7 @@ impl StatementCache for ReplicationBook {
             }
             Some(&(ref stmt, _)) => {
                 stmt.reset();
-                let stmt = bind_statement(&stmt, args)?;
+                let stmt = bind_statement(stmt, args)?;
                 let cursor = stmt.execute()?;
                 Ok(cursor_to_query_result(cursor))
             }
@@ -182,7 +182,7 @@ impl StatementCache for ReplicationBook {
             }
             Some(&(ref stmt, true)) => {
                 stmt.reset();
-                let stmt = bind_statement(&stmt, args)?;
+                let stmt = bind_statement(stmt, args)?;
                 let cursor = stmt.execute()?;
                 Ok(cursor_to_query_result(cursor))
             }
@@ -280,16 +280,15 @@ impl RedisReply for sql::Entity {
                     rm::ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
                 }
                 sql::Entity::OK { to_replicate } => {
-                    QueryResult::OK { to_replicate: to_replicate }
-                        .reply(ctx)
+                    QueryResult::OK { to_replicate }.reply(ctx)
                 }                
                 sql::Entity::DONE {
                     modified_rows,
                     to_replicate,
                 } => {
                     QueryResult::DONE {
-                            modified_rows: modified_rows,
-                            to_replicate: to_replicate,
+                            modified_rows,
+                            to_replicate,
                         }
                         .reply(ctx)
                 }
@@ -390,8 +389,6 @@ pub fn create_argument(ctx: *mut rm::ffi::RedisModuleCtx,
 fn parse_args(argv: *mut *mut rm::ffi::RedisModuleString,
               argc: i32)
               -> Result<Vec<&'static str>, string::FromUtf8Error> {
-    mem::forget(argv);
-    mem::forget(argc);
     let mut args: Vec<&'static str> = Vec::with_capacity(argc as
                                                          usize);
     for i in 0..argc {
@@ -510,11 +507,10 @@ fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
             }
         }
         sql::Cursor::RowsCursor { to_replicate, .. } => {
-            let y = QueryResult::Array {
+            QueryResult::Array {
                 array: cursor.collect::<Vec<sql::Row>>(),
-                to_replicate: to_replicate,
-            };
-            return y;
+                to_replicate,
+            }
         }
     }
 }
@@ -534,18 +530,17 @@ pub fn do_query(db: &Arc<Mutex<sql::RawConnection>>,
                 -> Result<QueryResult, err::RediSQLError> {
 
     let stmt = MultiStatement::new(db.clone(), query)?;
-    match stmt.is_read_only() {
-        true => {
-            let cursor = stmt.execute()?;
-            Ok(cursor_to_query_result(cursor))
-        }
-        false => {
-            let debug = String::from("Not read only statement");
-            let description = String::from("Statement is not read only but it may modify the database, use `EXEC_STATEMENT` instead.",);
-            Err(RediSQLError::new(debug, description))
-        }
+    if stmt.is_read_only() {
+
+        let cursor = stmt.execute()?;
+        Ok(cursor_to_query_result(cursor))
+    } else {
+        let debug = String::from("Not read only statement");
+        let description = String::from("Statement is not read only but it may modify the database, use `EXEC_STATEMENT` instead.",);
+        Err(RediSQLError::new(debug, description))
     }
 }
+
 
 fn bind_statement<'a>
     (stmt: &'a MultiStatement,
@@ -554,7 +549,7 @@ fn bind_statement<'a>
 
     // let args: Vec<&str> =
     //    arguments.iter().map(|arg| arg.as_str()).collect();
-    match stmt.bind_texts(&arguments) {
+    match stmt.bind_texts(arguments) {
         Err(e) => Err(e),
         Ok(_) => Ok(stmt),
     }
@@ -582,7 +577,7 @@ impl error::Error for RedisError {
     }
 }
 fn restore_previous_statements<'a, L: 'a + LoopData + Clone>
-    (loopdata: L)
+    (loopdata: &L)
      -> () {
     let saved_statements = get_statement_metadata(loopdata.get_db());
     match saved_statements {
@@ -596,11 +591,11 @@ fn restore_previous_statements<'a, L: 'a + LoopData + Clone>
                     sql::Entity::Text { ref text } => text,
                     _ => continue,
                 };
-                match compile_and_insert_statement(identifier,
-                                                   statement,
-                                                   loopdata.clone()) {
-                    Err(e) => println!("Error: {}", e),
-                    _ => (),
+                if let Err(e) =
+                    compile_and_insert_statement(identifier,
+                                                 statement,
+                                                 &loopdata.clone()) {
+                    println!("Error: {}", e)
                 }
             }
         }
@@ -609,7 +604,7 @@ fn restore_previous_statements<'a, L: 'a + LoopData + Clone>
     }
 }
 
-fn return_value(client: BlockedClient,
+fn return_value(client: &BlockedClient,
                 result: Result<QueryResult, err::RediSQLError>) {
     unsafe {
         rm::ffi::RedisModule_UnblockClient
@@ -620,22 +615,22 @@ fn return_value(client: BlockedClient,
     }
 }
 
-pub fn listen_and_execute<'a, L: 'a + LoopData + Clone>(loopdata: L,
-rx: Receiver<Command>){
+pub fn listen_and_execute<'a, L: 'a + LoopData + Clone>(loopdata: &L,
+rx: &Receiver<Command>){
     debug!("Start thread execution");
-    restore_previous_statements(loopdata.clone());
+    restore_previous_statements(&loopdata.clone());
     loop {
         debug!("Loop iteration");
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
-                let result = do_execute(&loopdata.get_db(), &query);
-                return_value(client, result);
+                let result = do_execute(&loopdata.get_db(), query);
+                return_value(&client, result);
             }
             Ok(Command::Query { query, client }) => {
                 debug!("Query | Query = {:?}", query);
-                let result = do_query(&loopdata.get_db(), &query);
-                return_value(client, result);
+                let result = do_query(&loopdata.get_db(), query);
+                return_value(&client, result);
             }
             Ok(Command::UpdateStatement {
                    identifier,
@@ -648,17 +643,17 @@ rx: Receiver<Command>){
                 let result =
                     loopdata
                         .get_replication_book()
-                        .update_statement(&identifier, &statement);
-                return_value(client, result)
+                        .update_statement(identifier, statement);
+                return_value(&client, result)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
                 debug!("DeleteStatement | Identifier = {:?}",
                        identifier);
                 let result = loopdata
                     .get_replication_book()
-                    .delete_statement(&identifier);
+                    .delete_statement(identifier);
 
-                return_value(client, result);
+                return_value(&client, result);
             }
             Ok(Command::CompileStatement {
                    identifier,
@@ -671,9 +666,8 @@ rx: Receiver<Command>){
                 let result =
                     loopdata
                         .get_replication_book()
-                        .insert_new_statement(&identifier,
-                                              &statement);
-                return_value(client, result);
+                        .insert_new_statement(identifier, statement);
+                return_value(&client, result);
             }
 
             Ok(Command::ExecStatement {
@@ -687,8 +681,8 @@ rx: Receiver<Command>){
                 let result =
                     loopdata
                         .get_replication_book()
-                        .exec_statement(&identifier, &arguments);
-                return_value(client, result);
+                        .exec_statement(identifier, &arguments);
+                return_value(&client, result);
             }
             Ok(Command::QueryStatement {
                    identifier,
@@ -698,9 +692,9 @@ rx: Receiver<Command>){
                 let result =
                     loopdata
                         .get_replication_book()
-                        .query_statement(&identifier,
+                        .query_statement(identifier,
                                          arguments.as_slice());
-                return_value(client, result);
+                return_value(&client, result);
             }
             Ok(Command::Stop) => return,
             Err(RecvError) => return,
@@ -712,7 +706,7 @@ rx: Receiver<Command>){
 fn compile_and_insert_statement<'a, L: 'a + LoopData + Clone>
     (identifier: &str,
      statement: &str,
-     loop_data: L)
+     loop_data: &L)
      -> Result<QueryResult, err::RediSQLError> {
     let stmt_cache = &loop_data.get_replication_book().data;
     let mut statements_cache = stmt_cache.write().unwrap();
@@ -946,9 +940,8 @@ pub fn write_rdb_to_file(f: &mut File,
         };
         let y = f.write_all(buffer.as_slice());
         mem::forget(buffer);
-        match y {
-            Err(e) => return Err(e),
-            _ => (),
+        if let Err(e) = y {
+            return Err(e);
         }
     }
     Ok(())
@@ -966,7 +959,7 @@ pub fn get_dbkey_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
             rm::ffi::REDISMODULE_WRITE,
         )
     };
-    let safe_key = RedisKey { key: key };
+    let safe_key = RedisKey { key };
     let key_type = unsafe {
         rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
     };

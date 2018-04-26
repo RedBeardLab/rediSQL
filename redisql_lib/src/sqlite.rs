@@ -137,9 +137,7 @@ pub fn open_connection(path: &str)
                    modified_rows: 0,
                })
         }
-        _ => {
-            return Err(generate_sqlite3_error(db));
-        }
+        _ => Err(generate_sqlite3_error(db)),
     }
 }
 
@@ -269,7 +267,7 @@ impl<'a> Iterator for Cursor<'a> {
             }
 
             Cursor::RowsCursor {
-                ref stmt,
+                stmt,
                 num_columns,
                 ref mut previous_status,
                 ..
