@@ -1,8 +1,8 @@
-extern crate libc;
 
 use std::mem;
 use std::ptr;
 use std::fmt;
+use std::os::raw::c_char;
 use std::ffi::{CString, CStr};
 
 use std::sync::{Arc, Mutex};
@@ -215,7 +215,7 @@ impl<'a> StatementTrait<'a> for Statement {
                   ffi::sqlite3_bind_text(self.stmt,
                                          index,
                                          value.as_ptr() as
-                                         *const libc::c_char,
+                                         *const c_char,
                                          value.len() as i32,
                                          SQLITE_TRANSIENT())
               } {

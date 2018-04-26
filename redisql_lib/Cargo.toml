@@ -8,7 +8,6 @@ bindgen = "0.30.0"
 cc = {version = "1.0.3", features = ["parallel"]}
 
 [dependencies]
-libc = "0.2.21"
 log = "0.3.8"
 env_logger = "0.4.3"
 fnv = "1.0.5"

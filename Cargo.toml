@@ -12,7 +12,6 @@ bindgen = "0.30.0"
 cc = {version = "1.0.3", features = ["parallel"]}
 
 [dependencies]
-libc = "0.2.21"
 fnv = "1.0.5"
 uuid = { version = "0.4", features = ["v4"] }
 log = {version = "0.3.8", features = ["release_max_level_warn"]}

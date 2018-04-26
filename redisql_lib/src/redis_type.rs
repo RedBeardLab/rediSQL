@@ -1,9 +1,6 @@
-extern crate libc;
-
-use self::libc::c_char;
+use std::os::raw::c_char;
 
 use std::ffi::CString;
-
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]

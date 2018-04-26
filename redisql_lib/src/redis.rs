@@ -1,4 +1,3 @@
-extern crate libc;
 extern crate uuid;
 extern crate fnv;
 
@@ -928,7 +927,7 @@ pub fn write_rdb_to_file(f: &mut File,
     };
 
     for _ in 0..blocks {
-        let mut dimension: libc::size_t = 0;
+        let mut dimension: usize = 0;
         let c_str_ptr = SafeRedisModuleString {
             ptr: unsafe {
                 rm::ffi::RedisModule_LoadStringBuffer
