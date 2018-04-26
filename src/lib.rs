@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 extern crate redisql_lib;
 
-use redisql_lib::redis_type::Context;
+use redisql_lib::redis_type::{Context, ReplicateVerbatim};
 
 use redisql_lib::sqlite as sql;
 
@@ -26,7 +26,7 @@ use redisql_lib::redis::{RedisReply, Loop, LoopData,
                          reply_with_error_from_key_type,
                          get_db_channel_from_name,
                          get_dbkey_from_name, register_function,
-                         register_write_function, replicate_verbatim};
+                         register_write_function};
 
 #[cfg(feature = "pro")]
 extern crate engine_pro;
@@ -494,11 +494,12 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
                        argc: ::std::os::raw::c_int)
 -> i32{
 
-    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
 
     match argvector.len() {
         2 | 3 => {
-            let key_name = r::rm::RMString::new(ctx, &argvector[1]);
+            let key_name = r::rm::RMString::new(context,
+                                                &argvector[1]);
             let key = unsafe {
                 r::rm::ffi::Export_RedisModule_OpenKey(
                     ctx,
@@ -547,7 +548,7 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
                                     match type_set {
                                         r::rm::ffi::REDISMODULE_OK => {
                                             let ok = r::QueryResult::OK {to_replicate: true};
-                                            replicate_verbatim(ctx);
+                                            ReplicateVerbatim(context);
                                             ok.reply(ctx)
                                         }
                                         r::rm::ffi::REDISMODULE_ERR => {

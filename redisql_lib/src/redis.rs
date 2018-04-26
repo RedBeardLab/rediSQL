@@ -28,6 +28,7 @@ use std::fmt;
 use std::error;
 
 pub use redis_type as rm;
+use redis_type::{Context, ReplyWithError};
 
 use redisql_error as err;
 use redisql_error::RediSQLError;
@@ -956,7 +957,8 @@ pub fn write_rdb_to_file(f: &mut File,
 pub fn get_dbkey_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
                            name: &str)
                            -> Result<Box<DBKey>, i32> {
-    let key_name = rm::RMString::new(ctx, name);
+    let context = Context::new(ctx);
+    let key_name = rm::RMString::new(context, name);
     let key = unsafe {
         rm::ffi::Export_RedisModule_OpenKey(
             ctx,
@@ -996,23 +998,16 @@ pub fn get_db_channel_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
 pub fn reply_with_error_from_key_type(ctx: *mut rm::ffi::RedisModuleCtx,
                                       key_type: i32)
 -> i32{
+    let context = Context::new(ctx);
     match key_type {
         rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
-            let error = CString::new("ERR - Error the key is empty")
-                .unwrap();
-            unsafe {
-                rm::ffi::RedisModule_ReplyWithError
-                    .unwrap()(ctx, error.as_ptr())
-            }
+            ReplyWithError(context, "ERR - Error the key is empty")
         }
         _ => {
             let error = CStr::from_bytes_with_nul(
                 rm::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
             ).unwrap();
-            unsafe {
-                rm::ffi::RedisModule_ReplyWithError
-                    .unwrap()(ctx, error.as_ptr())
-            }
+            ReplyWithError(context, error.to_str().unwrap())
         }
     }
 }
@@ -1042,10 +1037,6 @@ fn remove_statement(db: &Arc<Mutex<sql::RawConnection>>,
                     -> Result<(), err::RediSQLError> {
     remove_statement_metadata(Arc::clone(db), identifier)
         .or_else(|e| Err(err::RediSQLError::from(e)))
-}
-
-pub fn replicate_verbatim(ctx: *mut rm::ffi::RedisModuleCtx) {
-    unsafe { rm::ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx) };
 }
 
 pub fn replicate(_ctx: *mut rm::ffi::RedisModuleCtx,

@@ -35,13 +35,13 @@ impl From<Context> for *mut ffi::RedisModuleCtx {
 
 pub struct RMString {
     pub ptr: *mut ffi::RedisModuleString,
-    ctx: *mut ffi::RedisModuleCtx,
+    ctx: Context,
 }
 
 impl RMString {
-    pub fn new(ctx: *mut ffi::RedisModuleCtx, s: &str) -> RMString {
+    pub fn new(ctx: Context, s: &str) -> RMString {
         let ptr = unsafe {
-            ffi::RedisModule_CreateString.unwrap()(ctx,
+            ffi::RedisModule_CreateString.unwrap()(ctx.as_ptr(),
                                                    s.as_ptr() as
                                                    *const c_char,
                                                    s.len())
@@ -53,7 +53,8 @@ impl RMString {
 impl Drop for RMString {
     fn drop(&mut self) {
         unsafe {
-            ffi::RedisModule_FreeString.unwrap()(self.ctx, self.ptr);
+            ffi::RedisModule_FreeString.unwrap()(self.ctx.as_ptr(),
+                                                 self.ptr);
         }
     }
 }
@@ -79,5 +80,21 @@ pub fn CreateCommand(ctx: Context,
                                                 0,
                                                 0)
 
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn ReplicateVerbatim(ctx: Context) {
+    unsafe {
+        ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx.as_ptr())
+    };
+}
+
+#[allow(non_snake_case)]
+pub fn ReplyWithError(ctx: Context, error: &str) -> i32 {
+    unsafe {
+        ffi::RedisModule_ReplyWithError.unwrap()(ctx.as_ptr(),
+                                                 error.as_ptr() as
+                                                 *const i8)
     }
 }
