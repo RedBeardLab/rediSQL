@@ -84,10 +84,10 @@ pub fn CreateCommand(ctx: Context,
 }
 
 #[allow(non_snake_case)]
-pub fn ReplicateVerbatim(ctx: Context) {
+pub fn ReplicateVerbatim(ctx: Context) -> i32 {
     unsafe {
         ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx.as_ptr())
-    };
+    }
 }
 
 #[allow(non_snake_case)]
@@ -96,5 +96,15 @@ pub fn ReplyWithError(ctx: Context, error: &str) -> i32 {
         ffi::RedisModule_ReplyWithError.unwrap()(ctx.as_ptr(),
                                                  error.as_ptr() as
                                                  *const i8)
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn OpenKey(ctx: Context,
+               name: RMString,
+               mode: i32)
+               -> *mut ffi::RedisModuleKey {
+    unsafe {
+        ffi::Export_RedisModule_OpenKey(ctx.as_ptr(), name.ptr, mode)
     }
 }

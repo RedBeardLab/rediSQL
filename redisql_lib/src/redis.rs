@@ -28,7 +28,7 @@ use std::fmt;
 use std::error;
 
 pub use redis_type as rm;
-use redis_type::{Context, ReplyWithError};
+use redis_type::{Context, ReplyWithError, OpenKey};
 
 use redisql_error as err;
 use redisql_error::RediSQLError;
@@ -952,13 +952,7 @@ pub fn get_dbkey_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
                            -> Result<Box<DBKey>, i32> {
     let context = Context::new(ctx);
     let key_name = rm::RMString::new(context, name);
-    let key = unsafe {
-        rm::ffi::Export_RedisModule_OpenKey(
-            ctx,
-            key_name.ptr,
-            rm::ffi::REDISMODULE_WRITE,
-        )
-    };
+    let key = OpenKey(context, key_name, rm::ffi::REDISMODULE_WRITE);
     let safe_key = RedisKey { key };
     let key_type = unsafe {
         rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
