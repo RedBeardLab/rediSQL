@@ -874,9 +874,7 @@ pub fn write_file_to_rdb(f: File,
     let lenght = f.metadata().unwrap().len();
     let blocks = lenght / block_size as u64;
 
-    unsafe {
-        rm::ffi::RedisModule_SaveSigned.unwrap()(rdb, blocks as i64);
-    }
+    rm::SaveSigned(rdb, blocks as i64);
 
     let to_write: Vec<u8> = vec![0; block_size as usize];
     let mut buffer = BufReader::with_capacity(block_size as usize, f);
@@ -917,10 +915,7 @@ pub fn write_rdb_to_file(f: &mut File,
                          rdb: *mut rm::ffi::RedisModuleIO)
                          -> Result<(), std::io::Error> {
 
-    let blocks = unsafe {
-        rm::ffi::RedisModule_LoadSigned.unwrap()(rdb) as i64
-    };
-
+    let blocks = rm::LoadSigned(rdb);
     for _ in 0..blocks {
         let mut dimension: usize = 0;
         let c_str_ptr = SafeRedisModuleString {
@@ -929,17 +924,14 @@ pub fn write_rdb_to_file(f: &mut File,
                     .unwrap()(rdb, &mut dimension)
             },
         };
-
         if dimension == 0 {
             break;
         }
-        let buffer: Vec<u8> = unsafe {
-            Vec::from_raw_parts(c_str_ptr.ptr as *mut u8,
-                                dimension,
-                                dimension)
+        let slice = unsafe {
+            slice::from_raw_parts(c_str_ptr.ptr as *mut u8, dimension)
         };
-        let y = f.write_all(buffer.as_slice());
-        mem::forget(buffer);
+        let y = f.write_all(slice);
+        // mem::forget(slice);
         if let Err(e) = y {
             return Err(e);
         }

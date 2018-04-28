@@ -7,10 +7,6 @@ authors = ["Simone Mosciatti <simone@redbeardlab.tech>"]
 name = "redis_sql"
 crate-type = ["cdylib"]
 
-[build-dependencies]
-bindgen = "0.30.0"
-cc = {version = "1.0.3", features = ["parallel"]}
-
 [dependencies]
 fnv = "1.0.5"
 uuid = { version = "0.4", features = ["v4"] }

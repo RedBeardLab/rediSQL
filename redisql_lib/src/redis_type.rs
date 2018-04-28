@@ -108,3 +108,22 @@ pub fn OpenKey(ctx: Context,
         ffi::Export_RedisModule_OpenKey(ctx.as_ptr(), name.ptr, mode)
     }
 }
+
+/*
+#[allow(non_snake_case)]
+pub fn LoadStringBuffer(rdb: *mut rm::ffi::RedisModuleIO,
+                        dimension: &mut usize)
+                        ->  {
+    unsafe { ffi::RedisModule_LoadStringBuffer(rdb, dimension) }
+}
+*/
+
+#[allow(non_snake_case)]
+pub fn LoadSigned(rdb: *mut ffi::RedisModuleIO) -> i64 {
+    unsafe { ffi::RedisModule_LoadSigned.unwrap()(rdb) as i64 }
+}
+
+#[allow(non_snake_case)]
+pub fn SaveSigned(rdb: *mut ffi::RedisModuleIO, to_save: i64) {
+    unsafe { ffi::RedisModule_SaveSigned.unwrap()(rdb, to_save) }
+}

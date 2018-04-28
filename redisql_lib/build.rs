@@ -58,6 +58,7 @@ fn main() {
     let bindings =
         bindgen::Builder::default()
             .parse_callbacks(Box::new(SqliteTypeChooser))
+            // .rustfmt_bindings(false)
             .header("sqlite_dependencies.h")
             .clang_arg(engine_pro)
             .generate()
@@ -71,7 +72,7 @@ fn main() {
     let bindings =
         bindgen::Builder::default()
             .parse_callbacks(Box::new(SqliteTypeChooser))
-            .rustfmt_bindings(true) // see https://github.com/rust-lang-nursery/rust-bindgen/issues/1306#event-1597477817
+            // .rustfmt_bindings(false) // see https://github.com/rust-lang-nursery/rust-bindgen/issues/1306#event-1597477817
             .header("redis_dependencies.h")
             .generate()
             .expect("Unable to generate bindings for Redis");
