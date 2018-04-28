@@ -257,28 +257,18 @@ impl RedisReply for sql::Entity {
         unsafe {
             match *self {
                 sql::Entity::Integer { int } => {
-                    rm::ffi::RedisModule_ReplyWithLongLong
-                        .unwrap()(ctx, int as i64)
+                    rm::ReplyWithLongLong(ctx, int as i64)
                 }
                 sql::Entity::Float { float } => {
-                    rm::ffi::RedisModule_ReplyWithDouble
-                        .unwrap()(ctx, float)
+                    rm::ReplyWithDouble(ctx, float)
                 }
                 sql::Entity::Text { ref text } => {
-                    rm::ffi::RedisModule_ReplyWithStringBuffer
-                        .unwrap()(ctx,
-                                  text.as_ptr() as *const i8,
-                                  text.len())
+                    rm::ReplyWithStringBuffer(ctx, text.as_bytes())
                 }
                 sql::Entity::Blob { ref blob } => {
-                    rm::ffi::RedisModule_ReplyWithStringBuffer
-                        .unwrap()(ctx,
-                                  blob.as_ptr() as *const i8,
-                                  blob.len())
+                    rm::ReplyWithStringBuffer(ctx, blob.as_bytes())
                 }
-                sql::Entity::Null => {
-                    rm::ffi::RedisModule_ReplyWithNull.unwrap()(ctx)
-                }
+                sql::Entity::Null => rm::ReplyWithNull(ctx),
                 sql::Entity::OK { to_replicate } => {
                     QueryResult::OK { to_replicate }.reply(ctx)
                 }                
@@ -884,13 +874,9 @@ pub fn write_file_to_rdb(f: File,
             Ok(0) => {
                 return Ok(());
             }
-            Ok(n) => unsafe {
-                rm::ffi::RedisModule_SaveStringBuffer
-                    .unwrap()(rdb,
-                              tw.as_slice().as_ptr() as *const c_char,
-                              n)
-
-            },
+            Ok(_n) => {
+                rm::SaveStringBuffer(rdb, tw.as_slice());
+            }
             Err(e) => return Err(e),
         }
     }

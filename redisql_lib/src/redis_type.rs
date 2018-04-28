@@ -127,3 +127,43 @@ pub fn LoadSigned(rdb: *mut ffi::RedisModuleIO) -> i64 {
 pub fn SaveSigned(rdb: *mut ffi::RedisModuleIO, to_save: i64) {
     unsafe { ffi::RedisModule_SaveSigned.unwrap()(rdb, to_save) }
 }
+
+#[allow(non_snake_case)]
+pub fn SaveStringBuffer(rdb: *mut ffi::RedisModuleIO,
+                        buffer: &[u8]) {
+    let ptr = buffer.as_ptr() as *const c_char;
+    let len = buffer.len();
+    unsafe {
+        ffi::RedisModule_SaveStringBuffer.unwrap()(rdb, ptr, len)
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn ReplyWithNull(ctx: *mut ffi::RedisModuleCtx) -> i32 {
+    unsafe { ffi::RedisModule_ReplyWithNull.unwrap()(ctx) }
+}
+
+#[allow(non_snake_case)]
+pub fn ReplyWithLongLong(ctx: *mut ffi::RedisModuleCtx,
+                         ll: i64)
+                         -> i32 {
+    unsafe { ffi::RedisModule_ReplyWithLongLong.unwrap()(ctx, ll) }
+}
+
+#[allow(non_snake_case)]
+pub fn ReplyWithDouble(ctx: *mut ffi::RedisModuleCtx,
+                       dd: f64)
+                       -> i32 {
+    unsafe { ffi::RedisModule_ReplyWithDouble.unwrap()(ctx, dd) }
+}
+
+#[allow(non_snake_case)]
+pub fn ReplyWithStringBuffer(ctx: *mut ffi::RedisModuleCtx,
+                             buffer: &[u8])
+                             -> i32 {
+    let ptr = buffer.as_ptr() as *const c_char;
+    let len = buffer.len();
+    unsafe {
+        ffi::RedisModule_ReplyWithStringBuffer.unwrap()(ctx, ptr, len)
+    }
+}
