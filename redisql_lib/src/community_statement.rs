@@ -11,7 +11,6 @@ use sqlite::ffi;
 
 use sqlite::StatementTrait;
 use sqlite::{SQLite3Error, Cursor, RawConnection, SQLiteOK};
-use sqlite::generate_sqlite3_error;
 use sqlite::SQLiteConnection;
 
 
@@ -108,7 +107,7 @@ pub fn generate_statements
                               });
                 }
             }
-            _ => return Err(generate_sqlite3_error(conn.get_db())),
+            _ => return Err(conn.get_last_error()),
         }
     }
 }
@@ -144,20 +143,19 @@ impl Statement {
                        modified_rows: 0,
                    })
             }
-            _ => {
-                Err(generate_sqlite3_error(
-                    unsafe { ffi::sqlite3_db_handle(self.stmt) },
-                ))
-            }
+            _ => Err(self.get_last_error()),
         }
+    }
+    fn get_last_error(&self) -> SQLite3Error {
+        let db = unsafe { ffi::sqlite3_db_handle(self.stmt) };
+        let rc = RawConnection::from_db_handler(db);
+        rc.get_last_error()
     }
 }
 
 impl<'a> StatementTrait<'a> for Statement {
     fn execute(&self) -> Result<Cursor, SQLite3Error> {
-        Err(generate_sqlite3_error(
-                    unsafe { ffi::sqlite3_db_handle(self.stmt) },
-                ))
+        Err(self.get_last_error())
     }
 
     fn new(conn: Arc<Mutex<RawConnection>>,
@@ -178,7 +176,7 @@ impl<'a> StatementTrait<'a> for Statement {
         };
         match r {
             ffi::SQLITE_OK => Ok(Statement { stmt }),
-            _ => Err(generate_sqlite3_error(conn.get_db())),
+            _ => Err(conn.get_last_error()),
         }
     }
 
@@ -220,10 +218,7 @@ impl<'a> StatementTrait<'a> for Statement {
                                          SQLITE_TRANSIENT())
               } {
             ffi::SQLITE_OK => Ok(SQLiteOK::OK),
-            _ => {
-                let db = unsafe { ffi::sqlite3_db_handle(self.stmt) };
-                Err(generate_sqlite3_error(db))
-            }
+            _ => Err(self.get_last_error()),
         }
     }
 

@@ -1,13 +1,11 @@
 extern crate uuid;
 extern crate fnv;
 
-use std::mem;
 use std::ffi::{CString, CStr};
 use std::string;
 use std::fs::File;
 use std::io::BufReader;
 
-use std::os::raw::c_char;
 use std::os::raw::c_long;
 
 use std::io::{Read, Write};
@@ -249,39 +247,37 @@ pub fn create_rm_string(ctx: *mut rm::ffi::RedisModuleCtx,
 */
 
 pub trait RedisReply {
-    fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32;
+    fn reply(&self, ctx: rm::Context) -> i32;
 }
 
 impl RedisReply for sql::Entity {
-    fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
-        unsafe {
-            match *self {
-                sql::Entity::Integer { int } => {
-                    rm::ReplyWithLongLong(ctx, int as i64)
-                }
-                sql::Entity::Float { float } => {
-                    rm::ReplyWithDouble(ctx, float)
-                }
-                sql::Entity::Text { ref text } => {
-                    rm::ReplyWithStringBuffer(ctx, text.as_bytes())
-                }
-                sql::Entity::Blob { ref blob } => {
-                    rm::ReplyWithStringBuffer(ctx, blob.as_bytes())
-                }
-                sql::Entity::Null => rm::ReplyWithNull(ctx),
-                sql::Entity::OK { to_replicate } => {
-                    QueryResult::OK { to_replicate }.reply(ctx)
-                }                
-                sql::Entity::DONE {
-                    modified_rows,
-                    to_replicate,
-                } => {
-                    QueryResult::DONE {
-                            modified_rows,
-                            to_replicate,
-                        }
-                        .reply(ctx)
-                }
+    fn reply(&self, ctx: rm::Context) -> i32 {
+        match *self {
+            sql::Entity::Integer { int } => {
+                rm::ReplyWithLongLong(ctx, i64::from(int))
+            }
+            sql::Entity::Float { float } => {
+                rm::ReplyWithDouble(ctx, float)
+            }
+            sql::Entity::Text { ref text } => {
+                rm::ReplyWithStringBuffer(ctx, text.as_bytes())
+            }
+            sql::Entity::Blob { ref blob } => {
+                rm::ReplyWithStringBuffer(ctx, blob.as_bytes())
+            }
+            sql::Entity::Null => rm::ReplyWithNull(ctx),
+            sql::Entity::OK { to_replicate } => {
+                QueryResult::OK { to_replicate }.reply(ctx)
+            }
+            sql::Entity::DONE {
+                modified_rows,
+                to_replicate,
+            } => {
+                QueryResult::DONE {
+                        modified_rows,
+                        to_replicate,
+                    }
+                    .reply(ctx)
             }
         }
     }
@@ -318,23 +314,21 @@ fn reply_with_done(ctx: *mut rm::ffi::RedisModuleCtx,
     reply_with_simple_string(ctx, "DONE\0");
     unsafe {
         rm::ffi::RedisModule_ReplyWithLongLong
-            .unwrap()(ctx, modified_rows as i64);
+            .unwrap()(ctx, i64::from(modified_rows));
     }
     rm::ffi::REDISMODULE_OK
 }
 
-fn reply_with_array(ctx: *mut rm::ffi::RedisModuleCtx,
-                    array: Vec<sql::Row>)
-                    -> i32 {
+fn reply_with_array(ctx: rm::Context, array: Vec<sql::Row>) -> i32 {
     let len = array.len() as c_long;
     unsafe {
-        rm::ffi::RedisModule_ReplyWithArray.unwrap()(ctx, len);
+        rm::ffi::RedisModule_ReplyWithArray.unwrap()(ctx.as_ptr(),
+                                                     len);
     }
     for row in array {
         unsafe {
-            rm::ffi::RedisModule_ReplyWithArray.unwrap()(ctx,
-                                                         row.len() as
-                                                         c_long);
+            rm::ffi::RedisModule_ReplyWithArray
+                .unwrap()(ctx.as_ptr(), row.len() as c_long);
         }
         for entity in row {
             entity.reply(ctx);
@@ -345,16 +339,16 @@ fn reply_with_array(ctx: *mut rm::ffi::RedisModuleCtx,
 
 
 impl RedisReply for sql::SQLite3Error {
-    fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
+    fn reply(&self, ctx: Context) -> i32 {
         let error = format!("{}", self);
-        reply_with_error(ctx, error)
+        reply_with_error(ctx.as_ptr(), error)
     }
 }
 
 impl RedisReply for RediSQLError {
-    fn reply(&self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
+    fn reply(&self, ctx: Context) -> i32 {
         let error = format!("{}", self);
-        reply_with_error(ctx, error)
+        reply_with_error(ctx.as_ptr(), error)
     }
 }
 
@@ -466,11 +460,11 @@ pub enum QueryResult {
 }
 
 impl QueryResult {
-    pub fn reply(self, ctx: *mut rm::ffi::RedisModuleCtx) -> i32 {
+    pub fn reply(self, ctx: rm::Context) -> i32 {
         match self {
-            QueryResult::OK { .. } => reply_with_ok(ctx),
+            QueryResult::OK { .. } => reply_with_ok(ctx.as_ptr()),
             QueryResult::DONE { modified_rows, .. } => {
-                reply_with_done(ctx, modified_rows)
+                reply_with_done(ctx.as_ptr(), modified_rows)
             }
             QueryResult::Array { array, .. } => {
                 reply_with_array(ctx, array)
@@ -837,11 +831,11 @@ pub fn make_backup(conn1: &sql::RawConnection,
     match sql::create_backup(conn1, conn2) {
         Err(e) => Err(e),
         Ok(bk) => {
-            let mut result = sql::backup_step(bk, 1);
+            let mut result = unsafe { sql::BackupStep(&bk, 1) };
             while sql::backup_should_step_again(result) {
-                result = sql::backup_step(bk, 1);
+                result = unsafe { sql::BackupStep(&bk, 1) };
             }
-            sql::backup_finish(bk);
+            unsafe { sql::BackupFinish(&bk) };
             Ok(result)
         }
     }
@@ -850,15 +844,15 @@ pub fn make_backup(conn1: &sql::RawConnection,
 pub fn create_backup(conn: &sql::RawConnection,
                      path: &str)
                      -> Result<i32, sql::SQLite3Error> {
-    match sql::open_connection(path) {
+    match sql::RawConnection::open_connection(path) {
         Err(e) => Err(e),
         Ok(new_db) => make_backup(conn, &new_db),
     }
 }
 
-pub fn write_file_to_rdb(f: File,
-                         rdb: *mut rm::ffi::RedisModuleIO)
-                         -> Result<(), std::io::Error> {
+pub unsafe fn write_file_to_rdb(f: File,
+                                rdb: *mut rm::ffi::RedisModuleIO)
+                                -> Result<(), std::io::Error> {
 
     let block_size = 1024 * 4 as i64;
     let lenght = f.metadata().unwrap().len();
@@ -871,12 +865,8 @@ pub fn write_file_to_rdb(f: File,
     loop {
         let mut tw = to_write.clone();
         match buffer.read(tw.as_mut_slice()) {
-            Ok(0) => {
-                return Ok(());
-            }
-            Ok(_n) => {
-                rm::SaveStringBuffer(rdb, tw.as_slice());
-            }
+            Ok(0) => return Ok(()),
+            Ok(_n) => rm::SaveStringBuffer(rdb, tw.as_slice()),
             Err(e) => return Err(e),
         }
     }
@@ -897,25 +887,22 @@ impl Drop for SafeRedisModuleString {
     }
 }
 
-pub fn write_rdb_to_file(f: &mut File,
-                         rdb: *mut rm::ffi::RedisModuleIO)
-                         -> Result<(), std::io::Error> {
+pub unsafe fn write_rdb_to_file(f: &mut File,
+                                rdb: *mut rm::ffi::RedisModuleIO)
+                                -> Result<(), std::io::Error> {
 
     let blocks = rm::LoadSigned(rdb);
     for _ in 0..blocks {
         let mut dimension: usize = 0;
         let c_str_ptr = SafeRedisModuleString {
-            ptr: unsafe {
-                rm::ffi::RedisModule_LoadStringBuffer
-                    .unwrap()(rdb, &mut dimension)
-            },
+            ptr: rm::ffi::RedisModule_LoadStringBuffer
+                .unwrap()(rdb, &mut dimension),
         };
         if dimension == 0 {
             break;
         }
-        let slice = unsafe {
-            slice::from_raw_parts(c_str_ptr.ptr as *mut u8, dimension)
-        };
+        let slice = slice::from_raw_parts(c_str_ptr.ptr as *mut u8,
+                                          dimension);
         let y = f.write_all(slice);
         // mem::forget(slice);
         if let Err(e) = y {
@@ -930,7 +917,7 @@ pub fn get_dbkey_from_name(ctx: *mut rm::ffi::RedisModuleCtx,
                            -> Result<Box<DBKey>, i32> {
     let context = Context::new(ctx);
     let key_name = rm::RMString::new(context, name);
-    let key = OpenKey(context, key_name, rm::ffi::REDISMODULE_WRITE);
+    let key = OpenKey(context, &key_name, rm::ffi::REDISMODULE_WRITE);
     let safe_key = RedisKey { key };
     let key_type = unsafe {
         rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)

@@ -18,6 +18,7 @@ use community_statement::Statement;
 #[allow(non_camel_case_types)]
 #[allow(non_upper_case_globals)]
 pub mod ffi {
+    #![allow(clippy)]
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
@@ -37,28 +38,6 @@ pub struct SQLite3Error {
     pub code: i32,
     pub error_message: String,
     pub error_string: String,
-}
-
-pub fn generate_sqlite3_error(conn: *mut ffi::sqlite3)
-                              -> SQLite3Error {
-    let error_code = unsafe { ffi::sqlite3_extended_errcode(conn) };
-    let error_message =
-        unsafe {
-            CStr::from_ptr(ffi::sqlite3_errmsg(conn))
-                .to_string_lossy()
-                .into_owned()
-        };
-    let error_string =
-        unsafe {
-            CStr::from_ptr(ffi::sqlite3_errstr(error_code))
-                .to_string_lossy()
-                .into_owned()
-        };
-    SQLite3Error {
-        code: error_code,
-        error_message,
-        error_string,
-    }
 }
 
 impl fmt::Display for SQLite3Error {
@@ -103,42 +82,72 @@ impl Drop for RawConnection {
 
 pub trait SQLiteConnection {
     fn get_db(&self) -> *mut ffi::sqlite3;
+    fn get_last_error(&self) -> SQLite3Error;
 }
 
 impl SQLiteConnection for RawConnection {
     fn get_db(&self) -> *mut ffi::sqlite3 {
         self.db
     }
+    fn get_last_error(&self) -> SQLite3Error {
+        let error_code =
+            unsafe { ffi::sqlite3_extended_errcode(self.get_db()) };
+        let error_message =
+            unsafe {
+                CStr::from_ptr(ffi::sqlite3_errmsg(self.get_db()))
+                    .to_string_lossy()
+                    .into_owned()
+            };
+        let error_string =
+            unsafe {
+                CStr::from_ptr(ffi::sqlite3_errstr(error_code))
+                    .to_string_lossy()
+                    .into_owned()
+            };
+        SQLite3Error {
+            code: error_code,
+            error_message,
+            error_string,
+        }
+    }
+}
+
+impl RawConnection {
+    pub fn open_connection(path: &str)
+                           -> Result<RawConnection, SQLite3Error> {
+        let mut db: *mut ffi::sqlite3 =
+            unsafe { mem::uninitialized() };
+        let c_path = CString::new(path).unwrap();
+        let r = unsafe {
+            let ptr_path = c_path.as_ptr();
+            ffi::sqlite3_open_v2(ptr_path,
+                                 &mut db,
+                                 ffi::SQLITE_OPEN_CREATE |
+                                 ffi::SQLITE_OPEN_READWRITE,
+                                 ptr::null())
+        };
+        let rc = RawConnection {
+            db,
+            modified_rows: 0,
+        };
+        match r {
+            ffi::SQLITE_OK => Ok(rc),
+            _ => Err(rc.get_last_error()),
+        }
+    }
+    pub fn from_db_handler(db: *mut ffi::sqlite3) -> RawConnection {
+        RawConnection {
+            db,
+            modified_rows: 0,
+        }
+    }
 }
 
 pub fn get_arc_connection
     (path: &str)
      -> Result<Arc<Mutex<RawConnection>>, SQLite3Error> {
-    let raw = open_connection(path)?;
+    let raw = RawConnection::open_connection(path)?;
     Ok(Arc::new(Mutex::new(raw)))
-}
-
-pub fn open_connection(path: &str)
-                       -> Result<RawConnection, SQLite3Error> {
-    let mut db: *mut ffi::sqlite3 = unsafe { mem::uninitialized() };
-    let c_path = CString::new(path).unwrap();
-    let r = unsafe {
-        let ptr_path = c_path.as_ptr();
-        ffi::sqlite3_open_v2(ptr_path,
-                             &mut db,
-                             ffi::SQLITE_OPEN_CREATE |
-                             ffi::SQLITE_OPEN_READWRITE,
-                             ptr::null())
-    };
-    match r {
-        ffi::SQLITE_OK => {
-            Ok(RawConnection {
-                   db,
-                   modified_rows: 0,
-               })
-        }
-        _ => Err(generate_sqlite3_error(db)),
-    }
 }
 
 pub trait StatementTrait<'a>: Sized {
@@ -328,10 +337,19 @@ impl<'a> Iterator for Cursor<'a> {
     }
 }
 
-pub fn create_backup
-    (src: &RawConnection,
-     dest: &RawConnection)
-     -> Result<*mut ffi::sqlite3_backup, SQLite3Error> {
+pub struct Backup {
+    bk: *mut ffi::sqlite3_backup,
+}
+
+impl Backup {
+    fn as_ptr(&self) -> *mut ffi::sqlite3_backup {
+        self.bk
+    }
+}
+
+pub fn create_backup(src: &RawConnection,
+                     dest: &RawConnection)
+                     -> Result<Backup, SQLite3Error> {
     let dest_name = CString::new("main").unwrap();
     let src_name = CString::new("main").unwrap();
     let result = unsafe {
@@ -341,20 +359,22 @@ pub fn create_backup
                                  src_name.as_ptr())
     };
     match result {
-        null if null.is_null() => {
-            Err(generate_sqlite3_error(dest.db))
-        }
-        ptr => Ok(ptr),
+        null if null.is_null() => Err(dest.get_last_error()),
+        ptr => Ok(Backup { bk: ptr }),
     }
 }
 
-pub fn backup_step(bk: *mut ffi::sqlite3_backup, steps: i32) -> i32 {
-    unsafe { ffi::sqlite3_backup_step(bk, steps) }
+// TODO XXX finish work here
+#[allow(non_snake_case)]
+pub unsafe fn BackupStep(bk: &Backup, steps: i32) -> i32 {
+    ffi::sqlite3_backup_step(bk.as_ptr(), steps)
 }
 
-pub fn backup_finish(bk: *mut ffi::sqlite3_backup) -> i32 {
-    unsafe { ffi::sqlite3_backup_finish(bk) }
+#[allow(non_snake_case)]
+pub unsafe fn BackupFinish(bk: &Backup) -> i32 {
+    ffi::sqlite3_backup_finish(bk.as_ptr())
 }
+
 
 pub fn backup_step_is_ok(result: i32) -> bool {
     result == ffi::SQLITE_OK

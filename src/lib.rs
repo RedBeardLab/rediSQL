@@ -6,7 +6,6 @@ extern crate env_logger;
 use env_logger::{LogBuilder, LogTarget};
 
 use std::ffi::{CString, CStr};
-use std::mem;
 use std::ptr;
 use std::fs::{remove_file, File};
 
@@ -42,6 +41,7 @@ extern "C" fn reply_exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::rm::ffi::RedisModuleString,
                          _argc: ::std::os::raw::c_int)
 -> i32{
+    let context = r::rm::Context::new(ctx);
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData
             .unwrap()(ctx) as
@@ -50,8 +50,8 @@ extern "C" fn reply_exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(query_result) => query_result.reply(ctx),
-        Err(error) => error.reply(ctx),
+        Ok(query_result) => query_result.reply(context),
+        Err(error) => error.reply(context),
     }
 }
 
@@ -60,6 +60,7 @@ extern "C" fn reply_exec_statement(
     _argv: *mut *mut r::rm::ffi::RedisModuleString,
     _argc: ::std::os::raw::c_int,
 ) -> i32{
+    let context = r::rm::Context::new(ctx);
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData
             .unwrap()(ctx) as
@@ -68,8 +69,8 @@ extern "C" fn reply_exec_statement(
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(query_result) => query_result.reply(ctx),
-        Err(error) => error.reply(ctx),
+        Ok(query_result) => query_result.reply(context),
+        Err(error) => error.reply(context),
     }
 }
 
@@ -78,6 +79,7 @@ extern "C" fn reply_create_statement(
     _argv: *mut *mut r::rm::ffi::RedisModuleString,
     _argc: ::std::os::raw::c_int,
 ) -> i32{
+    let context = r::rm::Context::new(ctx);
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData
             .unwrap()(ctx) as
@@ -86,8 +88,8 @@ extern "C" fn reply_create_statement(
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(query_result) => query_result.reply(ctx),
-        Err(error) => error.reply(ctx),
+        Ok(query_result) => query_result.reply(context),
+        Err(error) => error.reply(context),
     }
 }
 
@@ -243,7 +245,6 @@ extern "C" fn Exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
                                               10000)
                             },
                     };
-                    mem::forget(ctx);
                     let cmd = r::Command::Exec {
                         query: argvector[2],
                         client: blocked_client,
@@ -296,7 +297,6 @@ extern "C" fn Query(ctx: *mut r::rm::ffi::RedisModuleCtx,
                                               10000)
                             },
                     };
-                    mem::forget(ctx);
                     let cmd = r::Command::Query {
                         query: argvector[2],
                         client: blocked_client,
@@ -532,7 +532,7 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
                                 r::enable_foreign_key(rc.clone())
                                 })
                             }) {
-                                Err(e) => e.reply(ctx),
+                                Err(e) => e.reply(context),
                                 Ok(()) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(tx, rc, in_memory);
@@ -549,7 +549,7 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
                                         r::rm::ffi::REDISMODULE_OK => {
                                             let ok = r::QueryResult::OK {to_replicate: true};
                                             ReplicateVerbatim(context);
-                                            ok.reply(ctx)
+                                            ok.reply(context)
                                         }
                                         r::rm::ffi::REDISMODULE_ERR => {
                                             let err = CString::new("ERR - Error in saving the database inside Redis").unwrap();
@@ -666,13 +666,13 @@ unsafe extern "C" fn rdb_load(rdb: *mut r::rm::ffi::RedisModuleIO,
                     ptr::null_mut()
                 }
                 Ok(()) => {
-                    match sql::open_connection(":memory:") {
+                    match sql::RawConnection::open_connection(":memory:") {
                         Err(_) => {
                             println!("Was impossible to open the in memory db!");
                             ptr::null_mut()
                         },
                         Ok(in_mem) => {
-                            match sql::open_connection(&path) {
+                            match sql::RawConnection::open_connection(&path) {
                                 Err(_) => {
                                     println!("Error in opening the rdb database");
                                     ptr::null_mut()
