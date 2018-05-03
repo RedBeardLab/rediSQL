@@ -904,7 +904,6 @@ pub unsafe fn write_rdb_to_file(f: &mut File,
         let slice = slice::from_raw_parts(c_str_ptr.ptr as *mut u8,
                                           dimension);
         let y = f.write_all(slice);
-        // mem::forget(slice);
         if let Err(e) = y {
             return Err(e);
         }
@@ -991,10 +990,11 @@ fn remove_statement(db: &Arc<Mutex<sql::RawConnection>>,
         .or_else(|e| Err(err::RediSQLError::from(e)))
 }
 
-pub fn replicate(_ctx: *mut rm::ffi::RedisModuleCtx,
-                 _command: String,
-                 _argv: *mut *mut rm::ffi::RedisModuleString,
-                 _argc: std::os::raw::c_int) {
+#[allow(non_snake_case)]
+pub unsafe fn Replicate(_ctx: rm::Context,
+                        _command: &str,
+                        _argv: *mut *mut rm::ffi::RedisModuleString,
+                        _argc: std::os::raw::c_int) {
 }
 
 pub fn register_function(

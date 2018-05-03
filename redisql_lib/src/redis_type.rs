@@ -1,4 +1,4 @@
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_int};
 
 use std::ffi::CString;
 
@@ -35,7 +35,7 @@ impl From<Context> for *mut ffi::RedisModuleCtx {
 }
 
 pub struct RMString {
-    pub ptr: *mut ffi::RedisModuleString,
+    ptr: *mut ffi::RedisModuleString,
     ctx: Context,
 }
 
@@ -49,13 +49,16 @@ impl RMString {
         };
         RMString { ptr, ctx }
     }
+    pub fn as_ptr(&self) -> *mut ffi::RedisModuleString {
+        self.ptr
+    }
 }
 
 impl Drop for RMString {
     fn drop(&mut self) {
         unsafe {
             ffi::RedisModule_FreeString.unwrap()(self.ctx.as_ptr(),
-                                                 self.ptr);
+                                                 self.as_ptr());
         }
     }
 }
@@ -89,6 +92,21 @@ pub fn ReplicateVerbatim(ctx: Context) -> i32 {
     unsafe {
         ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx.as_ptr())
     }
+}
+
+#[allow(non_snake_case)]
+pub unsafe fn Replicate(ctx: Context,
+                        command: &str,
+                        argv: *mut *mut ffi::RedisModuleString,
+                        argc: c_int)
+                        -> i32 {
+    let command = CString::new(command).unwrap();
+    let v = CString::new("v").unwrap();
+    ffi::RedisModule_Replicate.unwrap()(ctx.as_ptr(),
+                                        command.as_ptr(),
+                                        v.as_ptr(),
+                                        argv.offset(1),
+                                        argc - 1)
 }
 
 #[allow(non_snake_case)]
@@ -168,4 +186,30 @@ pub fn ReplyWithStringBuffer(ctx: Context, buffer: &[u8]) -> i32 {
                                                         ptr,
                                                         len)
     }
+}
+
+pub struct AOF {
+    aof: *mut ffi::RedisModuleIO,
+}
+
+impl AOF {
+    pub fn new(aof: *mut ffi::RedisModuleIO) -> AOF {
+        AOF { aof }
+    }
+    pub fn as_ptr(&self) -> *mut ffi::RedisModuleIO {
+        self.aof
+    }
+}
+
+#[allow(non_snake_case)]
+pub unsafe fn EmitAOF(aof: &AOF,
+                      command: &str,
+                      specifier: &str,
+                      key: *mut ffi::RedisModuleString,
+                      data: &str) {
+    ffi::RedisModule_EmitAOF.unwrap()(aof.as_ptr(),
+                                      command.as_ptr() as *const i8,
+                                      specifier.as_ptr() as *const i8,
+                                      key,
+                                      data.as_ptr())
 }

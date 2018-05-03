@@ -33,9 +33,9 @@ extern crate engine_pro;
 use engine_pro::{WriteAOF, register};
 
 #[cfg(feature = "pro")]
-use engine_pro::replicate;
+use engine_pro::Replicate;
 #[cfg(not(feature = "pro"))]
-use redisql_lib::redis::replicate;
+use redisql_lib::redis::Replicate;
 
 extern "C" fn reply_exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
                          _argv: *mut *mut r::rm::ffi::RedisModuleString,
@@ -122,7 +122,7 @@ extern "C" fn ExecStatement(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
-    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
 
     match argvector.len() {
         0...2 => {
@@ -135,7 +135,7 @@ extern "C" fn ExecStatement(
             }
         }
         _ => {
-            match get_db_and_loopdata_from_name(ctx, &argvector[1]) {
+            match get_db_and_loopdata_from_name(ctx, argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -159,7 +159,7 @@ extern "C" fn ExecStatement(
 
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx, String::from("REDISQL.EXEC_STATEMENT.NOW"), argv, argc);
+                            unsafe {Replicate(context, "REDISQL.EXEC_STATEMENT.NOW", argv, argc);}
                             r::rm::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
@@ -189,7 +189,7 @@ extern "C" fn QueryStatement(
             }
         }
         _ => {
-            match get_db_and_loopdata_from_name(ctx, &argvector[1]) {
+            match get_db_and_loopdata_from_name(ctx, argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -226,10 +226,10 @@ extern "C" fn Exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
                    argv: *mut *mut r::rm::ffi::RedisModuleString,
                    argc: ::std::os::raw::c_int)
                    -> i32 {
-    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         3 => {
-            match get_db_channel_from_name(ctx, &argvector[1]) {
+            match get_db_channel_from_name(ctx, argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -251,7 +251,7 @@ extern "C" fn Exec(ctx: *mut r::rm::ffi::RedisModuleCtx,
                     };
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx, String::from("REDISQL.EXEC.NOW"), argv, argc);
+                            unsafe {Replicate(context, "REDISQL.EXEC.NOW", argv, argc);}
                             r::rm::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
@@ -281,7 +281,7 @@ extern "C" fn Query(ctx: *mut r::rm::ffi::RedisModuleCtx,
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         3 => {
-            match get_db_channel_from_name(ctx, &argvector[1]) {
+            match get_db_channel_from_name(ctx, argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -331,10 +331,10 @@ extern "C" fn CreateStatement(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
-    let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         4 => {
-            match get_db_channel_from_name(ctx, &argvector[1]) {
+            match get_db_channel_from_name(ctx, argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -357,7 +357,8 @@ extern "C" fn CreateStatement(
 
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx, String::from("REDISQL.CREATE_STATEMENT.NOW"), argv, argc);
+                            unsafe {
+                                Replicate(context, "REDISQL.CREATE_STATEMENT.NOW", argv, argc);}
                             r::rm::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
@@ -387,10 +388,10 @@ extern "C" fn UpdateStatement(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
-    let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         4 => {
-            match get_db_channel_from_name(ctx, &argvector[1]) {
+            match get_db_channel_from_name(ctx, argvector[1]) {
                 Err(key_type) => {
                     reply_with_error_from_key_type(ctx, key_type)
                 }
@@ -414,7 +415,7 @@ extern "C" fn UpdateStatement(
 
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx, String::from("REDISQL.UPDATE_STATEMENT.NOW"), argv, argc);
+                            unsafe {Replicate(context, "REDISQL.UPDATE_STATEMENT.NOW", argv, argc);}
                             r::rm::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
@@ -442,10 +443,10 @@ extern "C" fn DeleteStatement(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32{
-    let (_ctx, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
         3 => {
-            match get_db_channel_from_name(ctx, &argvector[1]) {
+            match get_db_channel_from_name(ctx, argvector[1]) {
                 Ok(ch) => {
                     let blocked_client =
                         r::BlockedClient {
@@ -464,7 +465,7 @@ extern "C" fn DeleteStatement(
                     };
                     match ch.send(cmd) {
                         Ok(()) => {
-                            replicate(ctx, String::from("REDISQL.DELETE_STATEMENT.NOW"), argv, argc);
+                            unsafe {Replicate(context, "REDISQL.DELETE_STATEMENT.NOW", argv, argc);}
                             r::rm::ffi::REDISMODULE_OK
                         }
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
@@ -499,15 +500,15 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
     match argvector.len() {
         2 | 3 => {
             let key_name = r::rm::RMString::new(context,
-                                                &argvector[1]);
+                                                argvector[1]);
             let key = unsafe {
                 r::rm::ffi::Export_RedisModule_OpenKey(
                     ctx,
-                    key_name.ptr,
+                    key_name.as_ptr(),
                     r::rm::ffi::REDISMODULE_WRITE,
                 )
             };
-            let safe_key = r::RedisKey { key: key };
+            let safe_key = r::RedisKey { key };
             match unsafe {
                       r::rm::ffi::RedisModule_KeyType
                           .unwrap()(safe_key.key)
@@ -516,7 +517,7 @@ extern "C" fn CreateDB(ctx: *mut r::rm::ffi::RedisModuleCtx,
                     let (path, in_memory): (&str,
                                             bool) =
                         match argvector.len() {
-                            3 => (&argvector[2], false),
+                            3 => (argvector[2], false),
                             _ => (":memory:", true),
                         };
                     match sql::get_arc_connection(path) {
@@ -774,7 +775,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
 
-    if unsafe { r::rm::ffi::DBType } == std::ptr::null_mut() {
+    if unsafe { r::rm::ffi::DBType.is_null() } {
         return r::rm::ffi::REDISMODULE_ERR;
     }
 
