@@ -6,9 +6,11 @@ import os
 
 import redis
 from rmtest import ModuleTestCase
-    
-os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/debug/libredis_sql.so"
-os.environ["REDIS_PATH"] = "/home/simo/redis-4.0.2/src/redis-server"
+
+if "REDIS_MODULE_PATH" not in os.environ:
+    os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/debug/libredis_sql.so"
+
+os.environ["REDIS_PATH"] = "/home/simo/redis-4.0.8/src/redis-server"
 os.environ["RUST_BACKTRACE"] = "full"
 
 class Table():
@@ -348,13 +350,12 @@ class TestRead(TestRediSQLWithExec):
       with Table(self, "t1", "(A INTEGER)", key = "B"):
         with self.assertRaises(redis.exceptions.ResponseError):
           self.exec_naked("REDISQL.QUERY", "B", "INSERT INTO t1 VALUES(5);")
-        #self.assertEquals(err, )
-        #done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE TABLE test(a INT, b TEXT);")
-        #self.assertEquals(done, ["DONE", 0L])
-        #done = self.exec_naked("REDISQL.EXEC.NOW", "A", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
-        #self.assertEquals(done, ["DONE", 3L])
-        #result = self.exec_naked("REDISQL.EXEC.NOW", "A", "SELECT * FROM test ORDER BY a ASC")
-        #self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
+        done = self.exec_naked("REDISQL.EXEC", "B", "CREATE TABLE test(a INT, b TEXT);")
+        self.assertEquals(done, ["DONE", 0L])
+        done = self.exec_naked("REDISQL.EXEC", "B", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
+        self.assertEquals(done, ["DONE", 3L])
+        result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM test ORDER BY a ASC")
+        self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
 
 
         
