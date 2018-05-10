@@ -6,7 +6,7 @@ use std::string;
 use std::fs::File;
 use std::io::BufReader;
 
-use std::os::raw::c_long;
+use std::os::raw::{c_long, c_char};
 
 use std::io::{Read, Write};
 
@@ -297,7 +297,7 @@ fn reply_with_simple_string(ctx: *mut rm::ffi::RedisModuleCtx,
                             -> i32 {
     unsafe {
         rm::ffi::RedisModule_ReplyWithSimpleString
-            .unwrap()(ctx, s.as_ptr() as *const i8)
+            .unwrap()(ctx, s.as_ptr() as *const c_char)
     }
 }
 

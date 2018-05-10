@@ -114,7 +114,7 @@ pub fn ReplyWithError(ctx: Context, error: &str) -> i32 {
     unsafe {
         ffi::RedisModule_ReplyWithError.unwrap()(ctx.as_ptr(),
                                                  error.as_ptr() as
-                                                 *const i8)
+                                                 *const c_char)
     }
 }
 
@@ -208,8 +208,10 @@ pub unsafe fn EmitAOF(aof: &AOF,
                       key: *mut ffi::RedisModuleString,
                       data: &str) {
     ffi::RedisModule_EmitAOF.unwrap()(aof.as_ptr(),
-                                      command.as_ptr() as *const i8,
-                                      specifier.as_ptr() as *const i8,
+                                      command.as_ptr() as
+                                      *const c_char,
+                                      specifier.as_ptr() as
+                                      *const c_char,
                                       key,
                                       data.as_ptr())
 }
