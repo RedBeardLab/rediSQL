@@ -159,14 +159,6 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "engine_pro"
-version = "0.1.0"
-dependencies = [
- "cc 1.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
- "redisql_lib 0.1.0",
-]
-
-[[package]]
 name = "env_logger"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -359,9 +351,8 @@ dependencies = [
 
 [[package]]
 name = "rediSQL"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
- "engine_pro 0.1.0",
  "env_logger 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",

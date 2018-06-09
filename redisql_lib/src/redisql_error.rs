@@ -1,10 +1,9 @@
-use std::fmt;
 use std::error;
 use std::error::Error;
+use std::fmt;
 
-
-use sqlite as sql;
 use redis;
+use sqlite as sql;
 
 pub trait RediSQLErrorTrait: fmt::Display + error::Error {}
 
@@ -14,9 +13,10 @@ pub struct RediSQLError {
 }
 
 impl RediSQLError {
-    pub fn new(debug: String,
-               error_description: String)
-               -> RediSQLError {
+    pub fn new(
+        debug: String,
+        error_description: String,
+    ) -> RediSQLError {
         RediSQLError {
             debug,
             error_description,
