@@ -1,29 +1,22 @@
 extern crate fnv;
 extern crate uuid;
 
-use std::ffi::{CStr, CString};
-use std::fs::File;
-use std::io::BufReader;
-use std::string;
-
-use std::os::raw::{c_char, c_long};
-
-use std::io::{Read, Write};
-
+use self::fnv::FnvHashMap;
+use std;
+use std::cell::RefCell;
 use std::clone::Clone;
-
-use std::sync::mpsc::{Receiver, RecvError, Sender};
-use std::sync::{Arc, Mutex, RwLock};
-
+use std::collections::hash_map::Entry;
+use std::error;
+use std::ffi::{CStr, CString};
+use std::fmt;
+use std::fs::File;
+use std::io::{BufReader, Read, Write};
+use std::os::raw::{c_char, c_long};
 use std::slice;
 use std::str;
-
-use self::fnv::FnvHashMap;
-use std::collections::hash_map::Entry;
-
-use std;
-use std::error;
-use std::fmt;
+use std::string;
+use std::sync::mpsc::{Receiver, RecvError, Sender};
+use std::sync::{Arc, Mutex, RwLock};
 
 pub use redis_type as rm;
 use redis_type::{Context, OpenKey, ReplyWithError};
@@ -219,11 +212,13 @@ impl StatementCache for ReplicationBook {
 pub struct Loop {
     db: Arc<Mutex<sql::RawConnection>>,
     replication_book: ReplicationBook,
+    redis_context: Arc<Mutex<Option<Context>>>,
 }
 
 pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
     fn get_db(&self) -> Arc<Mutex<sql::RawConnection>>;
+    fn set_redis_context(&self, ctx: Context);
 }
 
 impl LoopData for Loop {
@@ -233,22 +228,33 @@ impl LoopData for Loop {
     fn get_db(&self) -> Arc<Mutex<sql::RawConnection>> {
         Arc::clone(&self.db)
     }
+    fn set_redis_context(&self, ctx: Context) {
+        *self.redis_context.lock().unwrap() = Some(ctx)
+    }
 }
 
 impl Loop {
-    fn new(db: sql::RawConnection) -> Self {
+    fn new(
+        db: sql::RawConnection,
+        redis_ctx: Arc<Mutex<Option<Context>>>,
+    ) -> Self {
         let db = Arc::new(Mutex::new(db));
         let replication_book = ReplicationBook::new(&db);
         Loop {
             db,
             replication_book,
+            redis_context: Arc::new(Mutex::new(None)),
         }
     }
-    fn new_from_arc(db: Arc<Mutex<sql::RawConnection>>) -> Loop {
+    fn new_from_arc(
+        db: Arc<Mutex<sql::RawConnection>>,
+        redis_context: Arc<Mutex<Option<Context>>>,
+    ) -> Loop {
         let replication_book = ReplicationBook::new(&db);
         Loop {
             db,
             replication_book,
+            redis_context,
         }
     }
 }
@@ -539,7 +545,9 @@ pub fn do_execute(
     query: &str,
 ) -> Result<QueryResult, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
+    debug!("do_execute | Created statement");
     let cursor = stmt.execute()?;
+    debug!("do_execute | Statement executed");
     Ok(cursor_to_query_result(cursor))
 }
 
@@ -645,6 +653,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData + Clone>(
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
                 let result = do_execute(&loopdata.get_db(), query);
+                debug!("Exec | DONE, returning result");
                 return_value(&client, result);
             }
             Ok(Command::Query { query, client }) => {
@@ -770,24 +779,13 @@ pub struct DBKey {
 }
 
 impl DBKey {
-    pub fn new(
-        tx: Sender<Command>,
-        db: sql::RawConnection,
-        in_memory: bool,
-    ) -> DBKey {
-        let loop_data = Loop::new(db);
-        DBKey {
-            tx,
-            in_memory,
-            loop_data,
-        }
-    }
     pub fn new_from_arc(
         tx: Sender<Command>,
         db: Arc<Mutex<sql::RawConnection>>,
         in_memory: bool,
+        redis_context: Arc<Mutex<Option<Context>>>,
     ) -> DBKey {
-        let loop_data = Loop::new_from_arc(db);
+        let loop_data = Loop::new_from_arc(db, redis_context);
         DBKey {
             tx,
             in_memory,

@@ -30,6 +30,9 @@ impl Context {
     }
 }
 
+unsafe impl Send for Context {}
+unsafe impl Sync for Context {}
+
 impl From<Context> for *mut ffi::RedisModuleCtx {
     fn from(c: Context) -> *mut ffi::RedisModuleCtx {
         c.ctx

@@ -1,17 +1,18 @@
+use std::cell::RefCell;
 use std::error;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::iter::FromIterator;
 use std::mem;
-use std::ptr;
-
-use std::sync::{Arc, Mutex};
-
 use std::os::raw::c_char;
+use std::ptr;
+use std::sync::{Arc, Mutex};
 
 use redisql_error as err;
 
 use community_statement::Statement;
+
+use redis_type::Context;
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]

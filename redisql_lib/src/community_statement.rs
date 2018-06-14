@@ -1,16 +1,17 @@
+use redis_type::Context;
+
+use sqlite::SQLiteConnection;
+use sqlite::StatementTrait;
+use sqlite::ffi;
+use sqlite::{Cursor, RawConnection, SQLite3Error, SQLiteOK};
+
+use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::mem;
 use std::os::raw::c_char;
 use std::ptr;
-
 use std::sync::{Arc, Mutex};
-
-use sqlite::ffi;
-
-use sqlite::SQLiteConnection;
-use sqlite::StatementTrait;
-use sqlite::{Cursor, RawConnection, SQLite3Error, SQLiteOK};
 
 #[derive(Clone, Debug)]
 enum Parameters {
@@ -238,8 +239,10 @@ impl<'a> StatementTrait<'a> for MultiStatement {
     fn execute(&self) -> Result<Cursor, SQLite3Error> {
         let db = self.db.clone();
         let conn = db.lock().unwrap();
+        debug!("Execute | Acquired db lock");
         let rows_modified_before_executing =
             unsafe { ffi::sqlite3_total_changes(conn.get_db()) };
+        debug!("Execute | Read row modified before");
         match self.stmts
             .iter()
             .map(|stmt| stmt.execute(&conn))
@@ -247,6 +250,7 @@ impl<'a> StatementTrait<'a> for MultiStatement {
         {
             Err(e) => Err(e),
             Ok(mut v) => {
+                debug!("Execute=> Executed trains of statements");
                 let rows_modified_after_executing = unsafe {
                     ffi::sqlite3_total_changes(conn.get_db())
                 };

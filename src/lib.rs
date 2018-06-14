@@ -1,31 +1,24 @@
-extern crate uuid;
-
 extern crate env_logger;
 extern crate log;
+extern crate redisql_lib;
+extern crate uuid;
 
 use env_logger::{LogBuilder, LogTarget};
-
-use std::ffi::{CStr, CString};
-use std::fs::{remove_file, File};
-use std::ptr;
-
-use std::sync::mpsc::{channel, Sender};
-use std::thread;
-
-use uuid::Uuid;
-
-extern crate redisql_lib;
-
-use redisql_lib::redis_type::{Context, ReplicateVerbatim};
-
 use redisql_lib::redis as r;
-use redisql_lib::redis::{get_db_channel_from_name,
-                         get_dbkey_from_name, register_function,
+use redisql_lib::redis::{get_dbkey_from_name, register_function,
                          register_write_function,
                          reply_with_error_from_key_type, Loop,
                          LoopData, RedisReply};
+use redisql_lib::redis_type::{Context, ReplicateVerbatim};
 use redisql_lib::sqlite as sql;
 use redisql_lib::virtual_tables as vtab;
+use std::ffi::{CStr, CString};
+use std::fs::{remove_file, File};
+use std::ptr;
+use std::sync::mpsc::{channel, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use uuid::Uuid;
 
 #[cfg(feature = "pro")]
 extern crate engine_pro;
@@ -140,7 +133,7 @@ extern "C" fn ExecStatement(
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok((ch, _)) => {
+            Ok((ch, loopdata)) => {
                 let blocked_client = r::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -152,6 +145,8 @@ extern "C" fn ExecStatement(
                         )
                     },
                 };
+
+                loopdata.set_redis_context(context);
 
                 let cmd = r::Command::ExecStatement {
                     identifier: argvector[2],
@@ -184,7 +179,7 @@ extern "C" fn QueryStatement(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
 
     match argvector.len() {
         0...2 => {
@@ -203,7 +198,7 @@ extern "C" fn QueryStatement(
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok((ch, _)) => {
+            Ok((ch, loopdata)) => {
                 let blocked_client = r::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -215,6 +210,8 @@ extern "C" fn QueryStatement(
                         )
                     },
                 };
+
+                loopdata.set_redis_context(context);
 
                 let cmd = r::Command::ExecStatement {
                     identifier: argvector[2],
@@ -239,11 +236,11 @@ extern "C" fn Exec(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => match get_db_channel_from_name(ctx, argvector[1]) {
+        3 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok(ch) => {
+            Ok((ch, loopdata)) => {
                 let blocked_client = r::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -255,6 +252,9 @@ extern "C" fn Exec(
                         )
                     },
                 };
+
+                loopdata.set_redis_context(context);
+
                 let cmd = r::Command::Exec {
                     query: argvector[2],
                     client: blocked_client,
@@ -297,13 +297,13 @@ extern "C" fn Query(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => match get_db_channel_from_name(ctx, argvector[1]) {
+        3 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok(ch) => {
+            Ok((ch, loopdata)) => {
                 let blocked_client = r::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -315,6 +315,9 @@ extern "C" fn Query(
                         )
                     },
                 };
+
+                loopdata.set_redis_context(context);
+
                 let cmd = r::Command::Query {
                     query: argvector[2],
                     client: blocked_client,
@@ -349,11 +352,11 @@ extern "C" fn CreateStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        4 => match get_db_channel_from_name(ctx, argvector[1]) {
+        4 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok(ch) => {
+            Ok((ch, loopdata)) => {
                 let blocked_client = r::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -365,6 +368,9 @@ extern "C" fn CreateStatement(
                         )
                     },
                 };
+
+                loopdata.set_redis_context(context);
+
                 let cmd = r::Command::CompileStatement {
                     identifier: argvector[2],
                     statement: argvector[3],
@@ -411,11 +417,11 @@ extern "C" fn UpdateStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        4 => match get_db_channel_from_name(ctx, argvector[1]) {
+        4 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok(ch) => {
+            Ok((ch, loopdata)) => {
                 let blocked_client = r::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -427,6 +433,8 @@ extern "C" fn UpdateStatement(
                         )
                     },
                 };
+
+                loopdata.set_redis_context(context);
 
                 let cmd = r::Command::UpdateStatement {
                     identifier: argvector[2],
@@ -474,8 +482,8 @@ extern "C" fn DeleteStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => match get_db_channel_from_name(ctx, argvector[1]) {
-            Ok(ch) => {
+        3 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
+            Ok((ch, loopdata)) => {
                 let blocked_client = r::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -487,6 +495,9 @@ extern "C" fn DeleteStatement(
                         )
                     },
                 };
+
+                loopdata.set_redis_context(context);
+
                 let cmd = r::Command::DeleteStatement {
                     identifier: argvector[2],
                     client: blocked_client,
@@ -573,12 +584,13 @@ extern "C" fn CreateDB(
                                     vtab::register_modules(rc.clone())
                                 }) {
                                 Err(e) => e.reply(context),
-                                Ok(()) => {
+                                Ok(mut vtab_context) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(
                                         tx,
                                         rc,
                                         in_memory,
+                                        vtab_context,
                                     );
                                     let loop_data =
                                         db.loop_data.clone();
@@ -704,62 +716,63 @@ unsafe extern "C" fn rdb_load(
     _encoding_version: i32,
 ) -> *mut std::os::raw::c_void {
     let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
-    match File::create(path.clone()) {
+
+    let mut file = match File::create(path.clone()) {
         Err(_) => {
             println!("Was impossible to create a file!");
-            ptr::null_mut()
+            return ptr::null_mut();
         }
-        Ok(ref mut f) => match r::write_rdb_to_file(f, rdb) {
-            Err(_) => {
-                println!("Was impossible to write the rdb file!");
-                ptr::null_mut()
-            }
-            Ok(()) => match sql::RawConnection::open_connection(
-                ":memory:",
-            ) {
-                Err(_) => {
-                    println!(
-                        "Was impossible to open the in memory db!"
-                    );
-                    ptr::null_mut()
-                }
-                Ok(in_mem) => {
-                    match sql::RawConnection::open_connection(&path) {
-                        Err(_) => {
-                            println!(
-                                "Error in opening the rdb database"
-                            );
-                            ptr::null_mut()
-                        }
-                        Ok(on_disk) => match r::make_backup(
-                            &on_disk,
-                            &in_mem,
-                        ) {
-                            Err(e) => {
-                                println!("{}", e);
-                                ptr::null_mut()
-                            }
-                            Ok(_) => {
-                                let (tx, rx) = channel();
-                                let db =
-                                    r::DBKey::new(tx, in_mem, true);
-                                let loop_data = db.loop_data.clone();
+        Ok(f) => f,
+    };
 
-                                thread::spawn(move || {
-                                    r::listen_and_execute(
-                                        &loop_data,
-                                        &rx,
-                                    )
-                                });
+    if r::write_rdb_to_file(&mut file, rdb).is_err() {
+        println!("Was impossible to write the rdb file!");
+        return ptr::null_mut();
+    }
 
-                                Box::into_raw(Box::new(db))
-                                    as *mut std::os::raw::c_void
-                            }
-                        },
+    let in_mem = match sql::RawConnection::open_connection(":memory:")
+    {
+        Err(_) => {
+            println!("Was impossible to open the in memory db!");
+            return ptr::null_mut();
+        }
+        Ok(in_mem) => in_mem,
+    };
+
+    let on_disk = match sql::RawConnection::open_connection(&path) {
+        Err(_) => {
+            println!("Error in opening the rdb database");
+            return ptr::null_mut();
+        }
+        Ok(on_disk) => on_disk,
+    };
+
+    match r::make_backup(&on_disk, &in_mem) {
+        Err(e) => {
+            println!("{}", e);
+            return ptr::null_mut();
+        }
+        Ok(_) => {
+            let (tx, rx) = channel();
+            let conn = Arc::new(Mutex::new(in_mem));
+            let redis_context =
+                match vtab::register_modules(conn.clone()) {
+                    Err(e) => {
+                        println!("{}", e);
+                        return ptr::null_mut();
                     }
-                }
-            },
-        },
+                    Ok(redis_context) => redis_context,
+                };
+            let db =
+                r::DBKey::new_from_arc(tx, conn, true, redis_context);
+            let loop_data = db.loop_data.clone();
+
+            thread::spawn(move || {
+                r::listen_and_execute(&loop_data, &rx)
+            });
+
+            Box::into_raw(Box::new(db)) as *mut std::os::raw::c_void
+        }
     }
 }
 
