@@ -1,6 +1,6 @@
 extern crate bindgen;
 
-use bindgen::callbacks::{ParseCallbacks, IntKind};
+use bindgen::callbacks::{IntKind, ParseCallbacks};
 
 extern crate cc;
 
@@ -8,7 +8,6 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=sqlite_dependencies.h");
     println!("cargo:rerun-if-changed=redis_dependencies.h");
@@ -16,6 +15,7 @@ fn main() {
     cc::Build::new()
         .file("src/CDeps/Redis/redismodule.c")
         .include("src/CDeps/Redis/include")
+        .debug(true)
         .compile("libredismodule.a");
 
     cc::Build::new()
@@ -36,12 +36,14 @@ fn main() {
     struct SqliteTypeChooser;
 
     impl ParseCallbacks for SqliteTypeChooser {
-        fn int_macro(&self,
-                     _name: &str,
-                     value: i64)
-                     -> Option<IntKind> {
-            if value >= i32::min_value() as i64 &&
-               value <= i32::max_value() as i64 {
+        fn int_macro(
+            &self,
+            _name: &str,
+            value: i64,
+        ) -> Option<IntKind> {
+            if value >= i32::min_value() as i64
+                && value <= i32::max_value() as i64
+            {
                 Some(IntKind::I32)
             } else {
                 None
@@ -49,11 +51,10 @@ fn main() {
         }
     }
 
-    // let engine_pro = "-DENGINE_PRO=1";
-    let engine_pro = "-DENGINE_PRO=0";
+    let engine_pro = "-DENGINE_PRO=1";
+    // let engine_pro = "-DENGINE_PRO=0";
 
-    let bindings =
-        bindgen::Builder::default()
+    let bindings = bindgen::Builder::default()
             .parse_callbacks(Box::new(SqliteTypeChooser))
             // .rustfmt_bindings(false)
             .header("sqlite_dependencies.h")
@@ -66,8 +67,7 @@ fn main() {
         .write_to_file(out_path.join("bindings_sqlite.rs"))
         .expect("Couldn't write bindings for SQLite!");
 
-    let bindings =
-        bindgen::Builder::default()
+    let bindings = bindgen::Builder::default()
             .parse_callbacks(Box::new(SqliteTypeChooser))
             // .rustfmt_bindings(false) // see https://github.com/rust-lang-nursery/rust-bindgen/issues/1306#event-1597477817
             .header("redis_dependencies.h")
@@ -78,5 +78,4 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings_redis.rs"))
         .expect("Couldn't write bindings for Redis!");
-
 }

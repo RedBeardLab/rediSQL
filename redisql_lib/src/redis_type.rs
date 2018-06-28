@@ -1,22 +1,20 @@
-use std::os::raw::{c_char, c_int};
-
 use std::ffi::CString;
+use std::mem;
+use std::os::raw::{c_char, c_int};
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
 #[allow(non_upper_case_globals)]
 #[allow(improper_ctypes)]
+#[allow(unknown_lints)]
 pub mod ffi {
     #![allow(clippy)]
-    include!(concat!(
-        env!("OUT_DIR"),
-        "/bindings_redis.rs"
-    ));
+    include!(concat!(env!("OUT_DIR"), "/bindings_redis.rs"));
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Context {
     ctx: *mut ffi::RedisModuleCtx,
 }
@@ -27,6 +25,14 @@ impl Context {
     }
     pub fn as_ptr(self) -> *mut ffi::RedisModuleCtx {
         self.ctx
+    }
+    pub fn thread_safe(blocked_client: &BlockedClient) -> Context {
+        let ctx = unsafe {
+            ffi::RedisModule_GetThreadSafeContext.unwrap()(
+                blocked_client.as_ptr(),
+            )
+        };
+        Context { ctx }
     }
 }
 
@@ -39,6 +45,19 @@ impl From<Context> for *mut ffi::RedisModuleCtx {
     }
 }
 
+pub struct BlockedClient {
+    pub client: *mut ffi::RedisModuleBlockedClient,
+}
+
+unsafe impl Send for BlockedClient {}
+
+impl BlockedClient {
+    pub fn as_ptr(&self) -> *mut ffi::RedisModuleBlockedClient {
+        self.client
+    }
+}
+
+#[derive(Debug)]
 pub struct RMString {
     ptr: *mut ffi::RedisModuleString,
     ctx: Context,
@@ -232,4 +251,118 @@ pub unsafe fn EmitAOF(
         key,
         data.as_ptr(),
     )
+}
+
+#[derive(Debug)]
+pub enum CallReply {
+    RString { ptr: *mut ffi::RedisModuleCallReply },
+    RError { ptr: *mut ffi::RedisModuleCallReply },
+    RInteger { ptr: *mut ffi::RedisModuleCallReply },
+    RArray { ptr: *mut ffi::RedisModuleCallReply },
+    RNull { ptr: *mut ffi::RedisModuleCallReply },
+}
+
+impl CallReply {
+    pub unsafe fn new(
+        ptr: *mut ffi::RedisModuleCallReply,
+    ) -> CallReply {
+        match ffi::RedisModule_CallReplyType.unwrap()(ptr) {
+            ffi::REDISMODULE_REPLY_STRING => {
+                CallReply::RString { ptr }
+            }
+            ffi::REDISMODULE_REPLY_ERROR => CallReply::RError { ptr },
+            ffi::REDISMODULE_REPLY_INTEGER => {
+                CallReply::RInteger { ptr }
+            }
+            ffi::REDISMODULE_REPLY_ARRAY => CallReply::RArray { ptr },
+            _ => CallReply::RNull { ptr },
+        }
+    }
+
+    pub fn as_ptr(&self) -> *mut ffi::RedisModuleCallReply {
+        match self {
+            CallReply::RString { ptr }
+            | CallReply::RError { ptr }
+            | CallReply::RInteger { ptr }
+            | CallReply::RArray { ptr }
+            | CallReply::RNull { ptr } => *ptr,
+        }
+    }
+
+    pub fn length(&self) -> Option<usize> {
+        match self {
+            CallReply::RString { ptr }
+            | CallReply::RArray { ptr } => {
+                let size = unsafe {
+                    ffi::RedisModule_CallReplyLength.unwrap()(*ptr)
+                };
+                Some(size)
+            }
+            _ => None,
+        }
+    }
+    pub fn access_array_subelement(
+        &self,
+        idx: usize,
+    ) -> Option<CallReply> {
+        match self {
+            CallReply::RString { .. }
+            | CallReply::RError { .. }
+            | CallReply::RInteger { .. }
+            | CallReply::RNull { .. } => None,
+
+            CallReply::RArray { ptr } => {
+                let sub_reply = unsafe {
+                    ffi::RedisModule_CallReplyArrayElement.unwrap()(
+                        *ptr,
+                        idx as usize,
+                    )
+                };
+                Some(unsafe { CallReply::new(sub_reply) })
+            }
+        }
+    }
+    pub fn access_integer(&self) -> Option<i64> {
+        match self {
+            CallReply::RString { .. }
+            | CallReply::RError { .. }
+            | CallReply::RArray { .. }
+            | CallReply::RNull { .. } => None,
+
+            CallReply::RInteger { ptr } => {
+                let integer = unsafe {
+                    ffi::RedisModule_CallReplyInteger.unwrap()(*ptr)
+                };
+                Some(integer)
+            }
+        }
+    }
+    pub fn access_string(&self) -> Option<String> {
+        debug!("access_string");
+        match self {
+            CallReply::RInteger { .. }
+            | CallReply::RError { .. }
+            | CallReply::RArray { .. }
+            | CallReply::RNull { .. } => None,
+
+            CallReply::RString { ptr } => {
+                let mut size = 0;
+                unsafe {
+                    let ptr = ffi::RedisModule_CallReplyStringPtr
+                        .unwrap()(
+                        *ptr, &mut size
+                    );
+                    let string = String::from_raw_parts(
+                        ptr as *mut u8,
+                        size,
+                        size,
+                    );
+                    debug!("access_string about to drop");
+                    let to_return = string.clone();
+                    mem::forget(string);
+                    Some(to_return)
+                }
+            }
+        }
+    }
 }

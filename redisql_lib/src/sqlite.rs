@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::error;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -12,18 +11,14 @@ use redisql_error as err;
 
 use community_statement::Statement;
 
-use redis_type::Context;
-
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
 #[allow(non_upper_case_globals)]
+#[allow(unknown_lints)]
 pub mod ffi {
     #![allow(clippy)]
-    include!(concat!(
-        env!("OUT_DIR"),
-        "/bindings_sqlite.rs"
-    ));
+    include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
 pub enum SQLiteOK {
@@ -250,7 +245,7 @@ impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
         }
         match last {
             None => Cursor::DONECursor {
-                modified_rows: 0,
+                modified_rows: modified,
             },
             Some(cursor) => cursor,
         }
@@ -277,17 +272,15 @@ impl<'a> Iterator for Cursor<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match *self {
-            Cursor::OKCursor {} => Some(vec![
-                Entity::OK {
-                    to_replicate: true,
-                },
-            ]),
-            Cursor::DONECursor { modified_rows } => Some(vec![
-                Entity::DONE {
+            Cursor::OKCursor {} => {
+                Some(vec![Entity::OK { to_replicate: true }])
+            }
+            Cursor::DONECursor { modified_rows } => {
+                Some(vec![Entity::DONE {
                     modified_rows,
                     to_replicate: true,
-                },
-            ]),
+                }])
+            }
 
             Cursor::RowsCursor {
                 stmt,
@@ -430,4 +423,9 @@ pub fn disable_global_memory_statistics() {
     unsafe {
         ffi::sqlite3_config(ffi::SQLITE_CONFIG_MEMSTATUS, 0);
     }
+}
+
+#[allow(non_snake_case)]
+pub fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
+    Some(unsafe { mem::transmute(-1isize) })
 }

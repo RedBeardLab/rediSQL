@@ -357,8 +357,31 @@ class TestRead(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM test ORDER BY a ASC")
         self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
 
+class TestBruteHash(TestRediSQLWithExec):
+    def testSimple(self):
+        with DB(self, "B"):
+            catty = 5
+            done = self.exec_naked("REDISQL.EXEC", "B", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
+            self.assertEquals(done, ["DONE", 0L])
+            for i in xrange(catty):
+                self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+            result = self.exec_naked("REDISQL.EXEC", "B", "SELECT * FROM cats")
+            self.assertEquals(catty, len(result))
+            self.assertTrue(["cat:0", "0"] in result)
+            self.assertTrue(["cat:1", "1"] in result)
+            self.assertTrue(["cat:2", "2"] in result)
+            self.assertTrue(["cat:3", "3"] in result)
+            self.assertTrue(["cat:4", "4"] in result)
 
-        
+    def test100(self):
+        with DB(self, "A"):
+            catty = 100
+            done = self.exec_naked("REDISQL.EXEC", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
+            self.assertEquals(done, ["DONE", 0L])
+            for i in xrange(catty):
+                self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+            result = self.exec_naked("REDISQL.EXEC", "A", "SELECT * FROM cats")
+            self.assertEquals(catty, len(result))
 
 if __name__ == '__main__':
    unittest.main()

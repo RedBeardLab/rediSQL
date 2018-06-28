@@ -1,11 +1,8 @@
-use redis_type::Context;
-
+use sqlite::ffi;
 use sqlite::SQLiteConnection;
 use sqlite::StatementTrait;
-use sqlite::ffi;
 use sqlite::{Cursor, RawConnection, SQLite3Error, SQLiteOK};
 
-use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::mem;
@@ -31,14 +28,12 @@ unsafe impl Send for MultiStatement {}
 impl<'a> fmt::Display for MultiStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut buffer = String::new();
-        buffer = self.stmts.iter().fold(
-            buffer,
-            |mut buffer, stmt| {
+        buffer =
+            self.stmts.iter().fold(buffer, |mut buffer, stmt| {
                 buffer.push_str(&stmt.to_string());
                 buffer.push_str("\n");
                 buffer
-            },
-        );
+            });
         write!(f, "{}", buffer)
     }
 }
@@ -57,7 +52,7 @@ impl<'a> fmt::Display for Statement {
                 .to_string_lossy()
                 .into_owned()
         };
-        write!(f, "{}\n", sql)
+        writeln!(f, "{}", sql)
     }
 }
 
@@ -231,10 +226,7 @@ impl<'a> StatementTrait<'a> for Statement {
 
 impl<'a> StatementTrait<'a> for MultiStatement {
     fn reset(&self) {
-        self.stmts
-            .iter()
-            .map(|stmt| stmt.reset())
-            .count();
+        self.stmts.iter().map(|stmt| stmt.reset()).count();
     }
     fn execute(&self) -> Result<Cursor, SQLite3Error> {
         let db = self.db.clone();
@@ -348,10 +340,7 @@ fn count_parameters(
     };
 
     let parameters: Result<Vec<Vec<Parameters>>, SQLite3Error> =
-        statements
-            .iter()
-            .map(|stmt| get_parameters(stmt))
-            .collect();
+        statements.iter().map(|stmt| get_parameters(stmt)).collect();
     match parameters {
         Err(e) => Err(e),
         Ok(parameters) => {
@@ -359,9 +348,7 @@ fn count_parameters(
                 .clone()
                 .iter()
                 .flat_map(|params| {
-                    params
-                        .iter()
-                        .map(|p| mem::discriminant(p))
+                    params.iter().map(|p| mem::discriminant(p))
                 })
                 .collect();
             discriminant.dedup();
@@ -457,15 +444,10 @@ mod test {
 
     #[test]
     fn count_inside_nested_vector() {
-        let nested_vector = vec![
-            vec![1, 2, 3],
-            vec![4, 5, 6, 6],
-            vec![1, 1, 0],
-        ];
-        let ten: i32 = nested_vector
-            .iter()
-            .map(|v| v.len() as i32)
-            .sum();
+        let nested_vector =
+            vec![vec![1, 2, 3], vec![4, 5, 6, 6], vec![1, 1, 0]];
+        let ten: i32 =
+            nested_vector.iter().map(|v| v.len() as i32).sum();
         assert!(ten == 10);
     }
 

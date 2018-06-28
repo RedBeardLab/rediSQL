@@ -3,7 +3,6 @@ extern crate uuid;
 
 use self::fnv::FnvHashMap;
 use std;
-use std::cell::RefCell;
 use std::clone::Clone;
 use std::collections::hash_map::Entry;
 use std::error;
@@ -19,7 +18,7 @@ use std::sync::mpsc::{Receiver, RecvError, Sender};
 use std::sync::{Arc, Mutex, RwLock};
 
 pub use redis_type as rm;
-use redis_type::{Context, OpenKey, ReplyWithError};
+use redis_type::{BlockedClient, Context, OpenKey, ReplyWithError};
 
 use redisql_error as err;
 use redisql_error::RediSQLError;
@@ -78,10 +77,7 @@ impl StatementCache for ReplicationBook {
     }
 
     fn is_statement_present(&self, identifier: &str) -> bool {
-        self.data
-            .read()
-            .unwrap()
-            .contains_key(identifier)
+        self.data.read().unwrap().contains_key(identifier)
     }
 
     fn insert_new_statement(
@@ -97,9 +93,7 @@ impl StatementCache for ReplicationBook {
                     create_statement(db, identifier, statement)?;
                 let read_only = stmt.is_read_only();
                 v.insert((stmt, read_only));
-                Ok(QueryResult::OK {
-                    to_replicate: true,
-                })
+                Ok(QueryResult::OK { to_replicate: true })
             }
             Entry::Occupied(_) => {
                 let debug = String::from("Statement already present");
@@ -124,9 +118,7 @@ impl StatementCache for ReplicationBook {
             Entry::Occupied(o) => {
                 remove_statement(&db, identifier)?;
                 o.remove_entry();
-                Ok(QueryResult::OK {
-                    to_replicate: true,
-                })
+                Ok(QueryResult::OK { to_replicate: true })
             }
         }
     }
@@ -149,9 +141,7 @@ impl StatementCache for ReplicationBook {
                     update_statement(&db, identifier, statement)?;
                 let read_only = stmt.is_read_only();
                 o.insert((stmt, read_only));
-                Ok(QueryResult::OK {
-                    to_replicate: true,
-                })
+                Ok(QueryResult::OK { to_replicate: true })
             }
         }
     }
@@ -234,18 +224,6 @@ impl LoopData for Loop {
 }
 
 impl Loop {
-    fn new(
-        db: sql::RawConnection,
-        redis_ctx: Arc<Mutex<Option<Context>>>,
-    ) -> Self {
-        let db = Arc::new(Mutex::new(db));
-        let replication_book = ReplicationBook::new(&db);
-        Loop {
-            db,
-            replication_book,
-            redis_context: Arc::new(Mutex::new(None)),
-        }
-    }
     fn new_from_arc(
         db: Arc<Mutex<sql::RawConnection>>,
         redis_context: Arc<Mutex<Option<Context>>>,
@@ -303,18 +281,6 @@ impl RedisReply for sql::Entity {
                 to_replicate,
             }.reply(ctx),
         }
-    }
-}
-
-fn reply_with_string(ctx: rm::Context, s: String) -> i32 {
-    let len = s.len();
-    let s = CString::new(s).unwrap();
-    unsafe {
-        rm::ffi::RedisModule_ReplyWithStringBuffer.unwrap()(
-            ctx.as_ptr(),
-            s.as_ptr(),
-            len,
-        )
     }
 }
 
@@ -425,9 +391,9 @@ pub unsafe fn string_ptr_len(
     str: *mut rm::ffi::RedisModuleString,
 ) -> &'static str {
     let mut len = 0;
-    let base =
-        rm::ffi::RedisModule_StringPtrLen.unwrap()(str, &mut len)
-            as *mut u8;
+    let base = rm::ffi::RedisModule_StringPtrLen.unwrap()(
+        str, &mut len,
+    ) as *mut u8;
     let slice = slice::from_raw_parts(base, len);
     str::from_utf8_unchecked(slice)
 }
@@ -481,12 +447,6 @@ pub enum Command {
     },
 }
 
-pub struct BlockedClient {
-    pub client: *mut rm::ffi::RedisModuleBlockedClient,
-}
-
-unsafe impl Send for BlockedClient {}
-
 pub enum QueryResult {
     OK {
         to_replicate: bool,
@@ -505,9 +465,7 @@ impl QueryResult {
     pub fn reply(self, ctx: rm::Context) -> i32 {
         match self {
             QueryResult::OK { .. } => reply_with_ok(ctx.as_ptr()),
-            QueryResult::DONE {
-                modified_rows, ..
-            } => {
+            QueryResult::DONE { modified_rows, .. } => {
                 debug!("QueryResult::DONE");
                 reply_with_done(ctx.as_ptr(), modified_rows)
             }
@@ -523,9 +481,9 @@ impl QueryResult {
 
 fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     match cursor {
-        sql::Cursor::OKCursor {} => QueryResult::OK {
-            to_replicate: true,
-        },
+        sql::Cursor::OKCursor {} => {
+            QueryResult::OK { to_replicate: true }
+        }
         sql::Cursor::DONECursor { modified_rows } => {
             debug!("Cursor::DONECursor");
             QueryResult::DONE {
@@ -674,10 +632,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData + Clone>(
                     .update_statement(identifier, statement);
                 return_value(&client, result)
             }
-            Ok(Command::DeleteStatement {
-                identifier,
-                client,
-            }) => {
+            Ok(Command::DeleteStatement { identifier, client }) => {
                 debug!(
                     "DeleteStatement | Identifier = {:?}",
                     identifier
@@ -720,9 +675,8 @@ pub fn listen_and_execute<'a, L: 'a + LoopData + Clone>(
                 arguments,
                 client,
             }) => {
-                let result = loopdata
-                    .get_replication_book()
-                    .query_statement(
+                let result =
+                    loopdata.get_replication_book().query_statement(
                         identifier,
                         arguments.as_slice(),
                     );
@@ -751,9 +705,7 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData + Clone>(
             match create_statement(db, identifier, statement) {
                 Ok(stmt) => {
                     v.insert((stmt, false));
-                    Ok(QueryResult::OK {
-                        to_replicate: true,
-                    })
+                    Ok(QueryResult::OK { to_replicate: true })
                 }
                 Err(e) => Err(e),
             }
@@ -966,11 +918,7 @@ pub fn get_dbkey_from_name(
 ) -> Result<Box<DBKey>, i32> {
     let context = Context::new(ctx);
     let key_name = rm::RMString::new(context, name);
-    let key = OpenKey(
-        context,
-        &key_name,
-        rm::ffi::REDISMODULE_WRITE,
-    );
+    let key = OpenKey(context, &key_name, rm::ffi::REDISMODULE_WRITE);
     let safe_key = RedisKey { key };
     let key_type = unsafe {
         rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
