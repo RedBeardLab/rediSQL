@@ -365,13 +365,29 @@ class TestBruteHash(TestRediSQLWithExec):
             self.assertEquals(done, ["DONE", 0L])
             for i in xrange(catty):
                 self.exec_naked("HSET", "cat:" + str(i), "meow", i)
-            result = self.exec_naked("REDISQL.EXEC", "B", "SELECT * FROM cats")
+            result = self.exec_naked("REDISQL.EXEC", "B", "SELECT rowid, cat, meow FROM cats")
             self.assertEquals(catty, len(result))
-            self.assertTrue(["cat:0", "0"] in result)
-            self.assertTrue(["cat:1", "1"] in result)
-            self.assertTrue(["cat:2", "2"] in result)
-            self.assertTrue(["cat:3", "3"] in result)
-            self.assertTrue(["cat:4", "4"] in result)
+            self.assertTrue([0L, "cat:0", "0"] in result)
+            self.assertTrue([1L, "cat:1", "1"] in result)
+            self.assertTrue([2L, "cat:2", "2"] in result)
+            self.assertTrue([3L, "cat:3", "3"] in result)
+            self.assertTrue([4L, "cat:4", "4"] in result)
+
+    def testNullFields(self):
+        with DB(self, "C"):
+            done = self.exec_naked("REDISQL.EXEC", "C", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow, kitten)")
+            for i in xrange(5):
+                self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+            self.exec_naked("HSET", "cat:0" , "kitten", "2")
+            self.exec_naked("HSET", "cat:2" , "kitten", "4")
+            self.exec_naked("HSET", "cat:4" , "kitten", "6")
+            result = self.exec_naked("REDISQL.EXEC", "C", "SELECT rowid, cat, meow, kitten FROM cats")
+            self.assertEquals(5, len(result))
+            self.assertTrue([0L, "cat:0", "0", "2"] in result)
+            self.assertTrue([1L, "cat:1", "1", None] in result)
+            self.assertTrue([2L, "cat:2", "2", "4"] in result)
+            self.assertTrue([3L, "cat:3", "3", None] in result)
+            self.assertTrue([4L, "cat:4", "4", "6"] in result)
 
     def test100(self):
         with DB(self, "A"):

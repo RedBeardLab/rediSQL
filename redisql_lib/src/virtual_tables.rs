@@ -440,26 +440,26 @@ extern "C" fn column_brute_hash(
 
                     debug!("Column cr: {:?}", cr);
 
-                    let result = match cr {
+                    match cr {
                         CallReply::RString { .. } => {
-                            cr.access_string().unwrap()
+                            let value = cr.access_string().unwrap();
+                            let value = CString::new(value).unwrap();
+                            unsafe {
+                                ffi::sqlite3_result_text(
+                                    sqlite3_context,
+                                    value.as_ptr(),
+                                    -1,
+                                    SQLITE_TRANSIENT(),
+                                );
+                            }
                         }
+                        CallReply::RNull { .. } => unsafe {
+                            ffi::sqlite3_result_null(sqlite3_context);
+                        },
                         _ => {
                             debug!("Column getting an error");
                             return ffi::SQLITE_ERROR;
                         }
-                    };
-
-                    let result =
-                        CString::new(result.clone()).unwrap();
-
-                    unsafe {
-                        ffi::sqlite3_result_text(
-                            sqlite3_context,
-                            result.as_ptr(),
-                            -1,
-                            SQLITE_TRANSIENT(),
-                        );
                     }
                 }
             }
@@ -546,10 +546,44 @@ extern "C" fn eof_brute_hash(
 }
 
 extern "C" fn rowid_brute_hash(
-    _p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor,
-    _row_id: *mut i64,
+    p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor,
+    row_id: *mut i64,
 ) -> i32 {
     debug!("Rowid");
+
+    let vtab_cur =
+        unsafe { &*(p_vtab_cursor as *mut VirtualTableCursor) };
+
+    match vtab_cur.rows {
+        None => {
+            debug!("Empty rows");
+            return ffi::SQLITE_ERROR;
+        }
+        Some(ref rows) => {
+            match rows.front() {
+                None => {
+                    debug!("No front row");
+                    return ffi::SQLITE_ERROR;
+                }
+                Some(obj) => match obj.split(':').nth(1) {
+                    None => {
+                        debug!("Error in formatting of the keys");
+                        return ffi::SQLITE_ERROR;
+                    }
+                    Some(index) => match index.parse::<i64>() {
+                        Err(_) => {
+                            debug!("Impossible to parse index {} into i64", index);
+                            return ffi::SQLITE_ERROR;
+                        }
+                        Ok(idx) => unsafe {
+                            *row_id = idx;
+                        },
+                    },
+                },
+            }
+        }
+    }
+
     debug!("Rowid Exit");
     ffi::SQLITE_OK
 }
