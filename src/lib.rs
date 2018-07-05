@@ -6,9 +6,8 @@ extern crate uuid;
 use env_logger::{LogBuilder, LogTarget};
 use redisql_lib::redis as r;
 use redisql_lib::redis::{
-    get_db_and_loopdata_from_name, register_function,
-    register_write_function, reply_with_error_from_key_type,
-    LoopData, RedisReply,
+    get_dbkey_from_name, register_function, register_write_function,
+    reply_with_error_from_key_type, LoopData, RedisReply,
 };
 use redisql_lib::redis_type::{Context, ReplicateVerbatim};
 use redisql_lib::sqlite as sql;
@@ -119,11 +118,13 @@ extern "C" fn ExecStatement(
                 )
             }
         }
-        _ => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
+        _ => match get_dbkey_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok((ch, loopdata)) => {
+            Ok(db) => {
+                let ch = &db.tx;
+                let loopdata = &db.loop_data;
                 let blocked_client = r::rm::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -186,11 +187,13 @@ extern "C" fn QueryStatement(
                 )
             }
         }
-        _ => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
+        _ => match get_dbkey_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok((ch, loopdata)) => {
+            Ok(db) => {
+                let ch = &db.tx;
+                let loopdata = &db.loop_data;
                 let blocked_client = r::rm::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -230,11 +233,13 @@ extern "C" fn Exec(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
+        3 => match get_dbkey_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok((ch, loopdata)) => {
+            Ok(db) => {
+                let ch = &db.tx;
+                let loopdata = &db.loop_data;
                 let blocked_client = r::rm::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -295,11 +300,13 @@ extern "C" fn Query(
 ) -> i32 {
     let (_context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
+        3 => match get_dbkey_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok((ch, loopdata)) => {
+            Ok(db) => {
+                let ch = &db.tx;
+                let loopdata = &db.loop_data;
                 let blocked_client = r::rm::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -350,11 +357,13 @@ extern "C" fn CreateStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        4 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
+        4 => match get_dbkey_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok((ch, _loopdata)) => {
+            Ok(db) => {
+                let ch = &db.tx;
+                let _loopdata = &db.loop_data;
                 let blocked_client = r::rm::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -413,11 +422,13 @@ extern "C" fn UpdateStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        4 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
+        4 => match get_dbkey_from_name(ctx, argvector[1]) {
             Err(key_type) => {
                 reply_with_error_from_key_type(ctx, key_type)
             }
-            Ok((ch, _loopdata)) => {
+            Ok(db) => {
+                let ch = &db.tx;
+                let _loopdata = &db.loop_data;
                 let blocked_client = r::rm::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -476,8 +487,10 @@ extern "C" fn DeleteStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => match get_db_and_loopdata_from_name(ctx, argvector[1]) {
-            Ok((ch, _loopdata)) => {
+        3 => match get_dbkey_from_name(ctx, argvector[1]) {
+            Ok(db) => {
+                let ch = &db.tx;
+                let _loopdata = &db.loop_data;
                 let blocked_client = r::rm::BlockedClient {
                     client: unsafe {
                         r::rm::ffi::RedisModule_BlockClient.unwrap()(
