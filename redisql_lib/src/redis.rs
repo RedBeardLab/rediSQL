@@ -198,6 +198,20 @@ impl StatementCache for ReplicationBook {
     }
 }
 
+struct RedisContext {
+    async: Mutex<Option<Context>>,
+    sync: Mutex<Option<Context>>,
+}
+
+impl RedisContext {
+    fn new(
+        async: Mutex<Option<Context>>,
+        sync: Mutex<Option<Context>>,
+    ) -> RedisContext {
+        RedisContext { async, sync }
+    }
+}
+
 #[derive(Clone)]
 pub struct Loop {
     db: Arc<Mutex<sql::RawConnection>>,
@@ -939,6 +953,17 @@ pub fn get_dbkey_from_name(
     } else {
         Err(key_type)
     }
+}
+
+pub fn get_db_and_loopdata_from_name(
+    ctx: *mut rm::ffi::RedisModuleCtx,
+    name: &str,
+) -> Result<(Sender<Command>, Loop), i32> {
+    let db: Box<DBKey> = get_dbkey_from_name(ctx, name)?;
+    let channel = db.tx.clone();
+    let loopdata = db.loop_data.clone();
+    std::mem::forget(db);
+    Ok((channel, loopdata))
 }
 
 pub fn get_db_channel_from_name(

@@ -6,8 +6,9 @@ extern crate uuid;
 use env_logger::{LogBuilder, LogTarget};
 use redisql_lib::redis as r;
 use redisql_lib::redis::{
-    get_dbkey_from_name, register_function, register_write_function,
-    reply_with_error_from_key_type, Loop, LoopData, RedisReply,
+    get_db_and_loopdata_from_name, register_function,
+    register_write_function, reply_with_error_from_key_type,
+    LoopData, RedisReply,
 };
 use redisql_lib::redis_type::{Context, ReplicateVerbatim};
 use redisql_lib::sqlite as sql;
@@ -15,7 +16,7 @@ use redisql_lib::virtual_tables as vtab;
 use std::ffi::{CStr, CString};
 use std::fs::{remove_file, File};
 use std::ptr;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use uuid::Uuid;
@@ -96,17 +97,6 @@ extern "C" fn timeout(
 }
 
 extern "C" fn free_privdata(_arg: *mut ::std::os::raw::c_void) {}
-
-fn get_db_and_loopdata_from_name(
-    ctx: *mut r::rm::ffi::RedisModuleCtx,
-    name: &str,
-) -> Result<(Sender<r::Command>, Loop), i32> {
-    let db: Box<r::DBKey> = get_dbkey_from_name(ctx, name)?;
-    let channel = db.tx.clone();
-    let loopdata = db.loop_data.clone();
-    std::mem::forget(db);
-    Ok((channel, loopdata))
-}
 
 #[allow(non_snake_case)]
 extern "C" fn ExecStatement(
@@ -578,9 +568,10 @@ extern "C" fn CreateDB(
                                         "setup",
                                         "path",
                                         path,
-                                    ).and_then(|_| {
-                                r::enable_foreign_key(rc.clone())
+                                    )
                                 })
+                                .and_then(|_| {
+                                    r::enable_foreign_key(rc.clone())
                                 })
                                 .and_then(|_| {
                                     vtab::register_modules(&rc)
