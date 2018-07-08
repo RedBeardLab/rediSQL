@@ -198,20 +198,6 @@ impl StatementCache for ReplicationBook {
     }
 }
 
-struct RedisContext {
-    async: Mutex<Option<Context>>,
-    sync: Mutex<Option<Context>>,
-}
-
-impl RedisContext {
-    fn new(
-        async: Mutex<Option<Context>>,
-        sync: Mutex<Option<Context>>,
-    ) -> RedisContext {
-        RedisContext { async, sync }
-    }
-}
-
 #[derive(Clone)]
 pub struct Loop {
     db: Arc<Mutex<sql::RawConnection>>,
@@ -571,7 +557,7 @@ impl error::Error for RedisError {
         self.msg.as_str()
     }
 }
-fn restore_previous_statements<'a, L: 'a + LoopData + Clone>(
+fn restore_previous_statements<'a, L: 'a + LoopData>(
     loopdata: &L,
 ) -> () {
     let saved_statements = get_statement_metadata(loopdata.get_db());
@@ -587,9 +573,7 @@ fn restore_previous_statements<'a, L: 'a + LoopData + Clone>(
                     _ => continue,
                 };
                 if let Err(e) = compile_and_insert_statement(
-                    identifier,
-                    statement,
-                    &loopdata.clone(),
+                    identifier, statement, loopdata,
                 ) {
                     println!("Error: {}", e)
                 }
@@ -613,12 +597,12 @@ fn return_value(
     }
 }
 
-pub fn listen_and_execute<'a, L: 'a + LoopData + Clone>(
+pub fn listen_and_execute<'a, L: 'a + LoopData>(
     loopdata: &L,
     rx: &Receiver<Command>,
 ) {
     debug!("Start thread execution");
-    restore_previous_statements(&loopdata.clone());
+    restore_previous_statements(loopdata);
     loop {
         debug!("Loop iteration");
         match rx.recv() {
@@ -696,13 +680,19 @@ pub fn listen_and_execute<'a, L: 'a + LoopData + Clone>(
                     );
                 return_value(&client, result);
             }
-            Ok(Command::Stop) => return,
-            Err(RecvError) => return,
+            Ok(Command::Stop) => {
+                debug!("Stop, exiting from work loop");
+                return;
+            }
+            Err(RecvError) => {
+                debug!("RecvError, exiting from work loop");
+                return;
+            }
         }
     }
 }
 
-fn compile_and_insert_statement<'a, L: 'a + LoopData + Clone>(
+fn compile_and_insert_statement<'a, L: 'a + LoopData>(
     identifier: &str,
     statement: &str,
     loop_data: &L,
@@ -757,6 +747,12 @@ impl DBKey {
             in_memory,
             loop_data,
         }
+    }
+}
+
+impl Drop for DBKey {
+    fn drop(&mut self) {
+        debug!("### Dropping DBKey ###")
     }
 }
 
@@ -926,10 +922,32 @@ pub unsafe fn write_rdb_to_file(
     Ok(())
 }
 
-pub fn get_dbkey_from_name(
+pub fn with_leaky_db<F>(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,
-) -> Result<Box<DBKey>, i32> {
+    f: F,
+) -> i32
+where
+    F: Fn(&Result<DBKey, i32>) -> i32,
+{
+    let db = match get_dbkeyptr_from_name(ctx, name) {
+        Err(err) => Err(err),
+        Ok(ptr) => Ok(unsafe { ptr.read() }),
+    };
+    let result = f(&db);
+    debug!("with_leaky_db | go result {}", result);
+    if db.is_ok() {
+        debug!("with_leaky_db | forgetting db");
+        // Box::into_raw(db);
+        std::mem::forget(db);
+    }
+    result
+}
+
+pub fn get_dbkeyptr_from_name(
+    ctx: *mut rm::ffi::RedisModuleCtx,
+    name: &str,
+) -> Result<*mut DBKey, i32> {
     let context = Context::new(ctx);
     let key_name = rm::RMString::new(context, name);
     let key = OpenKey(context, &key_name, rm::ffi::REDISMODULE_WRITE);
@@ -948,21 +966,41 @@ pub fn get_dbkey_from_name(
                 safe_key.key,
             ) as *mut DBKey
         };
-        let db: Box<DBKey> = unsafe { Box::from_raw(db_ptr) };
-        Ok(db)
+        Ok(db_ptr)
     } else {
         Err(key_type)
     }
 }
 
-pub fn get_db_and_loopdata_from_name(
+pub fn get_dbkey_from_name(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,
-) -> Result<(Sender<Command>, Loop), i32> {
-    let db: Box<DBKey> = get_dbkey_from_name(ctx, name)?;
-    let channel = db.tx.clone();
-    let loopdata = db.loop_data.clone();
-    std::mem::forget(db);
+) -> Result<DBKey, i32> {
+    let dbptr = get_dbkeyptr_from_name(ctx, name)?;
+    Ok(unsafe { dbptr.read() })
+}
+
+pub fn with_ch_and_loopdata<F>(
+    ctx: *mut rm::ffi::RedisModuleCtx,
+    name: &str,
+    f: F,
+) -> i32
+where
+    F: Fn(Result<(&Sender<Command>, &Loop), i32>) -> i32,
+{
+    let r = get_ch_and_loopdata_from_name(ctx, name);
+    f(r)
+}
+
+pub fn get_ch_and_loopdata_from_name(
+    ctx: *mut rm::ffi::RedisModuleCtx,
+    name: &str,
+) -> Result<(&Sender<Command>, &Loop), i32> {
+    // here we are intentionally leaking the DBKey, so that it does
+    // not get destroyed
+    let db: *mut DBKey = get_dbkeyptr_from_name(ctx, name)?;
+    let channel = unsafe { &(*db).tx };
+    let loopdata = unsafe { &(*db).loop_data };
     Ok((channel, loopdata))
 }
 
@@ -970,7 +1008,8 @@ pub fn get_db_channel_from_name(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,
 ) -> Result<Sender<Command>, i32> {
-    let db: Box<DBKey> = get_dbkey_from_name(ctx, name)?;
+    let db: *mut DBKey = get_dbkeyptr_from_name(ctx, name)?;
+    let db = unsafe { Box::from_raw(db) };
     let channel = db.tx.clone();
     std::mem::forget(db);
     Ok(channel)
