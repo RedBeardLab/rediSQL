@@ -15,7 +15,7 @@ use std::slice;
 use std::str;
 use std::string;
 use std::sync::mpsc::{Receiver, RecvError, Sender};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 pub use redis_type as rm;
 use redis_type::{BlockedClient, Context, OpenKey, ReplyWithError};
@@ -198,6 +198,14 @@ impl StatementCache for ReplicationBook {
     }
 }
 
+pub struct RedisContextSet<'a>(MutexGuard<'a, Option<Context>>);
+
+impl<'a> Drop for RedisContextSet<'a> {
+    fn drop(&mut self) {
+        *self.0 = None
+    }
+}
+
 #[derive(Clone)]
 pub struct Loop {
     db: Arc<Mutex<sql::RawConnection>>,
@@ -209,6 +217,11 @@ pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
     fn get_db(&self) -> Arc<Mutex<sql::RawConnection>>;
     fn set_redis_context(&self, ctx: Context);
+    fn set_rc(&self, ctx: Context) -> RedisContextSet;
+    fn set_rc_on_call<'a>(
+        &'a self,
+        ctx: Context,
+    ) -> Box<Fn() -> RedisContextSet<'a> + 'a>;
 }
 
 impl LoopData for Loop {
@@ -220,6 +233,21 @@ impl LoopData for Loop {
     }
     fn set_redis_context(&self, ctx: Context) {
         *self.redis_context.lock().unwrap() = Some(ctx)
+    }
+    fn set_rc(&self, ctx: Context) -> RedisContextSet {
+        let mut guard = self.redis_context.lock().unwrap();
+        *guard = Some(ctx);
+        RedisContextSet(guard)
+    }
+    fn set_rc_on_call<'a>(
+        &'a self,
+        ctx: Context,
+    ) -> Box<Fn() -> RedisContextSet<'a> + 'a> {
+        Box::new(move || {
+            let mut guard = self.redis_context.lock().unwrap();
+            *guard = Some(ctx);
+            RedisContextSet(guard)
+        })
     }
 }
 
@@ -528,8 +556,6 @@ fn bind_statement<'a>(
     stmt: &'a MultiStatement,
     arguments: &[&str],
 ) -> Result<&'a MultiStatement, sql::SQLite3Error> {
-    // let args: Vec<&str> =
-    //    arguments.iter().map(|arg| arg.as_str()).collect();
     match stmt.bind_texts(arguments) {
         Err(e) => Err(e),
         Ok(_) => Ok(stmt),
