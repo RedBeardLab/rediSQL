@@ -39,7 +39,7 @@ trait ReplicationData {
     fn to_replicate(&self) -> bool;
 }
 
-pub trait StatementCache {
+pub trait StatementCache<'a> {
     fn new(&Arc<Mutex<sql::RawConnection>>) -> Self;
     fn is_statement_present(&self, &str) -> bool;
     fn insert_new_statement(
@@ -60,15 +60,17 @@ pub trait StatementCache {
         &self,
         &str,
         &[&str],
+        RedisContextSet,
     ) -> Result<QueryResult, RediSQLError>;
     fn query_statement(
         &self,
         &str,
         &[&str],
+        RedisContextSet,
     ) -> Result<QueryResult, RediSQLError>;
 }
 
-impl StatementCache for ReplicationBook {
+impl<'a> StatementCache<'a> for ReplicationBook {
     fn new(db: &Arc<Mutex<sql::RawConnection>>) -> Self {
         ReplicationBook {
             data: Arc::new(RwLock::new(FnvHashMap::default())),
@@ -146,33 +148,11 @@ impl StatementCache for ReplicationBook {
         }
     }
 
-    fn exec_statement(
-        &self,
-        identifier: &str,
-        args: &[&str],
-    ) -> Result<QueryResult, RediSQLError> {
-        let map = self.data.read().unwrap();
-        match map.get(identifier) {
-            None => {
-                let debug = String::from("No statement found");
-                let description = String::from(
-                    "The statement is not present in the database",
-                );
-                Err(RediSQLError::new(debug, description))
-            }
-            Some(&(ref stmt, _)) => {
-                stmt.reset();
-                let stmt = bind_statement(stmt, args)?;
-                let cursor = stmt.execute()?;
-                Ok(cursor_to_query_result(cursor))
-            }
-        }
-    }
-
     fn query_statement(
         &self,
         identifier: &str,
         args: &[&str],
+        redis_context_set: RedisContextSet,
     ) -> Result<QueryResult, RediSQLError> {
         let map = self.data.read().unwrap();
         match map.get(identifier) {
@@ -186,7 +166,7 @@ impl StatementCache for ReplicationBook {
             Some(&(ref stmt, true)) => {
                 stmt.reset();
                 let stmt = bind_statement(stmt, args)?;
-                let cursor = stmt.execute()?;
+                let cursor = stmt.execute(redis_context_set)?;
                 Ok(cursor_to_query_result(cursor))
             }
             Some(&(_, false)) => {
@@ -196,13 +176,39 @@ impl StatementCache for ReplicationBook {
             }
         }
     }
+
+    fn exec_statement(
+        &self,
+        identifier: &str,
+        args: &[&str],
+        redis_context_set: RedisContextSet,
+    ) -> Result<QueryResult, RediSQLError> {
+        let map = self.data.read().unwrap();
+        match map.get(identifier) {
+            None => {
+                let debug = String::from("No statement found");
+                let description = String::from(
+                    "The statement is not present in the database",
+                );
+                Err(RediSQLError::new(debug, description))
+            }
+            Some(&(ref stmt, _)) => {
+                stmt.reset();
+                let stmt = bind_statement(stmt, args)?;
+                let cursor = stmt.execute(redis_context_set)?;
+                Ok(cursor_to_query_result(cursor))
+            }
+        }
+    }
 }
 
-pub struct RedisContextSet<'a>(MutexGuard<'a, Option<Context>>);
+pub struct RedisContextSet<'a> {
+    guard: MutexGuard<'a, Option<Context>>,
+}
 
 impl<'a> Drop for RedisContextSet<'a> {
     fn drop(&mut self) {
-        *self.0 = None
+        *self.guard = None;
     }
 }
 
@@ -216,12 +222,9 @@ pub struct Loop {
 pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
     fn get_db(&self) -> Arc<Mutex<sql::RawConnection>>;
+    fn get_redis_context(&self) -> Arc<Mutex<Option<Context>>>;
     fn set_redis_context(&self, ctx: Context);
     fn set_rc(&self, ctx: Context) -> RedisContextSet;
-    fn set_rc_on_call<'a>(
-        &'a self,
-        ctx: Context,
-    ) -> Box<Fn() -> RedisContextSet<'a> + 'a>;
 }
 
 impl LoopData for Loop {
@@ -231,23 +234,16 @@ impl LoopData for Loop {
     fn get_db(&self) -> Arc<Mutex<sql::RawConnection>> {
         Arc::clone(&self.db)
     }
+    fn get_redis_context(&self) -> Arc<Mutex<Option<Context>>> {
+        Arc::clone(&self.redis_context)
+    }
     fn set_redis_context(&self, ctx: Context) {
         *self.redis_context.lock().unwrap() = Some(ctx)
     }
     fn set_rc(&self, ctx: Context) -> RedisContextSet {
         let mut guard = self.redis_context.lock().unwrap();
         *guard = Some(ctx);
-        RedisContextSet(guard)
-    }
-    fn set_rc_on_call<'a>(
-        &'a self,
-        ctx: Context,
-    ) -> Box<Fn() -> RedisContextSet<'a> + 'a> {
-        Box::new(move || {
-            let mut guard = self.redis_context.lock().unwrap();
-            *guard = Some(ctx);
-            RedisContextSet(guard)
-        })
+        RedisContextSet { guard }
     }
 }
 
@@ -264,19 +260,6 @@ impl Loop {
         }
     }
 }
-
-/*
-pub fn create_rm_string(ctx: *mut rm::ffi::RedisModuleCtx,
-                        s: String)
-                        -> *mut rm::ffi::RedisModuleString {
-    let l = s.len();
-    let cs = CString::new(s).unwrap();
-
-    unsafe {
-        rm::ffi::RedisModule_CreateString.unwrap()(ctx, cs.as_ptr(), l)
-    }
-}
-*/
 
 pub trait RedisReply {
     fn reply(&self, ctx: rm::Context) -> i32;
@@ -526,24 +509,26 @@ fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
     }
 }
 
-pub fn do_execute(
+pub fn do_execute<'a>(
     db: &Arc<Mutex<sql::RawConnection>>,
     query: &str,
+    redis_context_set: RedisContextSet,
 ) -> Result<QueryResult, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
     debug!("do_execute | Created statement");
-    let cursor = stmt.execute()?;
+    let cursor = stmt.execute(redis_context_set)?;
     debug!("do_execute | Statement executed");
     Ok(cursor_to_query_result(cursor))
 }
 
-pub fn do_query(
+pub fn do_query<'a>(
     db: &Arc<Mutex<sql::RawConnection>>,
     query: &str,
+    redis_context_set: RedisContextSet,
 ) -> Result<QueryResult, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
     if stmt.is_read_only() {
-        let cursor = stmt.execute()?;
+        let cursor = stmt.execute(redis_context_set)?;
         Ok(cursor_to_query_result(cursor))
     } else {
         let debug = String::from("Not read only statement");
@@ -634,13 +619,25 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
-                let result = do_execute(&loopdata.get_db(), query);
+                let contex_setter =
+                    loopdata.set_rc(Context::thread_safe(&client));
+                let result = do_execute(
+                    &loopdata.get_db(),
+                    query,
+                    contex_setter,
+                );
                 debug!("Exec | DONE, returning result");
                 return_value(&client, result);
             }
             Ok(Command::Query { query, client }) => {
                 debug!("Query | Query = {:?}", query);
-                let result = do_query(&loopdata.get_db(), query);
+                let contex_setter =
+                    loopdata.set_rc(Context::thread_safe(&client));
+                let result = do_query(
+                    &loopdata.get_db(),
+                    query,
+                    contex_setter,
+                );
                 return_value(&client, result);
             }
             Ok(Command::UpdateStatement {
@@ -689,9 +686,12 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 debug!("ExecStatement | Identifier = {:?} Arguments = {:?}",
                        identifier,
                        arguments);
-                let result = loopdata
-                    .get_replication_book()
-                    .exec_statement(identifier, &arguments);
+                let contex_set =
+                    loopdata.set_rc(Context::thread_safe(&client));
+                let result =
+                    loopdata.get_replication_book().exec_statement(
+                        identifier, &arguments, contex_set,
+                    );
                 return_value(&client, result);
             }
             Ok(Command::QueryStatement {
@@ -699,10 +699,13 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 arguments,
                 client,
             }) => {
+                let contex_set =
+                    loopdata.set_rc(Context::thread_safe(&client));
                 let result =
                     loopdata.get_replication_book().query_statement(
                         identifier,
                         arguments.as_slice(),
+                        contex_set,
                     );
                 return_value(&client, result);
             }
@@ -788,7 +791,7 @@ pub fn create_metadata_table(
     let statement = "CREATE TABLE RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
     let stmt = MultiStatement::new(db, statement)?;
-    stmt.execute()?;
+    stmt.internal_execute()?;
     Ok(())
 }
 
@@ -804,7 +807,7 @@ pub fn insert_metadata(
     stmt.bind_index(1, data_type)?;
     stmt.bind_index(2, key)?;
     stmt.bind_index(3, value)?;
-    stmt.execute()?;
+    stmt.internal_execute()?;
     Ok(())
 }
 
@@ -814,7 +817,7 @@ pub fn enable_foreign_key(
     let enable_foreign_key = "PRAGMA foreign_keys = ON;";
     match MultiStatement::new(db, enable_foreign_key) {
         Err(e) => Err(e),
-        Ok(stmt) => match stmt.execute() {
+        Ok(stmt) => match stmt.internal_execute() {
             Err(e) => Err(e),
             Ok(_) => Ok(()),
         },
@@ -831,7 +834,7 @@ fn update_statement_metadata(
     let stmt = MultiStatement::new(db, statement)?;
     stmt.bind_index(1, value)?;
     stmt.bind_index(2, key)?;
-    stmt.execute()?;
+    stmt.internal_execute()?;
     Ok(())
 }
 
@@ -843,7 +846,7 @@ fn remove_statement_metadata(
 
     let stmt = MultiStatement::new(db, statement)?;
     stmt.bind_index(1, key)?;
-    stmt.execute()?;
+    stmt.internal_execute()?;
     Ok(())
 }
 
@@ -853,7 +856,7 @@ fn get_statement_metadata(
     let statement = "SELECT * FROM RediSQLMetadata WHERE data_type = 'statement';";
 
     let stmt = MultiStatement::new(db, statement)?;
-    let cursor = stmt.execute()?;
+    let cursor = stmt.internal_execute()?;
     Ok(cursor_to_query_result(cursor))
 }
 

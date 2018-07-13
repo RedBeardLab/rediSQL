@@ -10,6 +10,8 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
+use redis::RedisContextSet;
+
 #[derive(Clone, Debug)]
 enum Parameters {
     Anonymous,
@@ -141,7 +143,7 @@ impl Statement {
 }
 
 impl<'a> StatementTrait<'a> for Statement {
-    fn execute(&self) -> Result<Cursor, SQLite3Error> {
+    fn internal_execute(&self) -> Result<Cursor, SQLite3Error> {
         Err(self.get_last_error())
     }
 
@@ -228,7 +230,7 @@ impl<'a> StatementTrait<'a> for MultiStatement {
     fn reset(&self) {
         self.stmts.iter().map(|stmt| stmt.reset()).count();
     }
-    fn execute(&self) -> Result<Cursor, SQLite3Error> {
+    fn internal_execute(&self) -> Result<Cursor, SQLite3Error> {
         let db = self.db.clone();
         let conn = db.lock().unwrap();
         debug!("Execute | Acquired db lock");

@@ -7,6 +7,8 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
+use redis::RedisContextSet;
+
 use redisql_error as err;
 
 use community_statement::Statement;
@@ -156,7 +158,13 @@ pub trait StatementTrait<'a>: Sized {
         query: &str,
     ) -> Result<Self, SQLite3Error>;
     fn reset(&self);
-    fn execute(&self) -> Result<Cursor, SQLite3Error>;
+    fn execute(
+        &self,
+        _: RedisContextSet,
+    ) -> Result<Cursor, SQLite3Error> {
+        self.internal_execute()
+    }
+    fn internal_execute(&self) -> Result<Cursor, SQLite3Error>;
     fn bind_texts(
         &self,
         values: &[&str],

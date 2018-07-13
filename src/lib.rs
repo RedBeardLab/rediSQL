@@ -259,10 +259,6 @@ extern "C" fn Exec(
                     };
                     debug!("Exec | BlockedClient");
 
-                    loopdata.set_redis_context(Context::thread_safe(
-                        &blocked_client,
-                    ));
-
                     let cmd = r::Command::Exec {
                         query: argvector[2],
                         client: blocked_client,
