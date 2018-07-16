@@ -18,7 +18,7 @@ static BRUTE_HASH_MODULE: ffi::sqlite3_module = ffi::sqlite3_module {
     xCommit: None,
     xConnect: Some(create_brute_hash),
     xCreate: Some(create_brute_hash),
-    xDestroy: Some(disconnect_brute_hash),
+    xDestroy: Some(destroy_brute_hash),
     xDisconnect: Some(disconnect_brute_hash),
     xEof: Some(eof_brute_hash),
     xFilter: Some(filter_brute_hash),
@@ -472,6 +472,18 @@ extern "C" fn column_brute_hash(
 }
 
 extern "C" fn disconnect_brute_hash(
+    p_vtab: *mut ffi::sqlite3_vtab,
+) -> i32 {
+    debug!("Disconnect");
+    let result = VirtualTable::with_vtab(
+        p_vtab,
+        |ref _vtab| -> i32 { ffi::SQLITE_OK },
+    );
+    debug!("Disconnect Exit");
+    result
+}
+
+extern "C" fn destroy_brute_hash(
     p_vtab: *mut ffi::sqlite3_vtab,
 ) -> i32 {
     debug!("Disconnect");
