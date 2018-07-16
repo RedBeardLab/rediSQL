@@ -3,6 +3,7 @@ extern crate uuid;
 
 use self::fnv::FnvHashMap;
 use std;
+use std::cell::RefCell;
 use std::clone::Clone;
 use std::collections::hash_map::Entry;
 use std::error;
@@ -60,13 +61,11 @@ pub trait StatementCache<'a> {
         &self,
         &str,
         &[&str],
-        RedisContextSet,
     ) -> Result<QueryResult, RediSQLError>;
     fn query_statement(
         &self,
         &str,
         &[&str],
-        RedisContextSet,
     ) -> Result<QueryResult, RediSQLError>;
 }
 
@@ -152,7 +151,6 @@ impl<'a> StatementCache<'a> for ReplicationBook {
         &self,
         identifier: &str,
         args: &[&str],
-        redis_context_set: RedisContextSet,
     ) -> Result<QueryResult, RediSQLError> {
         let map = self.data.read().unwrap();
         match map.get(identifier) {
@@ -166,8 +164,8 @@ impl<'a> StatementCache<'a> for ReplicationBook {
             Some(&(ref stmt, true)) => {
                 stmt.reset();
                 let stmt = bind_statement(stmt, args)?;
-                let cursor = stmt.execute(redis_context_set)?;
-                Ok(cursor_to_query_result(cursor))
+                let cursor = stmt.execute()?;
+                Ok(QueryResult::from(cursor))
             }
             Some(&(_, false)) => {
                 let debug = String::from("Not read only statement");
@@ -181,7 +179,6 @@ impl<'a> StatementCache<'a> for ReplicationBook {
         &self,
         identifier: &str,
         args: &[&str],
-        redis_context_set: RedisContextSet,
     ) -> Result<QueryResult, RediSQLError> {
         let map = self.data.read().unwrap();
         match map.get(identifier) {
@@ -195,20 +192,39 @@ impl<'a> StatementCache<'a> for ReplicationBook {
             Some(&(ref stmt, _)) => {
                 stmt.reset();
                 let stmt = bind_statement(stmt, args)?;
-                let cursor = stmt.execute(redis_context_set)?;
-                Ok(cursor_to_query_result(cursor))
+                let cursor = stmt.execute()?;
+                Ok(QueryResult::from(cursor))
+                //Ok(cursor_to_query_result(cursor))
             }
         }
     }
 }
 
-pub struct RedisContextSet<'a> {
-    guard: MutexGuard<'a, Option<Context>>,
+pub struct RedisContextSet<'a>(
+    MutexGuard<'a, Arc<Mutex<RefCell<Option<Context>>>>>,
+);
+
+impl<'a> RedisContextSet<'a> {
+    fn new(
+        ctx: Context,
+        redis_ctx: &'a Arc<
+            Mutex<Arc<Mutex<RefCell<Option<Context>>>>>,
+        >,
+    ) -> RedisContextSet<'a> {
+        let wrap = redis_ctx.lock().unwrap();
+        {
+            let locked = wrap.lock().unwrap();
+            *locked.borrow_mut() = Some(ctx);
+        }
+        RedisContextSet(wrap)
+    }
 }
 
 impl<'a> Drop for RedisContextSet<'a> {
     fn drop(&mut self) {
-        *self.guard = None;
+        let locked = self.0.lock().unwrap();
+        *locked.borrow_mut() = None;
+        debug!("RedisContextSet | Drop");
     }
 }
 
@@ -216,15 +232,18 @@ impl<'a> Drop for RedisContextSet<'a> {
 pub struct Loop {
     db: Arc<Mutex<sql::RawConnection>>,
     replication_book: ReplicationBook,
-    redis_context: Arc<Mutex<Option<Context>>>,
+    redis_context: Arc<Mutex<Arc<Mutex<RefCell<Option<Context>>>>>>,
 }
+
+unsafe impl Send for Loop {}
 
 pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
     fn get_db(&self) -> Arc<Mutex<sql::RawConnection>>;
-    fn get_redis_context(&self) -> Arc<Mutex<Option<Context>>>;
-    fn set_redis_context(&self, ctx: Context);
     fn set_rc(&self, ctx: Context) -> RedisContextSet;
+    fn with_contex_set<F>(&self, ctx: Context, f: F)
+    where
+        F: Fn(RedisContextSet) -> ();
 }
 
 impl LoopData for Loop {
@@ -234,25 +253,34 @@ impl LoopData for Loop {
     fn get_db(&self) -> Arc<Mutex<sql::RawConnection>> {
         Arc::clone(&self.db)
     }
-    fn get_redis_context(&self) -> Arc<Mutex<Option<Context>>> {
-        Arc::clone(&self.redis_context)
-    }
-    fn set_redis_context(&self, ctx: Context) {
-        *self.redis_context.lock().unwrap() = Some(ctx)
-    }
     fn set_rc(&self, ctx: Context) -> RedisContextSet {
-        let mut guard = self.redis_context.lock().unwrap();
-        *guard = Some(ctx);
-        RedisContextSet { guard }
+        debug!("set_rc | enter");
+        let wrap = self.redis_context.lock().unwrap();
+        {
+            let locked = wrap.lock().unwrap();
+            *locked.borrow_mut() = Some(ctx);
+        }
+        debug!("set_rc | exit");
+        RedisContextSet(wrap)
+    }
+    fn with_contex_set<F>(&self, ctx: Context, f: F)
+    where
+        F: Fn(RedisContextSet) -> (),
+    {
+        let redis_context =
+            RedisContextSet::new(ctx, &self.redis_context);
+        f(redis_context);
+        debug!("with_contex_set | exit");
     }
 }
 
 impl Loop {
     fn new_from_arc(
         db: Arc<Mutex<sql::RawConnection>>,
-        redis_context: Arc<Mutex<Option<Context>>>,
+        redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
     ) -> Loop {
         let replication_book = ReplicationBook::new(&db);
+        let redis_context = Arc::new(Mutex::new(redis_context));
         Loop {
             db,
             replication_book,
@@ -481,6 +509,7 @@ impl QueryResult {
                 reply_with_done(ctx.as_ptr(), modified_rows)
             }
             QueryResult::Array { array, .. } => {
+                debug!("QueryResult::Array");
                 reply_with_array(ctx, array)
             }
         }
@@ -490,46 +519,25 @@ impl QueryResult {
     }
 }
 
-fn cursor_to_query_result(cursor: sql::Cursor) -> QueryResult {
-    match cursor {
-        sql::Cursor::OKCursor {} => {
-            QueryResult::OK { to_replicate: true }
-        }
-        sql::Cursor::DONECursor { modified_rows } => {
-            debug!("Cursor::DONECursor");
-            QueryResult::DONE {
-                modified_rows,
-                to_replicate: true,
-            }
-        }
-        sql::Cursor::RowsCursor { .. } => QueryResult::Array {
-            array: cursor.collect::<Vec<sql::Row>>(),
-            to_replicate: true,
-        },
-    }
-}
-
-pub fn do_execute<'a>(
+pub fn do_execute(
     db: &Arc<Mutex<sql::RawConnection>>,
     query: &str,
-    redis_context_set: RedisContextSet,
 ) -> Result<QueryResult, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
-    debug!("do_execute | Created statement");
-    let cursor = stmt.execute(redis_context_set)?;
-    debug!("do_execute | Statement executed");
-    Ok(cursor_to_query_result(cursor))
+    debug!("do_execute | created statement");
+    let cursor = stmt.execute()?;
+    debug!("do_execute | statement executed");
+    Ok(QueryResult::from(cursor))
 }
 
-pub fn do_query<'a>(
+pub fn do_query(
     db: &Arc<Mutex<sql::RawConnection>>,
     query: &str,
-    redis_context_set: RedisContextSet,
 ) -> Result<QueryResult, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
     if stmt.is_read_only() {
-        let cursor = stmt.execute(redis_context_set)?;
-        Ok(cursor_to_query_result(cursor))
+        let cursor = stmt.execute()?;
+        Ok(QueryResult::from(cursor))
     } else {
         let debug = String::from("Not read only statement");
         let description = String::from("Statement is not read only but it may modify the database, use `EXEC_STATEMENT` instead.",);
@@ -568,6 +576,7 @@ impl error::Error for RedisError {
         self.msg.as_str()
     }
 }
+
 fn restore_previous_statements<'a, L: 'a + LoopData>(
     loopdata: &L,
 ) -> () {
@@ -609,7 +618,7 @@ fn return_value(
 }
 
 pub fn listen_and_execute<'a, L: 'a + LoopData>(
-    loopdata: &L,
+    loopdata: &mut L,
     rx: &Receiver<Command>,
 ) {
     debug!("Start thread execution");
@@ -619,26 +628,30 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
-                let contex_setter =
-                    loopdata.set_rc(Context::thread_safe(&client));
-                let result = do_execute(
-                    &loopdata.get_db(),
-                    query,
-                    contex_setter,
+
+                loopdata.with_contex_set(
+                    Context::thread_safe(&client),
+                    |_| {
+                        debug!("A");
+                        let result =
+                            do_execute(&loopdata.get_db(), query);
+                        debug!("B");
+                        return_value(&client, result);
+                        debug!("C");
+                    },
                 );
                 debug!("Exec | DONE, returning result");
-                return_value(&client, result);
             }
             Ok(Command::Query { query, client }) => {
                 debug!("Query | Query = {:?}", query);
-                let contex_setter =
-                    loopdata.set_rc(Context::thread_safe(&client));
-                let result = do_query(
-                    &loopdata.get_db(),
-                    query,
-                    contex_setter,
+                loopdata.with_contex_set(
+                    Context::thread_safe(&client),
+                    |_| {
+                        let result =
+                            do_query(&loopdata.get_db(), query);
+                        return_value(&client, result);
+                    },
                 );
-                return_value(&client, result);
             }
             Ok(Command::UpdateStatement {
                 identifier,
@@ -686,28 +699,33 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 debug!("ExecStatement | Identifier = {:?} Arguments = {:?}",
                        identifier,
                        arguments);
-                let contex_set =
-                    loopdata.set_rc(Context::thread_safe(&client));
-                let result =
-                    loopdata.get_replication_book().exec_statement(
-                        identifier, &arguments, contex_set,
-                    );
-                return_value(&client, result);
+                loopdata.with_contex_set(
+                    Context::thread_safe(&client),
+                    |_| {
+                        let result = loopdata
+                            .get_replication_book()
+                            .exec_statement(identifier, &arguments);
+                        return_value(&client, result);
+                    },
+                );
             }
             Ok(Command::QueryStatement {
                 identifier,
                 arguments,
                 client,
             }) => {
-                let contex_set =
-                    loopdata.set_rc(Context::thread_safe(&client));
-                let result =
-                    loopdata.get_replication_book().query_statement(
-                        identifier,
-                        arguments.as_slice(),
-                        contex_set,
-                    );
-                return_value(&client, result);
+                loopdata.with_contex_set(
+                    Context::thread_safe(&client),
+                    |_| {
+                        let result = loopdata
+                            .get_replication_book()
+                            .query_statement(
+                                identifier,
+                                arguments.as_slice(),
+                            );
+                        return_value(&client, result);
+                    },
+                );
             }
             Ok(Command::Stop) => {
                 debug!("Stop, exiting from work loop");
@@ -768,7 +786,7 @@ impl DBKey {
         tx: Sender<Command>,
         db: Arc<Mutex<sql::RawConnection>>,
         in_memory: bool,
-        redis_context: Arc<Mutex<Option<Context>>>,
+        redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
     ) -> DBKey {
         let loop_data = Loop::new_from_arc(db, redis_context);
         DBKey {
@@ -791,7 +809,7 @@ pub fn create_metadata_table(
     let statement = "CREATE TABLE RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
     let stmt = MultiStatement::new(db, statement)?;
-    stmt.internal_execute()?;
+    stmt.execute()?;
     Ok(())
 }
 
@@ -807,7 +825,7 @@ pub fn insert_metadata(
     stmt.bind_index(1, data_type)?;
     stmt.bind_index(2, key)?;
     stmt.bind_index(3, value)?;
-    stmt.internal_execute()?;
+    stmt.execute()?;
     Ok(())
 }
 
@@ -817,7 +835,7 @@ pub fn enable_foreign_key(
     let enable_foreign_key = "PRAGMA foreign_keys = ON;";
     match MultiStatement::new(db, enable_foreign_key) {
         Err(e) => Err(e),
-        Ok(stmt) => match stmt.internal_execute() {
+        Ok(stmt) => match stmt.execute() {
             Err(e) => Err(e),
             Ok(_) => Ok(()),
         },
@@ -834,7 +852,7 @@ fn update_statement_metadata(
     let stmt = MultiStatement::new(db, statement)?;
     stmt.bind_index(1, value)?;
     stmt.bind_index(2, key)?;
-    stmt.internal_execute()?;
+    stmt.execute()?;
     Ok(())
 }
 
@@ -846,7 +864,7 @@ fn remove_statement_metadata(
 
     let stmt = MultiStatement::new(db, statement)?;
     stmt.bind_index(1, key)?;
-    stmt.internal_execute()?;
+    stmt.execute()?;
     Ok(())
 }
 
@@ -856,8 +874,8 @@ fn get_statement_metadata(
     let statement = "SELECT * FROM RediSQLMetadata WHERE data_type = 'statement';";
 
     let stmt = MultiStatement::new(db, statement)?;
-    let cursor = stmt.internal_execute()?;
-    Ok(cursor_to_query_result(cursor))
+    let cursor = stmt.execute()?;
+    Ok(QueryResult::from(cursor))
 }
 
 pub fn make_backup(
@@ -1015,7 +1033,7 @@ pub fn with_ch_and_loopdata<F>(
     f: F,
 ) -> i32
 where
-    F: Fn(Result<(&Sender<Command>, &Loop), i32>) -> i32,
+    F: Fn(Result<(&Sender<Command>, &mut Loop), i32>) -> i32,
 {
     let r = get_ch_and_loopdata_from_name(ctx, name);
     f(r)
@@ -1024,12 +1042,12 @@ where
 pub fn get_ch_and_loopdata_from_name(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,
-) -> Result<(&Sender<Command>, &Loop), i32> {
+) -> Result<(&Sender<Command>, &mut Loop), i32> {
     // here we are intentionally leaking the DBKey, so that it does
     // not get destroyed
     let db: *mut DBKey = get_dbkeyptr_from_name(ctx, name)?;
     let channel = unsafe { &(*db).tx };
-    let loopdata = unsafe { &(*db).loop_data };
+    let loopdata = unsafe { &mut (*db).loop_data };
     Ok((channel, loopdata))
 }
 

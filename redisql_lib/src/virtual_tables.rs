@@ -2,6 +2,7 @@ use redis_type::ffi as rffi;
 use redis_type::{CallReply, Context};
 use sqlite::ffi;
 use sqlite::{SQLite3Error, SQLiteConnection, SQLITE_TRANSIENT};
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::ffi::{CStr, CString};
 use std::os::raw;
@@ -40,13 +41,13 @@ static BRUTE_HASH_NAME: &[u8] = b"REDISQL_TABLES_BRUTE_HASH\0";
 #[derive(Debug)]
 struct VirtualTable {
     base: ffi::sqlite3_vtab,
-    ctx: Arc<Mutex<Option<Context>>>,
+    ctx: Arc<Mutex<RefCell<Option<Context>>>>,
     columns: Vec<&'static str>,
 }
 
 impl VirtualTable {
     pub fn new(
-        ctx: Arc<Mutex<Option<Context>>>,
+        ctx: Arc<Mutex<RefCell<Option<Context>>>>,
         columns: Vec<&'static str>,
     ) -> VirtualTable {
         VirtualTable {
@@ -67,9 +68,6 @@ impl VirtualTable {
 
         f(&*vtab)
     }
-    pub fn reset_context(&self) {
-        *self.ctx.lock().unwrap() = None
-    }
 }
 
 #[repr(C)]
@@ -77,7 +75,7 @@ impl VirtualTable {
 struct VirtualTableCursor<'vtab> {
     vtabc: ffi::sqlite3_vtab_cursor,
     vtab: &'vtab VirtualTable,
-    redis_context: Arc<Mutex<Option<Context>>>,
+    redis_context: &'vtab Arc<Mutex<RefCell<Option<Context>>>>,
     redis_cursor: Option<String>,
     columns: &'vtab [&'static str],
     rows: Option<VecDeque<String>>,
@@ -99,7 +97,7 @@ impl<'vtab> VirtualTableCursor<'vtab> {
                 pVtab: ptr::null_mut(),
             },
             vtab: &(*vtab),
-            redis_context: Arc::clone(&(*vtab).ctx),
+            redis_context: &(*vtab).ctx,
             redis_cursor: None,
             columns: &(*vtab).columns,
             rows: None,
@@ -114,7 +112,7 @@ impl<'vtab> VirtualTableCursor<'vtab> {
 
 pub fn register_modules<Conn>(
     conn: &Arc<Mutex<Conn>>,
-) -> Result<Arc<Mutex<Option<Context>>>, SQLite3Error>
+) -> Result<Arc<Mutex<RefCell<Option<Context>>>>, SQLite3Error>
 where
     Conn: SQLiteConnection + Sized,
 {
@@ -128,21 +126,23 @@ where
 
 fn register_module_vtabs(
     conn: *mut ffi::sqlite3,
-) -> Result<Arc<Mutex<Option<Context>>>, ()> {
+) -> Result<Arc<Mutex<RefCell<Option<Context>>>>, ()> {
     debug!("Registering REDISQL_TABLES_BRUTE_HASH");
-    let client_data = Arc::new(Mutex::new(None));
-    let to_return = client_data.clone();
+    let context_cell = Arc::new(Mutex::new(RefCell::new(None)));
+    let context_ptr = Arc::into_raw(context_cell);
+    let to_return = context_ptr;
+    let context_cell = unsafe { Arc::from_raw(to_return) };
     let destructor = None;
     match unsafe {
         ffi::sqlite3_create_module_v2(
             conn,
             BRUTE_HASH_NAME.as_ptr() as *const i8,
             &BRUTE_HASH_MODULE,
-            Arc::into_raw(client_data) as *mut raw::c_void,
+            context_ptr as *mut raw::c_void,
             destructor,
         )
     } {
-        ffi::SQLITE_OK => Ok(to_return),
+        ffi::SQLITE_OK => Ok(context_cell),
         _ => {
             println!("Error in creating the vtab");
             Err(())
@@ -199,7 +199,6 @@ fn set_error(to_set: *mut *mut raw::c_char, error: &str) {
     };
 }
 
-// need to be sure that the context exist here and put it into pp_vtab
 pub unsafe extern "C" fn create_brute_hash(
     conn: *mut ffi::sqlite3,
     aux: *mut raw::c_void,
@@ -226,8 +225,8 @@ pub unsafe extern "C" fn create_brute_hash(
         set_error(pz_err, "Impossible to create the vtab");
         return ffi::SQLITE_ERROR;
     }
-    let redis_context: Arc<Mutex<Option<Context>>> =
-        Arc::from_raw(aux as *mut Mutex<Option<Context>>);
+    let redis_context: Arc<Mutex<RefCell<Option<Context>>>> =
+        Arc::from_raw(aux as *mut Mutex<_>);
     let vtab = Box::new(VirtualTable::new(redis_context, columns));
 
     *pp_vtab = Box::into_raw(vtab) as *mut ffi::sqlite3_vtab;
@@ -303,10 +302,15 @@ fn advance_redis_cursor(
     let mut matcher = String::from(vtab_cur.columns[0]);
     matcher.push_str(":*");
 
-    let redis_context =
-        vtab_cur.redis_context.lock().unwrap().unwrap();
+    debug!(
+        "advance_redis_cursor | getting the redis_context {:p}",
+        vtab_cur.redis_context
+    );
 
-    let cr = do_scan(redis_context, &index, &matcher);
+    let locked = &*vtab_cur.redis_context.lock().unwrap();
+    let redis_context = locked.borrow();
+
+    let cr = do_scan(redis_context.unwrap(), &index, &matcher);
 
     match get_next_index_and_results(&cr) {
         None => {
@@ -428,15 +432,12 @@ extern "C" fn column_brute_hash(
                         obj, key
                     );
 
-                    let redis_context = vtab_cur
-                        .redis_context
-                        .lock()
-                        .unwrap()
-                        .unwrap();
+                    let locked =
+                        vtab_cur.redis_context.lock().unwrap();
 
-                    debug!("RedisContext: {:?}", redis_context);
-
-                    let cr = do_hget(redis_context, obj, key);
+                    let redis_context = locked.borrow();
+                    let cr =
+                        do_hget(redis_context.unwrap(), obj, key);
 
                     debug!("Column cr: {:?}", cr);
 
@@ -474,10 +475,10 @@ extern "C" fn disconnect_brute_hash(
     p_vtab: *mut ffi::sqlite3_vtab,
 ) -> i32 {
     debug!("Disconnect");
-    let result = VirtualTable::with_vtab(p_vtab, |ref vtab| -> i32 {
-        vtab.reset_context();
-        ffi::SQLITE_OK
-    });
+    let result = VirtualTable::with_vtab(
+        p_vtab,
+        |ref _vtab| -> i32 { ffi::SQLITE_OK },
+    );
     debug!("Disconnect Exit");
     result
 }

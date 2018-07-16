@@ -7,7 +7,7 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
-use redis::RedisContextSet;
+use redis::QueryResult;
 
 use redisql_error as err;
 
@@ -158,13 +158,7 @@ pub trait StatementTrait<'a>: Sized {
         query: &str,
     ) -> Result<Self, SQLite3Error>;
     fn reset(&self);
-    fn execute(
-        &self,
-        _: RedisContextSet,
-    ) -> Result<Cursor, SQLite3Error> {
-        self.internal_execute()
-    }
-    fn internal_execute(&self) -> Result<Cursor, SQLite3Error>;
+    fn execute(&self) -> Result<Cursor, SQLite3Error>;
     fn bind_texts(
         &self,
         values: &[&str],
@@ -211,6 +205,20 @@ pub enum Entity {
         modified_rows: i32,
         to_replicate: bool,
     },
+}
+
+impl Entity {
+    fn new(etype: &EntityType, stmt: &Statement, i: i32) -> Entity {
+        match etype {
+            EntityType::Integer => {
+                let int = unsafe {
+                    ffi::sqlite3_column_int(stmt.get_raw_stmt(), i)
+                };
+                Entity::Integer { int }
+            }
+            _ => Entity::Null {},
+        }
+    }
 }
 
 pub type Row = Vec<Entity>;
@@ -275,19 +283,17 @@ fn get_entity_type(
     }
 }
 
-impl<'a> Iterator for Cursor<'a> {
-    type Item = Row;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match *self {
+impl<'a> From<Cursor<'a>> for QueryResult {
+    fn from(mut cursor: Cursor) -> QueryResult {
+        match cursor {
             Cursor::OKCursor {} => {
-                Some(vec![Entity::OK { to_replicate: true }])
+                QueryResult::OK { to_replicate: true }
             }
             Cursor::DONECursor { modified_rows } => {
-                Some(vec![Entity::DONE {
+                QueryResult::DONE {
                     modified_rows,
                     to_replicate: true,
-                }])
+                }
             }
 
             Cursor::RowsCursor {
@@ -295,9 +301,11 @@ impl<'a> Iterator for Cursor<'a> {
                 num_columns,
                 ref mut previous_status,
                 ..
-            } => match *previous_status {
-                ffi::SQLITE_ROW => {
-                    let mut result = vec![];
+            } => {
+                let mut result = vec![];
+                while *previous_status == ffi::SQLITE_ROW {
+                    let mut row =
+                        Vec::with_capacity(num_columns as usize);
                     for i in 0..num_columns {
                         let entity_value = match get_entity_type(
                             stmt.get_raw_stmt(),
@@ -356,16 +364,20 @@ impl<'a> Iterator for Cursor<'a> {
                                 Entity::Null {}
                             }
                         };
-                        result.push(entity_value);
+                        row.push(entity_value);
                     }
                     unsafe {
                         *previous_status =
                             ffi::sqlite3_step(stmt.get_raw_stmt());
                     };
-                    Some(result)
+
+                    result.push(row);
                 }
-                _ => None,
-            },
+                QueryResult::Array {
+                    array: result,
+                    to_replicate: true,
+                }
+            }
         }
     }
 }
