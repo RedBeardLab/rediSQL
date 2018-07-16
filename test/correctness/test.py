@@ -398,6 +398,25 @@ class TestBruteHash(TestRediSQLWithExec):
                 self.exec_naked("HSET", "cat:" + str(i), "meow", i)
             result = self.exec_naked("REDISQL.EXEC", "A", "SELECT * FROM cats")
             self.assertEquals(catty, len(result))
+  
+    def test_rds_persistency(self):
+        with DB(self, "A"):
+            done = self.exec_naked("REDISQL.EXEC", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
+            for i in xrange(5):
+                self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+            
+            for _ in self.retry_with_reload():
+
+                result = self.exec_naked("REDISQL.EXEC", "A", "SELECT rowid, cat, meow FROM cats")
+                self.assertEquals(5, len(result))
+                self.assertTrue([0L, "cat:0", "0"] in result)
+                self.assertTrue([1L, "cat:1", "1"] in result)
+                self.assertTrue([2L, "cat:2", "2"] in result)
+                self.assertTrue([3L, "cat:3", "3"] in result)
+                self.assertTrue([4L, "cat:4", "4"] in result)
+
+
+
 
 if __name__ == '__main__':
    unittest.main()
