@@ -208,15 +208,46 @@ pub enum Entity {
 }
 
 impl Entity {
-    fn new(etype: &EntityType, stmt: &Statement, i: i32) -> Entity {
-        match etype {
+    fn new(stmt: &Statement, i: i32) -> Entity {
+        match get_entity_type(stmt.get_raw_stmt(), i) {
             EntityType::Integer => {
                 let int = unsafe {
                     ffi::sqlite3_column_int(stmt.get_raw_stmt(), i)
                 };
                 Entity::Integer { int }
             }
-            _ => Entity::Null {},
+            EntityType::Float => {
+                let value = unsafe {
+                    ffi::sqlite3_column_double(stmt.get_raw_stmt(), i)
+                };
+                Entity::Float { float: value }
+            }
+            EntityType::Text => {
+                let value = unsafe {
+                    CStr::from_ptr(ffi::sqlite3_column_text(
+                        stmt.get_raw_stmt(),
+                        i,
+                    )
+                        as *const c_char)
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                Entity::Text { text: value }
+            }
+
+            EntityType::Blob => {
+                let value = unsafe {
+                    CStr::from_ptr(ffi::sqlite3_column_blob(
+                        stmt.get_raw_stmt(),
+                        i,
+                    )
+                        as *const c_char)
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                Entity::Blob { blob: value }
+            }
+            EntityType::Null => Entity::Null {},
         }
     }
 }
@@ -307,63 +338,7 @@ impl<'a> From<Cursor<'a>> for QueryResult {
                     let mut row =
                         Vec::with_capacity(num_columns as usize);
                     for i in 0..num_columns {
-                        let entity_value = match get_entity_type(
-                            stmt.get_raw_stmt(),
-                            i,
-                        ) {
-                            EntityType::Integer => {
-                                let value = unsafe {
-                                    ffi::sqlite3_column_int(
-                                        stmt.get_raw_stmt(),
-                                        i,
-                                    )
-                                };
-                                debug!("Got integer: {:?}", value);
-                                Entity::Integer { int: value }
-                            }
-                            EntityType::Float => {
-                                let value = unsafe {
-                                    ffi::sqlite3_column_double(
-                                        stmt.get_raw_stmt(),
-                                        i,
-                                    )
-                                };
-                                debug!("Got float: {:?}", value);
-                                Entity::Float { float: value }
-                            }
-                            EntityType::Text => {
-                                let value = unsafe {
-                                    CStr::from_ptr(
-                                        ffi::sqlite3_column_text(
-                                            stmt.get_raw_stmt(),
-                                            i,
-                                        )
-                                            as *const c_char,
-                                    ).to_string_lossy()
-                                        .into_owned()
-                                };
-                                debug!("Got text: {:?}", value);
-                                Entity::Text { text: value }
-                            }
-                            EntityType::Blob => {
-                                let value = unsafe {
-                                    CStr::from_ptr(
-                                        ffi::sqlite3_column_blob(
-                                            stmt.get_raw_stmt(),
-                                            i,
-                                        )
-                                            as *const c_char,
-                                    ).to_string_lossy()
-                                        .into_owned()
-                                };
-                                debug!("Got blob: {:?}", value);
-                                Entity::Blob { blob: value }
-                            }
-                            EntityType::Null => {
-                                debug!("Got null");
-                                Entity::Null {}
-                            }
-                        };
+                        let entity_value = Entity::new(stmt, i);
                         row.push(entity_value);
                     }
                     unsafe {
