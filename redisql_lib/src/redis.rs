@@ -200,6 +200,9 @@ impl<'a> StatementCache<'a> for ReplicationBook {
     }
 }
 
+type ProtectedRedisContext =
+    Arc<Mutex<Arc<Mutex<RefCell<Option<Context>>>>>>;
+
 pub struct RedisContextSet<'a>(
     MutexGuard<'a, Arc<Mutex<RefCell<Option<Context>>>>>,
 );
@@ -207,9 +210,7 @@ pub struct RedisContextSet<'a>(
 impl<'a> RedisContextSet<'a> {
     fn new(
         ctx: Context,
-        redis_ctx: &'a Arc<
-            Mutex<Arc<Mutex<RefCell<Option<Context>>>>>,
-        >,
+        redis_ctx: &'a ProtectedRedisContext,
     ) -> RedisContextSet<'a> {
         let wrap = redis_ctx.lock().unwrap();
         {
@@ -232,7 +233,7 @@ impl<'a> Drop for RedisContextSet<'a> {
 pub struct Loop {
     db: Arc<Mutex<sql::RawConnection>>,
     replication_book: ReplicationBook,
-    redis_context: Arc<Mutex<Arc<Mutex<RefCell<Option<Context>>>>>>,
+    redis_context: ProtectedRedisContext,
 }
 
 unsafe impl Send for Loop {}
@@ -1069,7 +1070,7 @@ pub fn reply_with_error_from_key_type(
     let context = Context::new(ctx);
     match key_type {
         rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
-            ReplyWithError(context, "ERR - Error the key is empty")
+            ReplyWithError(context, "ERR - Error the key is empty\0")
         }
         _ => {
             let error = CStr::from_bytes_with_nul(
