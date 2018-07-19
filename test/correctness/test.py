@@ -26,7 +26,7 @@ class Table():
       self.redis.client.execute_command("REDISQL.EXEC", self.key, create_table) 
     else:
       self.redis.client.execute_command("REDISQL.EXEC", create_table)
-  
+
   def __exit__(self, type, value, traceback):
     drop_table = "DROP TABLE {}".format(self.name)
     if self.key:
@@ -87,10 +87,10 @@ class TestRediSQLExec(TestRediSQLWithExec):
       with Table(self, "test3", "(A INTEGER)", key = "C"):
         done = self.exec_cmd("C", "INSERT INTO test3 VALUES(2);")
         self.assertEquals(done, ["DONE", 1L])
-      
+
         result = self.exec_cmd("C", "SELECT * from test3")
         self.assertEquals(result, [[2]])
-      
+
         self.exec_cmd("C", "INSERT INTO test3 VALUES(3);")
         result = self.exec_cmd("C", "SELECT * from test3 ORDER BY A")
         self.assertEquals(result, [[2], [3]])
@@ -98,7 +98,7 @@ class TestRediSQLExec(TestRediSQLWithExec):
         self.exec_cmd("C", "INSERT INTO test3 VALUES(4);")
         result = self.exec_cmd("C", "SELECT * FROM test3 ORDER BY A")
         self.assertEquals(result, [[2], [3], [4]])
-  
+
   def test_single_remove(self):
     with DB(self, "D"):
       with Table(self, "test4", "(A INTEGER)", key = "D"):
@@ -110,7 +110,7 @@ class TestRediSQLExec(TestRediSQLWithExec):
         self.exec_cmd("D", "DELETE FROM test4 WHERE A = 3;")
         result = self.exec_cmd("D", "SELECT * FROM test4 ORDER BY A")
         self.assertEquals(result, [[2], [4]])
- 
+
   def test_big_select(self):
     elements = 50
     with DB(self, "E"):
@@ -122,7 +122,7 @@ class TestRediSQLExec(TestRediSQLWithExec):
         pipe.execute()
         result = self.exec_cmd("E", "SELECT * FROM test5 ORDER BY A")
         self.assertEquals(result, [[x] for x in xrange(elements)])
- 
+
   def test_multiple_row(self):
     with DB(self, "F"):
       with Table(self, "test6", "(A INTEGER, B REAL, C TEXT)", key= "F"):
@@ -131,14 +131,14 @@ class TestRediSQLExec(TestRediSQLWithExec):
         self.exec_cmd("F", "INSERT INTO test6 VALUES(3, 3.0, '3point3')")
         self.exec_cmd("F", "INSERT INTO test6 VALUES(4, 4.0, '4point4')")
         self.exec_cmd("F", "INSERT INTO test6 VALUES(5, 5.0, '5point5')")
-  
+
         result = self.exec_cmd("F", "SELECT A, B, C FROM test6 ORDER BY A")
         result = [[A, float(B), C] for [A, B, C] in result]
         self.assertEquals(result, 
             [[1L, 1.0, "1point1"], [2L, 2.0, '2point2'],
              [3L, 3.0, '3point3'], [4L, 4.0, '4point4'],
              [5L, 5.0, '5point5']])
-        
+
   def test_join(self):
     with DB(self, "G"):
       with Table(self, "testA", "(A INTEGER, B INTEGER)", key = "G"):
@@ -149,7 +149,7 @@ class TestRediSQLExec(TestRediSQLWithExec):
           self.exec_cmd("G", "INSERT INTO testB VALUES(3, 4)")
           result = self.exec_cmd("G", "SELECT A, B, C, D FROM testA, testB WHERE A = C ORDER BY A")
           self.assertEquals(result, [[1, 2, 1, 2], [3, 4, 3, 4]])
-        
+
 
   def runTest(self):
     pass
@@ -194,7 +194,7 @@ class TestMultipleInserts(TestRediSQLWithExec):
         self.assertEquals(done, ["DONE", 2L])
         done = self.exec_naked("REDISQL.EXEC", "M", "INSERT INTO t1 values(7, 8);")
         self.assertEquals(done, ["DONE", 1L])
- 
+
   def test_multi_insert_same_statement(self):
     with DB(self, "N"):
       with Table(self, "t1", "(A INTEGER, B INTEGER)", key = "N"):
@@ -276,7 +276,7 @@ class TestStatements(TestRediSQLWithExec):
   def test_rds_persistency_no_statements(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        
+
         done = self.exec_cmd("A", "INSERT INTO t1 VALUES(5)")
         self.assertEquals(done, ["DONE", 1L])
 
@@ -284,7 +284,7 @@ class TestStatements(TestRediSQLWithExec):
           pass
         done = self.exec_cmd("A", "INSERT INTO t1 VALUES(6)")
         self.assertEquals(done, ["DONE", 1L])
-        
+
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[5], [6]])
 
@@ -307,7 +307,7 @@ class TestStatements(TestRediSQLWithExec):
         self.assertEquals(done, ["DONE", 1L])
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert più cento", "4")
         self.assertEquals(done, ["DONE", 1L])
-        
+
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4], [103], [104]])
 
@@ -344,7 +344,7 @@ class TestRead(TestRediSQLWithExec):
         done = self.exec_naked("REDISQL.EXEC", "A", "INSERT INTO t1 VALUES(4);")
         result = self.exec_naked("REDISQL.QUERY", "A", "SELECT A FROM t1 LIMIT 1;")
         self.assertEquals(result, [[4]])
-        
+
   def test_not_insert(self):
     with DB(self, "B"):
       with Table(self, "t1", "(A INTEGER)", key = "B"):
@@ -358,63 +358,209 @@ class TestRead(TestRediSQLWithExec):
         self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
 
 class TestBruteHash(TestRediSQLWithExec):
-    def testSimple(self):
-        with DB(self, "B"):
-            catty = 5
-            done = self.exec_naked("REDISQL.EXEC", "B", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
-            self.assertEquals(done, ["DONE", 0L])
-            for i in xrange(catty):
-                self.exec_naked("HSET", "cat:" + str(i), "meow", i)
-            result = self.exec_naked("REDISQL.EXEC", "B", "SELECT rowid, cat, meow FROM cats")
-            self.assertEquals(catty, len(result))
-            self.assertTrue([0L, "cat:0", "0"] in result)
-            self.assertTrue([1L, "cat:1", "1"] in result)
-            self.assertTrue([2L, "cat:2", "2"] in result)
-            self.assertTrue([3L, "cat:3", "3"] in result)
-            self.assertTrue([4L, "cat:4", "4"] in result)
+  def testSimple(self):
+    with DB(self, "B"):
+      catty = 5
+      done = self.exec_naked("REDISQL.EXEC", "B", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
+      self.assertEquals(done, ["DONE", 0L])
+      for i in xrange(catty):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+      result = self.exec_naked("REDISQL.EXEC", "B", "SELECT rowid, cat, meow FROM cats")
+      self.assertEquals(catty, len(result))
+      self.assertTrue([0L, "cat:0", "0"] in result)
+      self.assertTrue([1L, "cat:1", "1"] in result)
+      self.assertTrue([2L, "cat:2", "2"] in result)
+      self.assertTrue([3L, "cat:3", "3"] in result)
+      self.assertTrue([4L, "cat:4", "4"] in result)
 
-    def testNullFields(self):
-        with DB(self, "C"):
-            done = self.exec_naked("REDISQL.EXEC", "C", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow, kitten)")
-            for i in xrange(5):
-                self.exec_naked("HSET", "cat:" + str(i), "meow", i)
-            self.exec_naked("HSET", "cat:0" , "kitten", "2")
-            self.exec_naked("HSET", "cat:2" , "kitten", "4")
-            self.exec_naked("HSET", "cat:4" , "kitten", "6")
-            result = self.exec_naked("REDISQL.EXEC", "C", "SELECT rowid, cat, meow, kitten FROM cats")
-            self.assertEquals(5, len(result))
-            self.assertTrue([0L, "cat:0", "0", "2"] in result)
-            self.assertTrue([1L, "cat:1", "1", None] in result)
-            self.assertTrue([2L, "cat:2", "2", "4"] in result)
-            self.assertTrue([3L, "cat:3", "3", None] in result)
-            self.assertTrue([4L, "cat:4", "4", "6"] in result)
+  def testNullFields(self):
+    with DB(self, "C"):
+      done = self.exec_naked("REDISQL.EXEC", "C", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow, kitten)")
+      for i in xrange(5):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
 
-    def test100(self):
-        with DB(self, "A"):
-            catty = 100
-            done = self.exec_naked("REDISQL.EXEC", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
-            self.assertEquals(done, ["DONE", 0L])
-            for i in xrange(catty):
-                self.exec_naked("HSET", "cat:" + str(i), "meow", i)
-            result = self.exec_naked("REDISQL.EXEC", "A", "SELECT * FROM cats")
-            self.assertEquals(catty, len(result))
-  
-    def test_rds_persistency(self):
-        with DB(self, "A"):
-            done = self.exec_naked("REDISQL.EXEC", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
-            for i in xrange(5):
-                self.exec_naked("HSET", "cat:" + str(i), "meow", i)
-            
-            for _ in self.retry_with_reload():
+      self.exec_naked("HSET", "cat:0" , "kitten", "2")
+      self.exec_naked("HSET", "cat:2" , "kitten", "4")
+      self.exec_naked("HSET", "cat:4" , "kitten", "6")
+      result = self.exec_naked("REDISQL.EXEC", "C", "SELECT rowid, cat, meow, kitten FROM cats")
+      self.assertEquals(5, len(result))
+      self.assertTrue([0L, "cat:0", "0", "2"] in result)
+      self.assertTrue([1L, "cat:1", "1", None] in result)
+      self.assertTrue([2L, "cat:2", "2", "4"] in result)
+      self.assertTrue([3L, "cat:3", "3", None] in result)
+      self.assertTrue([4L, "cat:4", "4", "6"] in result)
 
-                result = self.exec_naked("REDISQL.EXEC", "A", "SELECT rowid, cat, meow FROM cats")
-                self.assertEquals(5, len(result))
-                self.assertTrue([0L, "cat:0", "0"] in result)
-                self.assertTrue([1L, "cat:1", "1"] in result)
-                self.assertTrue([2L, "cat:2", "2"] in result)
-                self.assertTrue([3L, "cat:3", "3"] in result)
-                self.assertTrue([4L, "cat:4", "4"] in result)
+  def test100(self):
+    with DB(self, "A"):
+      catty = 100
+      done = self.exec_naked("REDISQL.EXEC", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
+      self.assertEquals(done, ["DONE", 0L])
+      for i in xrange(catty):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+      result = self.exec_naked("REDISQL.EXEC", "A", "SELECT * FROM cats")
+      self.assertEquals(catty, len(result))
 
+  def test_rds_persistency(self):
+    with DB(self, "A"):
+      done = self.exec_naked("REDISQL.EXEC", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
+
+      for i in xrange(5):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+
+      for _ in self.retry_with_reload():
+        pass
+
+      result = self.exec_naked("REDISQL.EXEC", "A", "SELECT rowid, cat, meow FROM cats")
+      self.assertEquals(5, len(result))
+      self.assertTrue([0L, "cat:0", "0"] in result)
+      self.assertTrue([1L, "cat:1", "1"] in result)
+      self.assertTrue([2L, "cat:2", "2"] in result)
+      self.assertTrue([3L, "cat:3", "3"] in result)
+      self.assertTrue([4L, "cat:4", "4"] in result)
+
+  def test_statement(self):
+    with DB(self, "D"):
+      done = self.exec_naked("REDISQL.EXEC", "D", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
+      self.assertEquals(done, ["DONE", 0L])
+
+      ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "D", "select_all", "SELECT rowid, cat, meow FROM cats")
+      self.assertEquals(ok, "OK")
+
+      for i in xrange(5):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+
+      result = self.exec_naked("REDISQL.EXEC_STATEMENT", "D", "select_all")
+      self.assertEquals(5, len(result))
+      self.assertTrue([0L, "cat:0", "0"] in result)
+      self.assertTrue([1L, "cat:1", "1"] in result)
+      self.assertTrue([2L, "cat:2", "2"] in result)
+      self.assertTrue([3L, "cat:3", "3"] in result)
+      self.assertTrue([4L, "cat:4", "4"] in result)
+
+  def test_statement_after_rdb_load(self):
+    with DB(self, "E"):
+      done = self.exec_naked("REDISQL.EXEC", "E", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
+      self.assertEquals(done, ["DONE", 0L])
+
+      ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "E", "select_all", "SELECT rowid, cat, meow FROM cats")
+      self.assertEquals(ok, "OK")
+
+      for i in xrange(5):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+
+      for _ in self.retry_with_reload():
+        pass
+
+      result = self.exec_naked("REDISQL.EXEC_STATEMENT", "E", "select_all")
+      self.assertEquals(5, len(result))
+      self.assertTrue([0L, "cat:0", "0"] in result)
+      self.assertTrue([1L, "cat:1", "1"] in result)
+      self.assertTrue([2L, "cat:2", "2"] in result)
+      self.assertTrue([3L, "cat:3", "3"] in result)
+      self.assertTrue([4L, "cat:4", "4"] in result)
+
+
+class TestBruteHashSyncronous(TestRediSQLWithExec):
+  def testSimple(self):
+    with DB(self, "B"):
+      catty = 5
+      done = self.exec_naked("REDISQL.EXEC.NOW", "B", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
+      self.assertEquals(done, ["DONE", 0L])
+      for i in xrange(catty):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+      result = self.exec_naked("REDISQL.EXEC.NOW", "B", "SELECT rowid, cat, meow FROM cats")
+      self.assertEquals(catty, len(result))
+      self.assertTrue([0L, "cat:0", "0"] in result)
+      self.assertTrue([1L, "cat:1", "1"] in result)
+      self.assertTrue([2L, "cat:2", "2"] in result)
+      self.assertTrue([3L, "cat:3", "3"] in result)
+      self.assertTrue([4L, "cat:4", "4"] in result)
+
+  def testNullFields(self):
+    with DB(self, "C"):
+      done = self.exec_naked("REDISQL.EXEC.NOW", "C", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow, kitten)")
+      for i in xrange(5):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+
+      self.exec_naked("HSET", "cat:0" , "kitten", "2")
+      self.exec_naked("HSET", "cat:2" , "kitten", "4")
+      self.exec_naked("HSET", "cat:4" , "kitten", "6")
+      result = self.exec_naked("REDISQL.EXEC.NOW", "C", "SELECT rowid, cat, meow, kitten FROM cats")
+      self.assertEquals(5, len(result))
+      self.assertTrue([0L, "cat:0", "0", "2"] in result)
+      self.assertTrue([1L, "cat:1", "1", None] in result)
+      self.assertTrue([2L, "cat:2", "2", "4"] in result)
+      self.assertTrue([3L, "cat:3", "3", None] in result)
+      self.assertTrue([4L, "cat:4", "4", "6"] in result)
+
+  def test100(self):
+    with DB(self, "A"):
+      catty = 100
+      done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
+      self.assertEquals(done, ["DONE", 0L])
+      for i in xrange(catty):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+      result = self.exec_naked("REDISQL.EXEC.NOW", "A", "SELECT * FROM cats")
+      self.assertEquals(catty, len(result))
+
+  def test_rds_persistency(self):
+    with DB(self, "A"):
+      done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
+
+      for i in xrange(5):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+
+      for _ in self.retry_with_reload():
+        pass
+
+      result = self.exec_naked("REDISQL.EXEC.NOW", "A", "SELECT rowid, cat, meow FROM cats")
+      self.assertEquals(5, len(result))
+      self.assertTrue([0L, "cat:0", "0"] in result)
+      self.assertTrue([1L, "cat:1", "1"] in result)
+      self.assertTrue([2L, "cat:2", "2"] in result)
+      self.assertTrue([3L, "cat:3", "3"] in result)
+      self.assertTrue([4L, "cat:4", "4"] in result)
+
+  def test_statement(self):
+    with DB(self, "D"):
+      done = self.exec_naked("REDISQL.EXEC.NOW", "D", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
+      self.assertEquals(done, ["DONE", 0L])
+
+      ok = self.exec_naked("REDISQL.CREATE_STATEMENT.NOW", "D", "select_all", "SELECT rowid, cat, meow FROM cats")
+      self.assertEquals(ok, "OK")
+
+      for i in xrange(5):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+
+      result = self.exec_naked("REDISQL.EXEC_STATEMENT.NOW", "D", "select_all")
+      self.assertEquals(5, len(result))
+      self.assertTrue([0L, "cat:0", "0"] in result)
+      self.assertTrue([1L, "cat:1", "1"] in result)
+      self.assertTrue([2L, "cat:2", "2"] in result)
+      self.assertTrue([3L, "cat:3", "3"] in result)
+      self.assertTrue([4L, "cat:4", "4"] in result)
+
+  def test_statement_after_rdb_load(self):
+    with DB(self, "E"):
+      done = self.exec_naked("REDISQL.EXEC.NOW", "E", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
+      self.assertEquals(done, ["DONE", 0L])
+
+      ok = self.exec_naked("REDISQL.CREATE_STATEMENT.NOW", "E", "select_all", "SELECT rowid, cat, meow FROM cats")
+      self.assertEquals(ok, "OK")
+
+      for i in xrange(5):
+        self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+
+      for _ in self.retry_with_reload():
+        pass
+
+      result = self.exec_naked("REDISQL.EXEC_STATEMENT.NOW", "E", "select_all")
+      self.assertEquals(5, len(result))
+      self.assertTrue([0L, "cat:0", "0"] in result)
+      self.assertTrue([1L, "cat:1", "1"] in result)
+      self.assertTrue([2L, "cat:2", "2"] in result)
+      self.assertTrue([3L, "cat:3", "3"] in result)
+      self.assertTrue([4L, "cat:4", "4"] in result)
 
 
 
