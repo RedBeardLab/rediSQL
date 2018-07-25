@@ -21,3 +21,4 @@ pages:
       - 'Analytics': 'blog/analytics.md'
       - 'JSON on Redis using RediSQL, SQL steroids for Redis': 'blog/JaaS.md'
       - 'Double performances of RediSQL going zero copy': 'blog/performances.md'
+      - 'Release 0.5.0': 'blog/release_0.5.0.md'
