@@ -13,17 +13,20 @@ pub mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_redis.rs"));
 }
 
-#[allow(dead_code)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct Context {
     ctx: *mut ffi::RedisModuleCtx,
+    thread_safe: bool,
 }
 
 impl Context {
     pub fn new(ctx: *mut ffi::RedisModuleCtx) -> Context {
-        Context { ctx }
+        Context {
+            ctx,
+            thread_safe: false,
+        }
     }
-    pub fn as_ptr(self) -> *mut ffi::RedisModuleCtx {
+    pub fn as_ptr(&self) -> *mut ffi::RedisModuleCtx {
         self.ctx
     }
     pub fn thread_safe(blocked_client: &BlockedClient) -> Context {
@@ -32,18 +35,42 @@ impl Context {
                 blocked_client.as_ptr(),
             )
         };
-        Context { ctx }
+        Context {
+            ctx,
+            thread_safe: true,
+        }
+    }
+    pub fn lock(&self) {
+        unsafe {
+            ffi::RedisModule_ThreadSafeContextLock.unwrap()(
+                self.as_ptr(),
+            );
+        }
+    }
+    pub fn release(&self) {
+        unsafe {
+            ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(
+                self.as_ptr(),
+            );
+        }
+    }
+}
+
+impl Drop for Context {
+    fn drop(&mut self) {
+        if self.thread_safe {
+            debug!("Free thread safe context");
+            unsafe {
+                ffi::RedisModule_FreeThreadSafeContext.unwrap()(
+                    self.as_ptr(),
+                );
+            }
+        }
     }
 }
 
 unsafe impl Send for Context {}
 unsafe impl Sync for Context {}
-
-impl From<Context> for *mut ffi::RedisModuleCtx {
-    fn from(c: Context) -> *mut ffi::RedisModuleCtx {
-        c.ctx
-    }
-}
 
 pub struct BlockedClient {
     pub client: *mut ffi::RedisModuleBlockedClient,
@@ -58,13 +85,13 @@ impl BlockedClient {
 }
 
 #[derive(Debug)]
-pub struct RMString {
+pub struct RMString<'a> {
     ptr: *mut ffi::RedisModuleString,
-    ctx: Context,
+    ctx: &'a Context,
 }
 
-impl RMString {
-    pub fn new(ctx: Context, s: &str) -> RMString {
+impl<'a> RMString<'a> {
+    pub fn new(ctx: &'a Context, s: &str) -> RMString<'a> {
         let ptr = unsafe {
             ffi::RedisModule_CreateString.unwrap()(
                 ctx.as_ptr(),
@@ -79,7 +106,7 @@ impl RMString {
     }
 }
 
-impl Drop for RMString {
+impl<'a> Drop for RMString<'a> {
     fn drop(&mut self) {
         unsafe {
             ffi::RedisModule_FreeString.unwrap()(
@@ -92,7 +119,7 @@ impl Drop for RMString {
 
 #[allow(non_snake_case)]
 pub fn CreateCommand(
-    ctx: Context,
+    ctx: &Context,
     name: String,
     f: ffi::RedisModuleCmdFunc,
     flags: String,
@@ -117,7 +144,7 @@ pub fn CreateCommand(
 }
 
 #[allow(non_snake_case)]
-pub fn ReplicateVerbatim(ctx: Context) -> i32 {
+pub fn ReplicateVerbatim(ctx: &Context) -> i32 {
     unsafe {
         ffi::RedisModule_ReplicateVerbatim.unwrap()(ctx.as_ptr())
     }
@@ -125,7 +152,7 @@ pub fn ReplicateVerbatim(ctx: Context) -> i32 {
 
 #[allow(non_snake_case)]
 pub unsafe fn Replicate(
-    ctx: Context,
+    ctx: &Context,
     command: &str,
     argv: *mut *mut ffi::RedisModuleString,
     argc: c_int,
@@ -142,7 +169,7 @@ pub unsafe fn Replicate(
 }
 
 #[allow(non_snake_case)]
-pub fn ReplyWithError(ctx: Context, error: &str) -> i32 {
+pub fn ReplyWithError(ctx: &Context, error: &str) -> i32 {
     unsafe {
         ffi::RedisModule_ReplyWithError.unwrap()(
             ctx.as_ptr(),
@@ -153,7 +180,7 @@ pub fn ReplyWithError(ctx: Context, error: &str) -> i32 {
 
 #[allow(non_snake_case)]
 pub fn OpenKey(
-    ctx: Context,
+    ctx: &Context,
     name: &RMString,
     mode: i32,
 ) -> *mut ffi::RedisModuleKey {
@@ -192,26 +219,26 @@ pub unsafe fn SaveStringBuffer(
 }
 
 #[allow(non_snake_case)]
-pub fn ReplyWithNull(ctx: Context) -> i32 {
+pub fn ReplyWithNull(ctx: &Context) -> i32 {
     unsafe { ffi::RedisModule_ReplyWithNull.unwrap()(ctx.as_ptr()) }
 }
 
 #[allow(non_snake_case)]
-pub fn ReplyWithLongLong(ctx: Context, ll: i64) -> i32 {
+pub fn ReplyWithLongLong(ctx: &Context, ll: i64) -> i32 {
     unsafe {
         ffi::RedisModule_ReplyWithLongLong.unwrap()(ctx.as_ptr(), ll)
     }
 }
 
 #[allow(non_snake_case)]
-pub fn ReplyWithDouble(ctx: Context, dd: f64) -> i32 {
+pub fn ReplyWithDouble(ctx: &Context, dd: f64) -> i32 {
     unsafe {
         ffi::RedisModule_ReplyWithDouble.unwrap()(ctx.as_ptr(), dd)
     }
 }
 
 #[allow(non_snake_case)]
-pub fn ReplyWithStringBuffer(ctx: Context, buffer: &[u8]) -> i32 {
+pub fn ReplyWithStringBuffer(ctx: &Context, buffer: &[u8]) -> i32 {
     let ptr = buffer.as_ptr() as *const c_char;
     let len = buffer.len();
     unsafe {

@@ -136,7 +136,7 @@ fn register_module_vtabs(
     match unsafe {
         ffi::sqlite3_create_module_v2(
             conn,
-            BRUTE_HASH_NAME.as_ptr() as *const i8,
+            BRUTE_HASH_NAME.as_ptr() as *const raw::c_char,
             &BRUTE_HASH_MODULE,
             context_ptr as *mut raw::c_void,
             destructor,
@@ -247,7 +247,7 @@ extern "C" fn best_index_brute_hash(
 }
 
 fn do_scan(
-    redis_context: Context,
+    redis_context: &Context,
     index: &str,
     to_match: &str,
 ) -> CallReply {
@@ -261,6 +261,7 @@ fn do_scan(
     let to_match = to_match.to_string();
     let to_match = CString::new(to_match).unwrap();
 
+    redis_context.lock();
     let reply = unsafe {
         rffi::RedisModule_Call.unwrap()(
             redis_context.as_ptr(),
@@ -271,6 +272,7 @@ fn do_scan(
             to_match.as_ptr(),
         )
     };
+    redis_context.release();
     unsafe { CallReply::new(reply) }
 }
 
@@ -309,8 +311,9 @@ fn advance_redis_cursor(
 
     let locked = &*vtab_cur.redis_context.lock().unwrap();
     let redis_context = locked.borrow();
+    let rc = redis_context.as_ref().unwrap();
 
-    let cr = do_scan(redis_context.unwrap(), &index, &matcher);
+    let cr = do_scan(rc, &index, &matcher);
 
     match get_next_index_and_results(&cr) {
         None => {
@@ -365,7 +368,7 @@ extern "C" fn next_brute_hash(
 
 #[no_mangle]
 pub fn do_hget(
-    redis_context: Context,
+    redis_context: &Context,
     obj: &str,
     key: &str,
 ) -> CallReply {
@@ -379,6 +382,7 @@ pub fn do_hget(
     debug!("do_HGET {:?} {:?}", obj, key);
 
     debug!("Real one");
+    redis_context.lock();
     let reply = unsafe {
         rffi::RedisModule_Call.unwrap()(
             redis_context.as_ptr(),
@@ -388,6 +392,7 @@ pub fn do_hget(
             key.as_ptr(),
         )
     };
+    redis_context.release();
     unsafe { CallReply::new(reply) }
 }
 
@@ -436,8 +441,8 @@ extern "C" fn column_brute_hash(
                         vtab_cur.redis_context.lock().unwrap();
 
                     let redis_context = locked.borrow();
-                    let cr =
-                        do_hget(redis_context.unwrap(), obj, key);
+                    let rc = redis_context.as_ref().unwrap();
+                    let cr = do_hget(rc, obj, key);
 
                     debug!("Column cr: {:?}", cr);
 

@@ -40,14 +40,14 @@ extern "C" fn reply_exec(
     let context = r::rm::Context::new(ctx);
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
-            ctx,
+            context.as_ptr(),
         ) as *mut Result<r::QueryResult, sql::SQLite3Error>
     };
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(query_result) => query_result.reply(context),
-        Err(error) => error.reply(context),
+        Ok(query_result) => query_result.reply(&context),
+        Err(error) => error.reply(&context),
     }
 }
 
@@ -59,14 +59,14 @@ extern "C" fn reply_exec_statement(
     let context = r::rm::Context::new(ctx);
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
-            ctx,
+            context.as_ptr(),
         ) as *mut Result<r::QueryResult, sql::SQLite3Error>
     };
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(query_result) => query_result.reply(context),
-        Err(error) => error.reply(context),
+        Ok(query_result) => query_result.reply(&context),
+        Err(error) => error.reply(&context),
     }
 }
 
@@ -78,14 +78,14 @@ extern "C" fn reply_create_statement(
     let context = r::rm::Context::new(ctx);
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
-            ctx,
+            context.as_ptr(),
         ) as *mut Result<r::QueryResult, sql::SQLite3Error>
     };
     let result: Box<Result<r::QueryResult, sql::SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
-        Ok(query_result) => query_result.reply(context),
-        Err(error) => error.reply(context),
+        Ok(query_result) => query_result.reply(&context),
+        Err(error) => error.reply(&context),
     }
 }
 
@@ -115,22 +115,25 @@ extern "C" fn ExecStatement(
             ).unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    ctx,
+                    context.as_ptr(),
                     error.as_ptr(),
                 )
             }
         }
-        _ => with_ch_and_loopdata(ctx, argvector[1], |ch_loopdata| {
-            match ch_loopdata {
-                Err(key_type) => {
-                    reply_with_error_from_key_type(ctx, key_type)
-                }
+        _ => with_ch_and_loopdata(
+            context.as_ptr(),
+            argvector[1],
+            |ch_loopdata| match ch_loopdata {
+                Err(key_type) => reply_with_error_from_key_type(
+                    context.as_ptr(),
+                    key_type,
+                ),
                 Ok((ch, _loopdata)) => {
                     let blocked_client = r::rm::BlockedClient {
                         client: unsafe {
                             r::rm::ffi::RedisModule_BlockClient
                                 .unwrap()(
-                                ctx,
+                                context.as_ptr(),
                                 Some(reply_exec_statement),
                                 Some(timeout),
                                 Some(free_privdata),
@@ -138,12 +141,6 @@ extern "C" fn ExecStatement(
                             )
                         },
                     };
-
-                    /*
-                    loopdata.set_redis_context(Context::thread_safe(
-                        &blocked_client,
-                    ));
-                    */
 
                     let cmd = r::Command::ExecStatement {
                         identifier: argvector[2],
@@ -154,7 +151,7 @@ extern "C" fn ExecStatement(
                         Ok(()) => {
                             unsafe {
                                 Replicate(
-                                    context,
+                                    &context,
                                     "REDISQL.EXEC_STATEMENT.NOW",
                                     argv,
                                     argc,
@@ -165,8 +162,8 @@ extern "C" fn ExecStatement(
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
-            }
-        }),
+            },
+        ),
     }
 }
 
@@ -176,7 +173,7 @@ extern "C" fn QueryStatement(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
 
     match argvector.len() {
         0...2 => {
@@ -186,22 +183,25 @@ extern "C" fn QueryStatement(
             ).unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    ctx,
+                    context.as_ptr(),
                     error.as_ptr(),
                 )
             }
         }
-        _ => with_ch_and_loopdata(ctx, argvector[1], |ch_loopdata| {
-            match ch_loopdata {
-                Err(key_type) => {
-                    reply_with_error_from_key_type(ctx, key_type)
-                }
+        _ => with_ch_and_loopdata(
+            context.as_ptr(),
+            argvector[1],
+            |ch_loopdata| match ch_loopdata {
+                Err(key_type) => reply_with_error_from_key_type(
+                    context.as_ptr(),
+                    key_type,
+                ),
                 Ok((ch, _loopdata)) => {
                     let blocked_client = r::rm::BlockedClient {
                         client: unsafe {
                             r::rm::ffi::RedisModule_BlockClient
                                 .unwrap()(
-                                ctx,
+                                context.as_ptr(),
                                 Some(reply_exec_statement),
                                 Some(timeout),
                                 Some(free_privdata),
@@ -221,8 +221,8 @@ extern "C" fn QueryStatement(
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
-            }
-        }),
+            },
+        ),
     }
 }
 
@@ -234,18 +234,21 @@ extern "C" fn Exec(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => with_ch_and_loopdata(ctx, argvector[1], |leaky_db| {
-            match leaky_db {
-                Err(key_type) => {
-                    reply_with_error_from_key_type(ctx, key_type)
-                }
+        3 => with_ch_and_loopdata(
+            context.as_ptr(),
+            argvector[1],
+            |leaky_db| match leaky_db {
+                Err(key_type) => reply_with_error_from_key_type(
+                    context.as_ptr(),
+                    key_type,
+                ),
                 Ok((ch, _loopdata)) => {
                     debug!("Exec | GotDB");
                     let blocked_client = r::rm::BlockedClient {
                         client: unsafe {
                             r::rm::ffi::RedisModule_BlockClient
                                 .unwrap()(
-                                ctx,
+                                context.as_ptr(),
                                 Some(reply_exec),
                                 Some(timeout),
                                 Some(free_privdata),
@@ -264,7 +267,7 @@ extern "C" fn Exec(
                         Ok(()) => {
                             unsafe {
                                 Replicate(
-                                    context,
+                                    &context,
                                     "REDISQL.EXEC.NOW",
                                     argv,
                                     argc,
@@ -275,8 +278,8 @@ extern "C" fn Exec(
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
-            }
-        }),
+            },
+        ),
         n => {
             let error = CString::new(format!(
                 "Wrong number of arguments, it \
@@ -285,7 +288,7 @@ extern "C" fn Exec(
             )).unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    ctx,
+                    context.as_ptr(),
                     error.as_ptr(),
                 )
             }
@@ -299,19 +302,22 @@ extern "C" fn Query(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (_context, argvector) = r::create_argument(ctx, argv, argc);
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => with_ch_and_loopdata(ctx, argvector[1], |ch_loopdata| {
-            match ch_loopdata {
-                Err(key_type) => {
-                    reply_with_error_from_key_type(ctx, key_type)
-                }
+        3 => with_ch_and_loopdata(
+            context.as_ptr(),
+            argvector[1],
+            |ch_loopdata| match ch_loopdata {
+                Err(key_type) => reply_with_error_from_key_type(
+                    context.as_ptr(),
+                    key_type,
+                ),
                 Ok((ch, _loopdata)) => {
                     let blocked_client = r::rm::BlockedClient {
                         client: unsafe {
                             r::rm::ffi::RedisModule_BlockClient
                                 .unwrap()(
-                                ctx,
+                                context.as_ptr(),
                                 Some(reply_exec),
                                 Some(timeout),
                                 Some(free_privdata),
@@ -329,8 +335,8 @@ extern "C" fn Query(
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
-            }
-        }),
+            },
+        ),
         n => {
             let error = CString::new(format!(
                 "Wrong number of arguments, it \
@@ -339,7 +345,7 @@ extern "C" fn Query(
             )).unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    ctx,
+                    context.as_ptr(),
                     error.as_ptr(),
                 )
             }
@@ -355,17 +361,20 @@ extern "C" fn CreateStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        4 => with_ch_and_loopdata(ctx, argvector[1], |ch_loopdata| {
-            match ch_loopdata {
-                Err(key_type) => {
-                    reply_with_error_from_key_type(ctx, key_type)
-                }
+        4 => with_ch_and_loopdata(
+            context.as_ptr(),
+            argvector[1],
+            |ch_loopdata| match ch_loopdata {
+                Err(key_type) => reply_with_error_from_key_type(
+                    context.as_ptr(),
+                    key_type,
+                ),
                 Ok((ch, _loopdata)) => {
                     let blocked_client = r::rm::BlockedClient {
                         client: unsafe {
                             r::rm::ffi::RedisModule_BlockClient
                                 .unwrap()(
-                                ctx,
+                                context.as_ptr(),
                                 Some(reply_create_statement),
                                 Some(timeout),
                                 Some(free_privdata),
@@ -382,7 +391,7 @@ extern "C" fn CreateStatement(
                         Ok(()) => {
                             unsafe {
                                 Replicate(
-                                    context,
+                                    &context,
                                     "REDISQL.CREATE_STATEMENT.NOW",
                                     argv,
                                     argc,
@@ -393,8 +402,8 @@ extern "C" fn CreateStatement(
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
-            }
-        }),
+            },
+        ),
 
         _ => {
             let error = CString::new(
@@ -403,7 +412,7 @@ extern "C" fn CreateStatement(
             ).unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    ctx,
+                    context.as_ptr(),
                     error.as_ptr(),
                 )
             }
@@ -419,17 +428,20 @@ extern "C" fn UpdateStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        4 => with_ch_and_loopdata(ctx, argvector[1], |ch_loopdata| {
-            match ch_loopdata {
-                Err(key_type) => {
-                    reply_with_error_from_key_type(ctx, key_type)
-                }
+        4 => with_ch_and_loopdata(
+            context.as_ptr(),
+            argvector[1],
+            |ch_loopdata| match ch_loopdata {
+                Err(key_type) => reply_with_error_from_key_type(
+                    context.as_ptr(),
+                    key_type,
+                ),
                 Ok((ch, _loopdata)) => {
                     let blocked_client = r::rm::BlockedClient {
                         client: unsafe {
                             r::rm::ffi::RedisModule_BlockClient
                                 .unwrap()(
-                                ctx,
+                                context.as_ptr(),
                                 Some(reply_create_statement),
                                 Some(timeout),
                                 Some(free_privdata),
@@ -448,7 +460,7 @@ extern "C" fn UpdateStatement(
                         Ok(()) => {
                             unsafe {
                                 Replicate(
-                                    context,
+                                    &context,
                                     "REDISQL.UPDATE_STATEMENT.NOW",
                                     argv,
                                     argc,
@@ -459,8 +471,8 @@ extern "C" fn UpdateStatement(
                         Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
-            }
-        }),
+            },
+        ),
 
         _ => {
             let error = CString::new(
@@ -469,7 +481,7 @@ extern "C" fn UpdateStatement(
             ).unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    ctx,
+                    context.as_ptr(),
                     error.as_ptr(),
                 )
             }
@@ -485,48 +497,53 @@ extern "C" fn DeleteStatement(
 ) -> i32 {
     let (context, argvector) = r::create_argument(ctx, argv, argc);
     match argvector.len() {
-        3 => with_ch_and_loopdata(ctx, argvector[1], |ch_loopdata| {
-            match ch_loopdata {
-                Err(key_type) => {
-                    reply_with_error_from_key_type(ctx, key_type)
-                }
-                Ok((ch, _loopdata)) => {
-                    //let ch = &db.tx;
-                    //let _loopdata = &db.loop_data;
-                    let blocked_client = r::rm::BlockedClient {
-                        client: unsafe {
-                            r::rm::ffi::RedisModule_BlockClient
-                                .unwrap()(
-                                ctx,
-                                Some(reply_create_statement),
-                                Some(timeout),
-                                Some(free_privdata),
-                                10000,
-                            )
-                        },
-                    };
+        3 => with_ch_and_loopdata(
+            context.as_ptr(),
+            argvector[1],
+            |ch_loopdata| {
+                match ch_loopdata {
+                    Err(key_type) => reply_with_error_from_key_type(
+                        context.as_ptr(),
+                        key_type,
+                    ),
+                    Ok((ch, _loopdata)) => {
+                        //let ch = &db.tx;
+                        //let _loopdata = &db.loop_data;
+                        let blocked_client = r::rm::BlockedClient {
+                            client: unsafe {
+                                r::rm::ffi::RedisModule_BlockClient
+                                    .unwrap()(
+                                    context.as_ptr(),
+                                    Some(reply_create_statement),
+                                    Some(timeout),
+                                    Some(free_privdata),
+                                    10000,
+                                )
+                            },
+                        };
 
-                    let cmd = r::Command::DeleteStatement {
-                        identifier: argvector[2],
-                        client: blocked_client,
-                    };
-                    match ch.send(cmd) {
-                        Ok(()) => {
-                            unsafe {
-                                Replicate(
-                                    context,
+                        let cmd = r::Command::DeleteStatement {
+                            identifier: argvector[2],
+                            client: blocked_client,
+                        };
+                        match ch.send(cmd) {
+                            Ok(()) => {
+                                unsafe {
+                                    Replicate(
+                                    &context,
                                     "REDISQL.DELETE_STATEMENT.NOW",
                                     argv,
                                     argc,
                                 );
+                                }
+                                r::rm::ffi::REDISMODULE_OK
                             }
-                            r::rm::ffi::REDISMODULE_OK
+                            Err(_) => r::rm::ffi::REDISMODULE_OK,
                         }
-                        Err(_) => r::rm::ffi::REDISMODULE_OK,
                     }
                 }
-            }
-        }),
+            },
+        ),
         _ => {
             let error = CString::new(
                 "Wrong number of arguments, it \
@@ -534,7 +551,7 @@ extern "C" fn DeleteStatement(
             ).unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    ctx,
+                    context.as_ptr(),
                     error.as_ptr(),
                 )
             }
@@ -553,10 +570,10 @@ extern "C" fn CreateDB(
     match argvector.len() {
         2 | 3 => {
             let key_name =
-                r::rm::RMString::new(context, argvector[1]);
+                r::rm::RMString::new(&context, argvector[1]);
             let key = unsafe {
                 r::rm::ffi::Export_RedisModule_OpenKey(
-                    ctx,
+                    context.as_ptr(),
                     key_name.as_ptr(),
                     r::rm::ffi::REDISMODULE_WRITE,
                 )
@@ -590,7 +607,7 @@ extern "C" fn CreateDB(
                                 .and_then(|_| {
                                     vtab::register_modules(&rc)
                                 }) {
-                                Err(e) => e.reply(context),
+                                Err(e) => e.reply(&context),
                                 Ok(mut vtab_context) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(
@@ -616,16 +633,16 @@ extern "C" fn CreateDB(
                                     match type_set {
                                         r::rm::ffi::REDISMODULE_OK => {
                                             let ok = r::QueryResult::OK {to_replicate: true};
-                                            ReplicateVerbatim(context);
-                                            ok.reply(context)
+                                            ReplicateVerbatim(&context);
+                                            ok.reply(&context)
                                         }
                                         r::rm::ffi::REDISMODULE_ERR => {
                                             let err = CString::new("ERR - Error in saving the database inside Redis").unwrap();
-                                            unsafe { r::rm::ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr()) }
+                                            unsafe { r::rm::ffi::RedisModule_ReplyWithSimpleString.unwrap()(context.as_ptr(), err.as_ptr()) }
                                         }
                                         _ => {
                                             let err = CString::new("ERR - Error unknow").unwrap();
-                                            unsafe { r::rm::ffi::RedisModule_ReplyWithSimpleString.unwrap()(ctx, err.as_ptr()) }
+                                            unsafe { r::rm::ffi::RedisModule_ReplyWithSimpleString.unwrap()(context.as_ptr(), err.as_ptr()) }
                                         }
                                     }
                                 }
@@ -640,7 +657,8 @@ extern "C" fn CreateDB(
                             unsafe {
                                 r::rm::ffi::RedisModule_ReplyWithError
                                     .unwrap()(
-                                    ctx, error.as_ptr()
+                                    context.as_ptr(),
+                                    error.as_ptr(),
                                 )
                             }
                         }
@@ -653,7 +671,8 @@ extern "C" fn CreateDB(
                     unsafe {
                         r::rm::ffi::RedisModule_ReplyWithError
                             .unwrap()(
-                            ctx, error.as_ptr()
+                            context.as_ptr(),
+                            error.as_ptr(),
                         )
                     }
                 }
@@ -666,7 +685,7 @@ extern "C" fn CreateDB(
             ).unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    ctx,
+                    context.as_ptr(),
                     error.as_ptr(),
                 )
             }
@@ -855,7 +874,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_write_function(
-        ctx,
+        &ctx,
         String::from("REDISQL.CREATE_DB"),
         CreateDB,
     ) {
@@ -864,7 +883,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_write_function(
-        ctx,
+        &ctx,
         String::from("REDISQL.EXEC"),
         Exec,
     ) {
@@ -873,7 +892,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_function(
-        ctx,
+        &ctx,
         String::from("REDISQL.QUERY"),
         String::from("readonly"),
         Query,
@@ -883,7 +902,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_write_function(
-        ctx,
+        &ctx,
         String::from("REDISQL.CREATE_STATEMENT"),
         CreateStatement,
     ) {
@@ -892,7 +911,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_write_function(
-        ctx,
+        &ctx,
         String::from("REDISQL.EXEC_STATEMENT"),
         ExecStatement,
     ) {
@@ -901,7 +920,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_write_function(
-        ctx,
+        &ctx,
         String::from("REDISQL.UPDATE_STATEMENT"),
         UpdateStatement,
     ) {
@@ -910,7 +929,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_write_function(
-        ctx,
+        &ctx,
         String::from("REDISQL.DELETE_STATEMENT"),
         DeleteStatement,
     ) {
@@ -919,7 +938,7 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_function(
-        ctx,
+        &ctx,
         String::from("REDISQL.QUERY_STATEMENT"),
         String::from("readonly"),
         QueryStatement,

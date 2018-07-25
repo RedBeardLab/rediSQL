@@ -203,8 +203,8 @@ impl<'a> StatementCache<'a> for ReplicationBook {
 type ProtectedRedisContext =
     Arc<Mutex<Arc<Mutex<RefCell<Option<Context>>>>>>;
 
-pub struct RedisContextSet<'a>(
-    MutexGuard<'a, Arc<Mutex<RefCell<Option<Context>>>>>,
+pub struct RedisContextSet<'external>(
+    MutexGuard<'external, Arc<Mutex<RefCell<Option<Context>>>>>,
 );
 
 impl<'a> RedisContextSet<'a> {
@@ -218,6 +218,12 @@ impl<'a> RedisContextSet<'a> {
             *locked.borrow_mut() = Some(ctx);
         }
         RedisContextSet(wrap)
+    }
+    pub fn release(&self) -> Context {
+        let locked = self.0.lock().unwrap();
+        let none_to_ctx = RefCell::new(None);
+        locked.swap(&none_to_ctx);
+        none_to_ctx.into_inner().unwrap()
     }
 }
 
@@ -291,11 +297,11 @@ impl Loop {
 }
 
 pub trait RedisReply {
-    fn reply(&self, ctx: rm::Context) -> i32;
+    fn reply(&self, ctx: &rm::Context) -> i32;
 }
 
 impl RedisReply for sql::Entity {
-    fn reply(&self, ctx: rm::Context) -> i32 {
+    fn reply(&self, ctx: &rm::Context) -> i32 {
         match *self {
             sql::Entity::Integer { int } => {
                 rm::ReplyWithLongLong(ctx, i64::from(int))
@@ -357,7 +363,7 @@ fn reply_with_done(
     rm::ffi::REDISMODULE_OK
 }
 
-fn reply_with_array(ctx: rm::Context, array: Vec<sql::Row>) -> i32 {
+fn reply_with_array(ctx: &rm::Context, array: Vec<sql::Row>) -> i32 {
     let len = array.len() as c_long;
     unsafe {
         rm::ffi::RedisModule_ReplyWithArray.unwrap()(
@@ -373,21 +379,21 @@ fn reply_with_array(ctx: rm::Context, array: Vec<sql::Row>) -> i32 {
             );
         }
         for entity in row {
-            entity.reply(ctx);
+            entity.reply(&ctx);
         }
     }
     rm::ffi::REDISMODULE_OK
 }
 
 impl RedisReply for sql::SQLite3Error {
-    fn reply(&self, ctx: Context) -> i32 {
+    fn reply(&self, ctx: &Context) -> i32 {
         let error = format!("{}", self);
         reply_with_error(ctx.as_ptr(), error)
     }
 }
 
 impl RedisReply for RediSQLError {
-    fn reply(&self, ctx: Context) -> i32 {
+    fn reply(&self, ctx: &Context) -> i32 {
         let error = format!("{}", self);
         reply_with_error(ctx.as_ptr(), error)
     }
@@ -502,7 +508,8 @@ pub enum QueryResult {
 }
 
 impl QueryResult {
-    pub fn reply(self, ctx: rm::Context) -> i32 {
+    pub fn reply(self, ctx: &rm::Context) -> i32 {
+        debug!("Start replying!");
         match self {
             QueryResult::OK { .. } => reply_with_ok(ctx.as_ptr()),
             QueryResult::DONE { modified_rows, .. } => {
@@ -629,16 +636,12 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
         match rx.recv() {
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
-
                 loopdata.with_contex_set(
                     Context::thread_safe(&client),
                     |_| {
-                        debug!("A");
                         let result =
                             do_execute(&loopdata.get_db(), query);
-                        debug!("B");
                         return_value(&client, result);
-                        debug!("C");
                     },
                 );
                 debug!("Exec | DONE, returning result");
@@ -997,8 +1000,9 @@ pub fn get_dbkeyptr_from_name(
     name: &str,
 ) -> Result<*mut DBKey, i32> {
     let context = Context::new(ctx);
-    let key_name = rm::RMString::new(context, name);
-    let key = OpenKey(context, &key_name, rm::ffi::REDISMODULE_WRITE);
+    let key_name = rm::RMString::new(&context, name);
+    let key =
+        OpenKey(&context, &key_name, rm::ffi::REDISMODULE_WRITE);
     let safe_key = RedisKey { key };
     let key_type = unsafe {
         rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
@@ -1067,7 +1071,7 @@ pub fn reply_with_error_from_key_type(
     ctx: *mut rm::ffi::RedisModuleCtx,
     key_type: i32,
 ) -> i32 {
-    let context = Context::new(ctx);
+    let context = &Context::new(ctx);
     match key_type {
         rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
             ReplyWithError(context, "ERR - Error the key is empty\0")
@@ -1111,7 +1115,7 @@ fn remove_statement(
 
 #[allow(non_snake_case)]
 pub unsafe fn Replicate(
-    _ctx: rm::Context,
+    _ctx: &rm::Context,
     _command: &str,
     _argv: *mut *mut rm::ffi::RedisModuleString,
     _argc: std::os::raw::c_int,
@@ -1119,7 +1123,7 @@ pub unsafe fn Replicate(
 }
 
 pub fn register_function(
-    context: rm::Context,
+    context: &rm::Context,
     name: String,
     flags: String,
     f: extern "C" fn(
@@ -1139,7 +1143,7 @@ pub fn register_function(
 }
 
 pub fn register_write_function(
-    ctx: rm::Context,
+    ctx: &rm::Context,
     name: String,
     f: extern "C" fn(
         *mut rm::ffi::RedisModuleCtx,

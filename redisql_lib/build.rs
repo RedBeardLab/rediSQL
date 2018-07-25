@@ -15,7 +15,7 @@ fn main() {
     cc::Build::new()
         .file("src/CDeps/Redis/redismodule.c")
         .include("src/CDeps/Redis/include")
-        .debug(true)
+        //.debug(true)
         .compile("libredismodule.a");
 
     cc::Build::new()
