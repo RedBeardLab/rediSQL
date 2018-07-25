@@ -9,7 +9,7 @@
         
         <link rel="shortcut icon" href="../../img/favicon.ico">
 
-	<title>Double performances of RediSQL going zero copy - RediSQL</title>
+	<title>Release 0.5.0 - RediSQL</title>
 
         <link href="../../css/bootstrap-custom.min.css" rel="stylesheet">
         <link href="../../css/font-awesome-4.0.3.css" rel="stylesheet">
@@ -119,14 +119,14 @@
 
                         
                             
-<li class="active">
-    <a href="./">Double performances of RediSQL going zero copy</a>
+<li >
+    <a href="../performances/">Double performances of RediSQL going zero copy</a>
 </li>
 
                         
                             
-<li >
-    <a href="../release_0.5.0/">Release 0.5.0</a>
+<li class="active">
+    <a href="./">Release 0.5.0</a>
 </li>
 
                         
@@ -145,12 +145,12 @@
                 </li>
                 
                     <li >
-                        <a rel="next" href="../JaaS/">
+                        <a rel="next" href="../performances/">
                             <i class="fa fa-arrow-left"></i> Previous
                         </a>
                     </li>
-                    <li >
-                        <a rel="prev" href="../release_0.5.0/">
+                    <li class="disabled">
+                        <a rel="prev" >
                             Next <i class="fa fa-arrow-right"></i>
                         </a>
                     </li>
@@ -175,78 +175,57 @@
                 <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
     <ul class="nav bs-sidenav">
     
-        <li class="main active"><a href="#doubling-the-performances-of-redisql-sql-steroids-for-redis">Doubling the performances of RediSQL, SQL steroids for Redis.</a></li>
+        <li class="main active"><a href="#release-050-of-redisql-sql-steroids-for-redis">Release 0.5.0 of RediSQL, SQL steroids for Redis</a></li>
         
-            <li><a href="#redisql-provides-sql-steroids-for-redis">RediSQL provides SQL steroids for Redis</a></li>
+            <li><a href="#redisql-redis-on-sql-steroids">RediSQL, Redis on SQL steroids.</a></li>
         
-            <li><a href="#background">Background</a></li>
+            <li><a href="#performance-improvement-20">Performance Improvement ~20%</a></li>
         
-            <li><a href="#the-complains">The complains</a></li>
+            <li><a href="#releases">Releases</a></li>
         
-            <li><a href="#looking-for-the-causes">Looking for the causes</a></li>
+            <li><a href="#trial">Trial</a></li>
         
-            <li><a href="#the-problem">The problem</a></li>
-        
-            <li><a href="#need-for-speed">Need for Speed</a></li>
-        
-            <li><a href="#result">Result</a></li>
-        
-            <li><a href="#wrapping-up">Wrapping up</a></li>
-        
-            <li><a href="#looking-for-beta-tester">Looking for beta tester</a></li>
+            <li><a href="#end">End</a></li>
         
     
     </ul>
 </div></div>
                 <div class="col-md-9" role="main">
 
-<h1 id="doubling-the-performances-of-redisql-sql-steroids-for-redis">Doubling the performances of RediSQL, SQL steroids for Redis.</h1>
-<h4 id="redisql-provides-sql-steroids-for-redis">RediSQL provides SQL steroids for Redis</h4>
-<p>RediSQL is a redis module that embeds SQLite to provide full SQL capabilities to redis.</p>
+<h1 id="release-050-of-redisql-sql-steroids-for-redis">Release 0.5.0 of RediSQL, SQL steroids for Redis</h1>
+<h4 id="redisql-redis-on-sql-steroids">RediSQL, Redis on SQL steroids.</h4>
+<p>RediSQL is a Redis module that provides full SQL capabilities to Redis, it is the simplest and fastest way to get an SQL database up and running, without incurring in difficult operational issues and it can scale quite well with your business.</p>
 <p>The fastest introduction to RediSQL is <a href="../../">our homepage</a></p>
-<p>tl;dr; We double the performance of RediSQL switching to a zero-copy use of the input arguments.</p>
-<h2 id="background">Background</h2>
-<p>During the development of RediSQL we always kept in mind performance, but only up to a degree.</p>
-<p>As Donal Knuth says "premature optimization is the root of all evil", but he also added, "Yet we should not pass up our opportunities in that critical 3%."</p>
-<p>For us not pass up opportunities was more about using the correct data structure and algorithm when and where they make sense.</p>
-<p>Overall the performances were quite good, on my old personal machine I could get 30k/inserts per second in a very simple table (few numeric value and small texts).</p>
-<p>This number is really small compared to Redis that can <code>SET</code> keys up to 100k/set per second, but we are also doing more work and we have always considered this figures good enough, at least as long as nobody complains.</p>
-<h2 id="the-complains">The complains</h2>
-<p><em>Fortunately</em> somebody <a href="https://github.com/RedBeardLab/rediSQL/issues/29#issuecomment-382199622">complains about the insertion rates</a>.</p>
-<p>His requirements were a little different from the assumption that we had when testing the performance. He needed to insert a lot of data ~100kB in each row. And to do it fast.</p>
-<p>First tests were not so good, showing just 2000 insertions per second. Definitely not good.</p>
-<h2 id="looking-for-the-causes">Looking for the causes</h2>
-<p>Rust, the system language in which RediSQL is built, is peculiar in the management of memory.</p>
-<p>The type system must be sure that every reference that you are using is valid and that you will never deference stuff out of your memory space.</p>
-<p>Of course, this gives you a lot of safety but introduces quite a bit of complexity.</p>
-<p>Fortunately, there are ways to manage this complexity: is possible to trade complexity for performances or, the other way around, performances for complexity.</p>
-<p>High complexity with high performance means that you are using references (pointers) everywhere it is possible, so you never copy memory around if it is not necessary, you pass a pointer to that memory location and the type system assure you that it is safe to deference such pointer.</p>
-<p>Low complexity with low performance implies to copy areas of memory multiple times so that the type system is always happy. Instead of using a pointer to a piece of memory I will just copy everything I need and pass it around functions.</p>
-<p>Since the product was new, it made sense for us to get as low complexity as possible in such a way that it is possible to move faster understanding what our clients need and what we want to build.</p>
-<p>Until now.</p>
-<h2 id="the-problem">The problem</h2>
-<p>The biggest problem we identified was that we were copying all the input parameter, so when a client was sending as a request like <code>REDISQL.EXEC_STATEMENT DB insert 1 2 3</code> we were copying 6 (insert) + 3 (1, 2, 3) = 9 bytes of memory.</p>
-<p>(Redis string are a little particular since they don't have a null '\0' terminator and carry along their size.)</p>
-<p>Nobody will complain about copying just ~10 bytes of memory, especially using slab allocator it is still some work but it is quite fast to do.</p>
-<p>However, when we start to ingest 100k bytes this will really impact negatively the performance.</p>
-<h2 id="need-for-speed">Need for Speed</h2>
-<p>We could get away with just copying and freeing few bytes, especially using jemalloc, however as soon as the payload start increasing in size copying it every time started to impact negatively the performance of the module.</p>
-<p>Was time to buy some performances paying our share price in complexity.</p>
-<p>The process was a little complex because the data lived outside the Rust code, inside Redis itself.
-It was necessary to use <code>unsafe</code> code that in normal Rust you can avoid, but finally, we were able to see the Redis string as a slice (array) of chars and get a reference to it to pass around.</p>
-<h2 id="result">Result</h2>
-<p>Before to release the code I obviously tested it. I used a c4.8xlarge from AWS.</p>
-<p>That machine before the patch could ingest 4000 request / second each of ~100k bytes. After the patch, it was able to get 8000 requests/second.</p>
-<p>Finally, the latency was pretty much the same with the 99.9 percentile at ~50 milliseconds.</p>
-<p>Xin, the gentleman who brought the issues to our attention, went even further setting several parameters available in <code>redis-benchmark</code>, notably the number of pipelined requests, and he reached 17000 requests per second.</p>
-<p>Being conservative we can claim that our works made redisql twice (from 4000 req/s to 8000 req/s) as fast at ingesting big amount of data.</p>
-<p>It is definitely necessary more testing to see the impact on different workloads, smaller payload. Fortunately, our preliminary results seem quite good.</p>
-<h2 id="wrapping-up">Wrapping up</h2>
-<p>We showed how was possible to get a lot of performance out of Rust and RediSQL switching to a zero copy approach.</p>
-<p>We also showed that our solution is very efficient, being able to ingest 800 MB / s of data without any sort of tuning.</p>
-<h2 id="looking-for-beta-tester">Looking for beta tester</h2>
-<p>We are looking also for tester for the PRO version of RediSQL, if you would like to test the PRO module without paying anything this is your occasion.
-You can either open an issues on github or write me (siscia) directly (email on github).</p></div>
+<p><strong>tl;dr;</strong> This release does not introduce any new features but it does improve the performances significantly. 
+Moreover, we are releasing for multiple platforms, notably for ARMv7 (Rasberry PI), for CentOS7 (Linux AMI on AWS) and of course for Linux generic. 
+Finally, we introduce also the TRIAL executable which can be freely downloaded and used, it provides all the functionality of the PRO version but it is limited for evaluation purposes, after ~2 hours it will shut down itself.</p>
+<h2 id="performance-improvement-20">Performance Improvement ~20%</h2>
+<p>We are registering an improvement in performance of roughly 20% with a similar load.</p>
+<p>Of course, performance inside an SQL database varies a lot depending on the query you are executing.</p>
+<p>In our evaluation, we are focusing on a simple query that inserts or updates values in the database.</p>
+<p>We decided to focus on <code>insert</code>s because is the simplest write operation, hence it cannot be distributed to different instances, and the performance of the single instance will limit the performance of the overall system.</p>
+<p>However, <code>insert</code> operations, need to allocate new memory, the allocator used by SQLite is very efficient but we still wanted to see what would happen without the need of allocation, hence we tested also <code>update</code>s</p>
+<p>We are seeing an improvement of roughly the 20% in <code>insert</code>/<code>upsert</code> throughput.</p>
+<p>The increase in throughput is driven by the switch to a zero-copy architecture.</p>
+<p>In Rust, the language in which RediSQL is written is usual to start dealing with lifetime issues simply by copying memory, this, of course, comes with a penalty in performances.</p>
+<p>However, as long as this performance penalty is not an issue is better to just leave as it is and work on the more important parts of the project.
+For one of our user it was a problem and so we decide to fix it by bringing performance improvements to all. [More about this story here.][perfomace]</p>
+<h2 id="releases">Releases</h2>
+<p>Rust produce in general static linked objects, so everything you need is already inside your object and you do not depends on any external library that must be installed in your host system.</p>
+<p>This has several advantages, as long as the architecture of your host is the correct one your executable will most likely run.</p>
+<p>There is an exception to that, <code>libc</code> given its ubiquity and size is compiled dynamically, so your object will need it to be present in your host machine. Which usually is not an issue.</p>
+<p>Unfortunately is some machine <code>libc</code> is present in an older version that the one we are expecting, so the module will not be able to run.</p>
+<p>Very old systems have this issues as well as CentOS 7 and the Linux AMI on AWS.</p>
+<p>Unfortunately, cross-compile for a different version of glibc is not as simple as it may seem, but we finally manage :)</p>
+<h2 id="trial">Trial</h2>
+<p>Finally, we decide to provide open access to the PRO version for evaluation purposes.</p>
+<p>Hence we created a third release that is called TRIAL.</p>
+<p>The releases are exactly the same as the PRO one, except that it shuts itself down after ~2 hours.</p>
+<p>It is supposed to let you test the PRO version before to commit to buy it, still, you have 14 days of money back guarantee if you don't like the product.</p>
+<p>Clearly, the TRIAL version is not supposed to be used in production.</p>
+<h2 id="end">End</h2>
+<p>As always you can find all the public releases on the <a href="https://github.com/RedBeardLab/rediSQL/releases/tag/v0.5.0">github page</a>, you can openly access the same public release on the <a href="https://plasso.com/s/epp4GbsJdp-redisql/">open page of our shop</a> or you can buy the complete PRO package <a href="https://plasso.com/s/epp4GbsJdp-redisql/signup/">signing up in the shop</a>.</p>
+<p>Remember that signing up for the PRO product also provide you free support from us, the creator of the project, so that we can point you to the right direction and suggest the best use cases for our product.</p></div>
             
         </div>
 

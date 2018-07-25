@@ -61,6 +61,12 @@
      <changefreq>daily</changefreq>
     </url>
         
+    <url>
+     <loc>None/blog/release_0.5.0/</loc>
+     <lastmod>2018-07-25</lastmod>
+     <changefreq>daily</changefreq>
+    </url>
+        
     
 
 </urlset>
