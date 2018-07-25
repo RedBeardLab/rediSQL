@@ -15,7 +15,6 @@ fn main() {
     cc::Build::new()
         .file("src/CDeps/Redis/redismodule.c")
         .include("src/CDeps/Redis/include")
-        //.debug(true)
         .compile("libredismodule.a");
 
     cc::Build::new()
@@ -51,8 +50,8 @@ fn main() {
         }
     }
 
-    let engine_pro = "-DENGINE_PRO=1";
-    // let engine_pro = "-DENGINE_PRO=0";
+    // let engine_pro = "-DENGINE_PRO=1";
+    let engine_pro = "-DENGINE_PRO=0";
 
     let bindings = bindgen::Builder::default()
             .parse_callbacks(Box::new(SqliteTypeChooser))
