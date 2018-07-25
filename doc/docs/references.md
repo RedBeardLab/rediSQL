@@ -266,6 +266,111 @@ This command is not blocking as well.
 4. [`REDISQL.DELETE_STATEMENT`][delete_statement]
 5. [Redis Blocking Command][Redis Blocking Command]
 
+
+# Virtual Tables
+
+What follows is not a RediSQL command but an SQLite virtual table introduced by the module.
+
+Virtual tables behave similarly to normal tables but have some limitations, for a deeper explanation please visit the [official SQLite documentation about virtual tables.][virtual_table]
+
+At the moment the module provides a single read-only virtual table: `REDISQL_TABLES_BRUTE_HASH`.
+
+## REDISQL_TABLES_BRUTE_HASH
+
+This virtual table allows you to query [Redis Hashes][redis_hash] that follow a similar pattern.
+
+A redis hash is composed by a key, that identifies the structure in the whole database, and several sub-keys that map to different string fields.
+
+This structure can easily be mapped to a standard table, where the key identifies the row and the sub-keys the columns.
+
+Redis does not impose any limitation to the format of the hash key, however, in order to use the virtual table you need to follow a specific syntax that happens to be the de-facto standard for hash keys.
+
+The key must be in the following format `$tableName:$id` where `$id` must be an integer. There are no limitations on the sub-keys.
+
+```
+127.0.0.1:6379> HSET cats:1 name romeo location rome hungry 3
+(integer) 3
+127.0.0.1:6379> HSET cats:2 name garfield location london hungry 10
+(integer) 3
+127.0.0.1:6379> HSET cats:3 name "simon's cat" location "simon's house" hungry 8
+(integer) 3
+```
+
+In this examples we have a table of cats, each with a name, a location, and a hungry level.
+
+Redis is perfect if we want to know how hungry is `romeo` or where is located `garfield`.
+
+However is a little more difficult to answer query like: who is the hungriest cat? Are there any cats in London? 
+
+Of course, the use of different data structures could alleviate these issues but then there will be the necessity to keep the several data structures in sync one with the other.
+
+Another alternative can be the use of the `REDISQL_TABLE_BRUTE_HASH` virtual table.
+
+```
+127.0.0.1:6379> REDISQL.EXEC DB "CREATE VIRTUAL TABLE funny_cats USING REDISQL_TABLES_BRUTE_HASH(cats, name, location, hungry);"
+1) DONE
+2) (integer) 0
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT * FROM funny_cats"
+1) 1) "cats:2"
+   2) "garfield"
+   3) "london"
+   4) "10"
+2) 1) "cats:1"
+   2) "romeo"
+   3) "rome"
+   4) "3"
+3) 1) "cats:3"
+   2) "simon's cat"
+   3) "simon's house"
+   4) "8"
+```
+
+This virtual table allows querying the redis hashes using a more convenient SQL syntax. It does require a constant amount of space but it operates in linear time with the respect of the elements in the "hash table".
+
+The syntax of the virtual table is quite simple, `REDISQL_TABLES_BRUTE_HASH(cats, name, location, hungry)`, as first we need the $tableName, so the key of every row without the `:$id` part. 
+Then the columns of the table. Please note that you do **not** provide the type of the column in the declaration.
+
+Is not necessary that every key defines all the columns (sub-keys), if a key does not have a specific sub-key, it will simply be returned as (nil).
+
+This virtual table is a read-only virtual table, it means that -- at the moment -- you can only `select` from this table, so you cannot `insert`, `update` or `delete` from this table.
+
+Another limitation is that Redis Hashes can store only strings, not integers or floats. This implies that by default we will return only strings when you query a table, of course, you could cast them to integers or float via SQLite.
+
+```
+127.0.0.1:6379> REDISQL.EXEC DB "SELECT name, location, CAST(hungry AS INTEGER) FROM cats"
+1) 1) "garfield"
+   2) "london"
+   3) (integer) 10
+2) 1) "romeo"
+   2) "rome"
+   3) (integer) 3
+3) 1) "simon's cat"
+   2) "simon's house"
+   3) (integer) 8
+```
+
+This specific virtual table works by continuously querying Redis itself.
+
+When you execute a `SELECT` against it, the first step is to [`SCAN`][scan] all the possible keys, for each key then we retrieve the associated values in each sub-key using [`HGET`][hget] and finally we return the result.
+
+**Complexity**.
+
+This implementation comes with several trade-offs.
+
+The space complexity is constant and negligible, no data is duplicated and are necessary only few bytes for the SQLite data structures.
+
+The time complexity for a query is linear `O(m*n)` where `m` is the number of rows and `n` is the number of columns.
+
+This virtual table does not support `INSERT`, `UPDATE` or `DELETE`.
+
+
+**See also**:
+
+1. [SQLite virtual tables][virtual_table]
+2. [Redis Hashes][redis_hash]
+3. [`SCAN`][scan]
+4. [`HGET`][hget]
+
 [sqlite3_close]: https://sqlite.org/c3ref/close.html
 [Redis DEL]: https://redis.io/commands/del
 [sqlite3_open]: https://sqlite.org/c3ref/open.html
@@ -284,3 +389,7 @@ This command is not blocking as well.
 [sqlite_readonly]: https://www.sqlite.org/c3ref/stmt_readonly.html
 [query]: #redisqlquery
 [query_statement]: #redisqlquery_statement
+[virtual_table]: https://sqlite.org/vtab.html
+[redis_hash]: https://redis.io/topics/data-types#hashes
+[scan]: https://redis.io/commands/scan
+[hget]: https://redis.io/commands/hget
