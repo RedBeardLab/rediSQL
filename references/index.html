@@ -190,6 +190,11 @@
             <li><a href="#redisqlupdate_statement">REDISQL.UPDATE_STATEMENT</a></li>
         
     
+        <li class="main "><a href="#virtual-tables">Virtual Tables</a></li>
+        
+            <li><a href="#redisql_tables_brute_hash">REDISQL_TABLES_BRUTE_HASH</a></li>
+        
+    
     </ul>
 </div></div>
                 <div class="col-md-9" role="main">
@@ -370,6 +375,79 @@ So if the statements is from the following query:</p>
 <li><a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a></li>
 <li><a href="#redisqldelete_statement"><code>REDISQL.DELETE_STATEMENT</code></a></li>
 <li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
+</ol>
+<h1 id="virtual-tables">Virtual Tables</h1>
+<p>What follows is not a RediSQL command but an SQLite virtual table introduced by the module.</p>
+<p>Virtual tables behave similarly to normal tables but have some limitations, for a deeper explanation please visit the <a href="https://sqlite.org/vtab.html">official SQLite documentation about virtual tables.</a></p>
+<p>At the moment the module provides a single read-only virtual table: <code>REDISQL_TABLES_BRUTE_HASH</code>.</p>
+<h2 id="redisql_tables_brute_hash">REDISQL_TABLES_BRUTE_HASH</h2>
+<p>This virtual table allows you to query <a href="https://redis.io/topics/data-types#hashes">Redis Hashes</a> that follow a similar pattern.</p>
+<p>A redis hash is composed by a key, that identifies the structure in the whole database, and several sub-keys that map to different string fields.</p>
+<p>This structure can easily be mapped to a standard table, where the key identifies the row and the sub-keys the columns.</p>
+<p>Redis does not impose any limitation to the format of the hash key, however, in order to use the virtual table you need to follow a specific syntax that happens to be the de-facto standard for hash keys.</p>
+<p>The key must be in the following format <code>$tableName:$id</code> where <code>$id</code> must be an integer. There are no limitations on the sub-keys.</p>
+<pre><code>127.0.0.1:6379&gt; HSET cats:1 name romeo location rome hungry 3
+(integer) 3
+127.0.0.1:6379&gt; HSET cats:2 name garfield location london hungry 10
+(integer) 3
+127.0.0.1:6379&gt; HSET cats:3 name &quot;simon's cat&quot; location &quot;simon's house&quot; hungry 8
+(integer) 3
+</code></pre>
+
+<p>In this examples we have a table of cats, each with a name, a location, and a hungry level.</p>
+<p>Redis is perfect if we want to know how hungry is <code>romeo</code> or where is located <code>garfield</code>.</p>
+<p>However is a little more difficult to answer query like: who is the hungriest cat? Are there any cats in London? </p>
+<p>Of course, the use of different data structures could alleviate these issues but then there will be the necessity to keep the several data structures in sync one with the other.</p>
+<p>Another alternative can be the use of the <code>REDISQL_TABLE_BRUTE_HASH</code> virtual table.</p>
+<pre><code>127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;CREATE VIRTUAL TABLE funny_cats USING REDISQL_TABLES_BRUTE_HASH(cats, name, location, hungry);&quot;
+1) DONE
+2) (integer) 0
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;SELECT * FROM funny_cats&quot;
+1) 1) &quot;cats:2&quot;
+   2) &quot;garfield&quot;
+   3) &quot;london&quot;
+   4) &quot;10&quot;
+2) 1) &quot;cats:1&quot;
+   2) &quot;romeo&quot;
+   3) &quot;rome&quot;
+   4) &quot;3&quot;
+3) 1) &quot;cats:3&quot;
+   2) &quot;simon's cat&quot;
+   3) &quot;simon's house&quot;
+   4) &quot;8&quot;
+</code></pre>
+
+<p>This virtual table allows querying the redis hashes using a more convenient SQL syntax. It does require a constant amount of space but it operates in linear time with the respect of the elements in the "hash table".</p>
+<p>The syntax of the virtual table is quite simple, <code>REDISQL_TABLES_BRUTE_HASH(cats, name, location, hungry)</code>, as first we need the $tableName, so the key of every row without the <code>:$id</code> part. 
+Then the columns of the table. Please note that you do <strong>not</strong> provide the type of the column in the declaration.</p>
+<p>Is not necessary that every key defines all the columns (sub-keys), if a key does not have a specific sub-key, it will simply be returned as (nil).</p>
+<p>This virtual table is a read-only virtual table, it means that -- at the moment -- you can only <code>select</code> from this table, so you cannot <code>insert</code>, <code>update</code> or <code>delete</code> from this table.</p>
+<p>Another limitation is that Redis Hashes can store only strings, not integers or floats. This implies that by default we will return only strings when you query a table, of course, you could cast them to integers or float via SQLite.</p>
+<pre><code>127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;SELECT name, location, CAST(hungry AS INTEGER) FROM cats&quot;
+1) 1) &quot;garfield&quot;
+   2) &quot;london&quot;
+   3) (integer) 10
+2) 1) &quot;romeo&quot;
+   2) &quot;rome&quot;
+   3) (integer) 3
+3) 1) &quot;simon's cat&quot;
+   2) &quot;simon's house&quot;
+   3) (integer) 8
+</code></pre>
+
+<p>This specific virtual table works by continuously querying Redis itself.</p>
+<p>When you execute a <code>SELECT</code> against it, the first step is to <a href="https://redis.io/commands/scan"><code>SCAN</code></a> all the possible keys, for each key then we retrieve the associated values in each sub-key using <a href="https://redis.io/commands/hget"><code>HGET</code></a> and finally we return the result.</p>
+<p><strong>Complexity</strong>.</p>
+<p>This implementation comes with several trade-offs.</p>
+<p>The space complexity is constant and negligible, no data is duplicated and are necessary only few bytes for the SQLite data structures.</p>
+<p>The time complexity for a query is linear <code>O(m*n)</code> where <code>m</code> is the number of rows and <code>n</code> is the number of columns.</p>
+<p>This virtual table does not support <code>INSERT</code>, <code>UPDATE</code> or <code>DELETE</code>.</p>
+<p><strong>See also</strong>:</p>
+<ol>
+<li><a href="https://sqlite.org/vtab.html">SQLite virtual tables</a></li>
+<li><a href="https://redis.io/topics/data-types#hashes">Redis Hashes</a></li>
+<li><a href="https://redis.io/commands/scan"><code>SCAN</code></a></li>
+<li><a href="https://redis.io/commands/hget"><code>HGET</code></a></li>
 </ol></div>
             
         </div>
