@@ -130,6 +130,12 @@
 </li>
 
                         
+                            
+<li >
+    <a href="blog/release_0.6.0/">Release 0.6.0</a>
+</li>
+
+                        
                         </ul>
                     </li>
                 
@@ -177,11 +183,7 @@
     
         <li class="main active"><a href="#redisql">RediSQL</a></li>
         
-            <li><a href="#obtain">Obtain</a></li>
-        
-            <li><a href="#motivation">Motivation</a></li>
-        
-            <li><a href="#walkthrough">Walkthrough</a></li>
+            <li><a href="#get-started">Get Started</a></li>
         
     
         <li class="main "><a href="#overview">Overview</a></li>
@@ -201,6 +203,10 @@
         
             <li><a href="#aof">AOF</a></li>
         
+            <li><a href="#obtain">Obtain</a></li>
+        
+            <li><a href="#motivation">Motivation</a></li>
+        
     
         <li class="main "><a href="#pro">PRO</a></li>
         
@@ -212,26 +218,15 @@
 <h1 id="redisql">RediSQL</h1>
 <p><a href="https://github.com/RedBeardLab/rediSQL">RediSQL</a> is a Redis module that embeds a fully functional SQLite database.</p>
 <p>At the best of our knowledge is the only system that provides SQL capabilities while being very fast so to be used as a cache, simple to integrate with any programming language, since it can be used by every redis client, and with very very low maintenance.</p>
-<p>Moreover, for small, not critical services, it can also be used as the main database, it can store data not only in memory but also on file and it can also use the same persistence mechanisms of redis itself.</p>
-<h2 id="obtain">Obtain</h2>
-<p>There are <strong>two version</strong> of the software, a "community", completely open source version and a PRO version that comes with <strong>more features and support plan.</strong></p>
-<p>Both versions can be <a href="https://plasso.com/s/epp4GbsJdp-redisql"><strong>obtained in the store.</strong></a></p>
-<p>For the community version, you can just download it, we ask for a small donation if you can support the project but feel free to just input 0€ and download it.</p>
-<p>For the PRO version you need to <a href="https://plasso.com/s/epp4GbsJdp-redisql/signup/"><strong>sign up here</strong></a>, after you signed up you will be able to download the software.</p>
-<p>A detailed coverage of the PRO version <a href="pro/">is provided here</a></p>
-<p>The motivations of why we decided to sell a PRO version and about its price are <a href="pro_motivations/">here</a> and we hope that you agree on our points.</p>
-<p>Finally you can also obtain the software from <a href="https://github.com/RedBeardLab/rediSQL/releases">github releases</a></p>
-<h2 id="motivation">Motivation</h2>
-<p>The main motivation behind the project is to provide a quick and hands-off environment to store structured data.</p>
-<p>It also turns out that RediSQL is a great way to cache your content and data in a more structured way.</p>
-<p>The main history and motivation of the project are explained <a href="motivations/">in this page.</a></p>
-<h2 id="walkthrough">Walkthrough</h2>
+<p>Moreover, it can also be used as the main database, it can store data not only in memory but also on file and it can also use the same persistence mechanisms of redis itself.</p>
+<h2 id="get-started">Get Started</h2>
+<p>You can download the module directly <a href="https://github.com/RedBeardLab/rediSQL/releases">from github releases</a>.</p>
 <p>You can start the module with:</p>
-<pre><code>./redis-server --loadmodule librediSQL.so 
+<pre><code class="bash">./redis-server --loadmodule rediSQL_&lt;version&gt;.so
 </code></pre>
 
 <p>After starting redis with the rediSQL module it will be just the redis you learn to love:</p>
-<pre><code>$ ~/redis-4.0-rc1/src/redis-cli 
+<pre><code class="bash">$ ~/redis-4.0-rc1/src/redis-cli 
 127.0.0.1:6379&gt; 
 127.0.0.1:6379&gt; SET A 3
 OK
@@ -339,6 +334,17 @@ This is quite useful especially if you have several services using the same Redi
 <p>AOF replication is provided only in the PRO edition.</p>
 <p>All the commands are replicated, but the read-only ones.</p>
 <p>With AOF replication you also get instance replication that allows replicating the same dataset into different Redis instances in a master/slave fashion.</p>
+<h2 id="obtain">Obtain</h2>
+<p>There are <strong>two version</strong> of the software, a "community", completely open source version and a PRO version that comes with <strong>more features and support plan.</strong></p>
+<p>Both versions can be <a href="https://plasso.com/s/epp4GbsJdp-redisql"><strong>obtained in the store.</strong></a></p>
+<p>For the community version, you can just download it, we ask for a small donation if you can support the project but feel free to just input 0€ and download it.</p>
+<p>For the PRO version you need to <a href="https://plasso.com/s/epp4GbsJdp-redisql/signup/"><strong>sign up here</strong></a>, after you signed up you will be able to download the software.</p>
+<p>A detailed coverage of the PRO version <a href="pro/">is provided here</a></p>
+<p>Finally you can also obtain the software from <a href="https://github.com/RedBeardLab/rediSQL/releases">github releases</a></p>
+<h2 id="motivation">Motivation</h2>
+<p>The main motivation behind the project is to provide a quick and hands-off environment to store structured data.</p>
+<p>It also turns out that RediSQL is a great way to cache your content and data in a more structured way.</p>
+<p>The main history and motivation of the project are explained <a href="motivations/">in this page.</a></p>
 <h1 id="pro">PRO</h1>
 <p>The PRO edition is based on the Open Source one, however, it provides one more class of commands that are necessary for business or where rediSQL is a critical piece of the infrastructure.</p>
 <p>Every command, but <code>REDISQL.CREATE_DB</code>, blocks the clients and it is executed in the background by a different thread.</p>
@@ -392,5 +398,5 @@ This is quite useful especially if you have several services using the same Redi
 
 <!--
 MkDocs version : 0.14.0
-Build Date UTC : 2018-07-25 18:38:46.234240
+Build Date UTC : 2018-08-04 17:45:49.204368
 -->

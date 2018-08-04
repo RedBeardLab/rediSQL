@@ -130,6 +130,12 @@
 </li>
 
                         
+                            
+<li >
+    <a href="../blog/release_0.6.0/">Release 0.6.0</a>
+</li>
+
+                        
                         </ul>
                     </li>
                 
@@ -424,7 +430,7 @@ So if the statements is from the following query:</p>
 </code></pre>
 
 <p>This virtual table allows querying the redis hashes using a more convenient SQL syntax. It does require a constant amount of space but it operates in linear time with the respect of the elements in the "hash table".</p>
-<p>The syntax of the virtual table is quite simple, <code>REDISQL_TABLES_BRUTE_HASH(cats, name, location, hungry)</code>, as first we need the $tableName, so the key of every row without the <code>:$id</code> part. 
+<p>The syntax of the virtual table is quite simple, <code>REDISQL_TABLES_BRUTE_HASH(cats, name, location, hungry)</code>, as first we need the <code>$tableName</code>, so the key of every row without the <code>:$id</code> part. 
 Then the columns of the table. Please note that you do <strong>not</strong> provide the type of the column in the declaration.</p>
 <p>Is not necessary that every key defines all the columns (sub-keys), if a key does not have a specific sub-key, it will simply be returned as (nil).</p>
 <p>This virtual table is a read-only virtual table, it means that -- at the moment -- you can only <code>select</code> from this table, so you cannot <code>insert</code>, <code>update</code> or <code>delete</code> from this table.</p>
