@@ -4,43 +4,21 @@
 
 At the best of our knowledge is the only system that provides SQL capabilities while being very fast so to be used as a cache, simple to integrate with any programming language, since it can be used by every redis client, and with very very low maintenance.
 
-Moreover, for small, not critical services, it can also be used as the main database, it can store data not only in memory but also on file and it can also use the same persistence mechanisms of redis itself.
+Moreover, it can also be used as the main database, it can store data not only in memory but also on file and it can also use the same persistence mechanisms of redis itself.
 
-## Obtain
+## Get Started
 
-There are **two version** of the software, a "community", completely open source version and a PRO version that comes with **more features and support plan.**
-
-Both versions can be [**obtained in the store.**][store]
-
-For the community version, you can just download it, we ask for a small donation if you can support the project but feel free to just input 0€ and download it.
-
-For the PRO version you need to [**sign up here**][signup], after you signed up you will be able to download the software.
-
-A detailed coverage of the PRO version [is provided here][pro]
-
-The motivations of why we decided to sell a PRO version and about its price are [here][pro_motivations] and we hope that you agree on our points.
-
-Finally you can also obtain the software from [github releases][github_release]
-
-## Motivation
-
-The main motivation behind the project is to provide a quick and hands-off environment to store structured data.
-
-It also turns out that RediSQL is a great way to cache your content and data in a more structured way.
-
-The main history and motivation of the project are explained [in this page.][motivations]
-
-## Walkthrough
+You can download the module directly [from github releases][github_release].
 
 You can start the module with:
 
-```
-./redis-server --loadmodule librediSQL.so 
+```bash
+./redis-server --loadmodule rediSQL_<version>.so
 ```
 
 After starting redis with the rediSQL module it will be just the redis you learn to love:
 
-```
+```bash
 $ ~/redis-4.0-rc1/src/redis-cli 
 127.0.0.1:6379> 
 127.0.0.1:6379> SET A 3
@@ -121,7 +99,6 @@ OK
 
 Now you can create tables, insert data on those tables, make queries, remove elements, everything.
 
-
 # Overview
 
 In this section, we are going to explore the main concepts in the module.
@@ -185,6 +162,28 @@ AOF replication is provided only in the PRO edition.
 All the commands are replicated, but the read-only ones.
 
 With AOF replication you also get instance replication that allows replicating the same dataset into different Redis instances in a master/slave fashion.
+
+## Obtain
+
+There are **two version** of the software, a "community", completely open source version and a PRO version that comes with **more features and support plan.**
+
+Both versions can be [**obtained in the store.**][store]
+
+For the community version, you can just download it, we ask for a small donation if you can support the project but feel free to just input 0€ and download it.
+
+For the PRO version you need to [**sign up here**][signup], after you signed up you will be able to download the software.
+
+A detailed coverage of the PRO version [is provided here][pro]
+
+Finally you can also obtain the software from [github releases][github_release]
+
+## Motivation
+
+The main motivation behind the project is to provide a quick and hands-off environment to store structured data.
+
+It also turns out that RediSQL is a great way to cache your content and data in a more structured way.
+
+The main history and motivation of the project are explained [in this page.][motivations]
 
 # PRO
 

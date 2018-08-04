@@ -4,7 +4,7 @@
 
 RediSQL is a Redis module that provides full SQL capabilities to Redis, it is the simplest and fastest way to get an SQL database up and running, without incurring in difficult operational issues and it can scale quite well with your business.
 
-The fastest introduction to RediSQL is [our homepage](/)
+The fastest introduction to RediSQL is [our homepage](https://redisql.com)
 
 **tl;dr;** This release does not introduce any new features but it does improve the performances significantly. 
 Moreover, we are releasing for multiple platforms, notably for ARMv7 (Rasberry PI), for CentOS7 (Linux AMI on AWS) and of course for Linux generic. 

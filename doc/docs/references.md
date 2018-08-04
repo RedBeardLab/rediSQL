@@ -327,7 +327,7 @@ Another alternative can be the use of the `REDISQL_TABLE_BRUTE_HASH` virtual tab
 
 This virtual table allows querying the redis hashes using a more convenient SQL syntax. It does require a constant amount of space but it operates in linear time with the respect of the elements in the "hash table".
 
-The syntax of the virtual table is quite simple, `REDISQL_TABLES_BRUTE_HASH(cats, name, location, hungry)`, as first we need the $tableName, so the key of every row without the `:$id` part. 
+The syntax of the virtual table is quite simple, `REDISQL_TABLES_BRUTE_HASH(cats, name, location, hungry)`, as first we need the `$tableName`, so the key of every row without the `:$id` part. 
 Then the columns of the table. Please note that you do **not** provide the type of the column in the declaration.
 
 Is not necessary that every key defines all the columns (sub-keys), if a key does not have a specific sub-key, it will simply be returned as (nil).
