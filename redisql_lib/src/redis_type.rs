@@ -136,9 +136,9 @@ pub fn CreateCommand(
             command_ptr_name,
             f,
             flag_ptr_name,
-            0,
-            0,
-            0,
+            1,
+            1,
+            1,
         )
     }
 }
