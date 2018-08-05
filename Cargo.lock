@@ -351,18 +351,18 @@ dependencies = [
 
 [[package]]
 name = "rediSQL"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "env_logger 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "redisql_lib 0.2.0",
+ "redisql_lib 0.2.1",
  "uuid 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "redisql_lib"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bindgen 0.30.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cc 1.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
