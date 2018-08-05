@@ -34,7 +34,7 @@ Please note that the first parameter of the virtual table is not, as we could ex
 
 Also note that is pointless to provide a type to the columns since Redis does store only strings inside the hashes, hence you will get only strings from the virtual table as well.
 
-What you can do to get numbers, integer or floats, is to exploit the [`CAST` (scroll down to `CAST expressions`)][sqlite_cast] capabilities of SQLite.
+What you can do to get numbers, integer or floats, is to exploit the [`CAST`][sqlite_cast] capabilities of SQLite.
 
 You can find examples of this feature in [the documentation.][redisql_table_brute_hash]
 
@@ -62,3 +62,8 @@ As always you can find all the public releases on the [github page][releases], y
 
 Remember that signing up for the PRO product also provide you free support from us, the creator of the project, so that we can point you to the right direction and suggest the best use cases for our product.
 
+[redisql_table_brute_hash]: ../references.md#redisql_tables_brute_hash
+[sqlite_cast]: https://www.sqlite.org/lang_expr.html#castexpr
+[releases]: https://github.com/RedBeardLab/rediSQL/releases/tag/v0.5.0
+[plaso_open]: https://plasso.com/s/epp4GbsJdp-redisql/
+[plaso_signup]: https://plasso.com/s/epp4GbsJdp-redisql/signup/

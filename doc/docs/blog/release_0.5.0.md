@@ -29,7 +29,7 @@ The increase in throughput is driven by the switch to a zero-copy architecture.
 In Rust, the language in which RediSQL is written is usual to start dealing with lifetime issues simply by copying memory, this, of course, comes with a penalty in performances.
 
 However, as long as this performance penalty is not an issue is better to just leave as it is and work on the more important parts of the project.
-For one of our user it was a problem and so we decide to fix it by bringing performance improvements to all. [More about this story here.][perfomace]
+For one of our user it was a problem and so we decide to fix it by bringing performance improvements to all. [More about this story here.][performance]
 
 ## Releases
 
@@ -66,4 +66,4 @@ Remember that signing up for the PRO product also provide you free support from 
 [releases]: https://github.com/RedBeardLab/rediSQL/releases/tag/v0.5.0
 [plaso_open]: https://plasso.com/s/epp4GbsJdp-redisql/
 [plaso_signup]: https://plasso.com/s/epp4GbsJdp-redisql/signup/
-[performance]: http://127.0.0.1:8000/blog/performances/
+[performance]: blog/performances.md
