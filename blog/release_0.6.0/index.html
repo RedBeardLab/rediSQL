@@ -204,21 +204,21 @@
 The release is important because set the foundation to write more complex commands or SQLite functions.
 Possible ideas could be SQLite functions that append to a list or to a stream, these functions could be used inside triggers to generate an event log of all the operation that happened to a particular table.</p>
 <h2 id="virtual-table">Virtual Table</h2>
-<p>Inside RediSQL is now possible to use the virtual table: [REDISQL_TABLES_BRUTE_HASH][redisql_table_brute_hash].</p>
+<p>Inside RediSQL is now possible to use the virtual table: <a href="../../references/#redisql_tables_brute_hash">REDISQL_TABLES_BRUTE_HASH</a>.</p>
 <p>This virtual table allows to only query Redis hashes that follow a common structure.</p>
 <p>The understood structure is:</p>
 <pre><code>HSET $tableName:$id $col1 $val1 $col2 $val2 ... $colN $valN
 </code></pre>
 
 <p>Where the <code>$col</code>s are constant in the hashes and, of course, the <code>$val</code>s change from row to row.</p>
-<p>In order to create a [REDISQL_TABLES_BRUTE_HASH][redisql_table_brute_hash] the syntax is the following:</p>
+<p>In order to create a <a href="../../references/#redisql_tables_brute_hash">REDISQL_TABLES_BRUTE_HASH</a> the syntax is the following:</p>
 <pre><code>CREATE VIRTUAL TABLE funny_cats USING REDISQL_TABLES_BRUTE_HASH($tableName, $col1, $col2, ..., $colN);
 </code></pre>
 
 <p>Please note that the first parameter of the virtual table is not, as we could expect, the first column of the table, but is the name of hashes that we want to use as table, of course without specifying any <code>$id</code>.</p>
 <p>Also note that is pointless to provide a type to the columns since Redis does store only strings inside the hashes, hence you will get only strings from the virtual table as well.</p>
-<p>What you can do to get numbers, integer or floats, is to exploit the [<code>CAST</code> (scroll down to <code>CAST expressions</code>)][sqlite_cast] capabilities of SQLite.</p>
-<p>You can find examples of this feature in [the documentation.][redisql_table_brute_hash]</p>
+<p>What you can do to get numbers, integer or floats, is to exploit the <a href="https://www.sqlite.org/lang_expr.html#castexpr"><code>CAST</code></a> capabilities of SQLite.</p>
+<p>You can find examples of this feature in <a href="../../references/#redisql_tables_brute_hash">the documentation.</a></p>
 <p>Let me make clear that this virtual table does <strong>not</strong> implements updates, inserts or deletes, at the moment you can only query this type of virtual tables.</p>
 <p>The implementation of update and inserts and deletes should not pose significant challenges.</p>
 <h2 id="importance-of-this-release">Importance of this release</h2>
@@ -229,7 +229,7 @@ Possible ideas could be SQLite functions that append to a list or to a stream, t
 <p>This will allow to log every operation you are doing against your dataset. You could replay them later in a different instance of RediSQL or maybe also against a different database.</p>
 <p>You could write all you operation very fast in memory using RediSQL and when you have enough of them write them to disk against PostgreSQL, MySQL or any other database.</p>
 <h2 id="end">End</h2>
-<p>As always you can find all the public releases on the [github page][releases], you can openly access the same public release on the [open page of our shop][plaso_open] or you can buy the complete PRO package [signing up in the shop][plaso_signup].</p>
+<p>As always you can find all the public releases on the <a href="https://github.com/RedBeardLab/rediSQL/releases/tag/v0.5.0">github page</a>, you can openly access the same public release on the <a href="https://plasso.com/s/epp4GbsJdp-redisql/">open page of our shop</a> or you can buy the complete PRO package <a href="https://plasso.com/s/epp4GbsJdp-redisql/signup/">signing up in the shop</a>.</p>
 <p>Remember that signing up for the PRO product also provide you free support from us, the creator of the project, so that we can point you to the right direction and suggest the best use cases for our product.</p></div>
             
         </div>
