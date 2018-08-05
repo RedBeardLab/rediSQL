@@ -66,4 +66,4 @@ Remember that signing up for the PRO product also provide you free support from 
 [releases]: https://github.com/RedBeardLab/rediSQL/releases/tag/v0.5.0
 [plaso_open]: https://plasso.com/s/epp4GbsJdp-redisql/
 [plaso_signup]: https://plasso.com/s/epp4GbsJdp-redisql/signup/
-[performance]: blog/performances.md
+[performance]: performances.md
