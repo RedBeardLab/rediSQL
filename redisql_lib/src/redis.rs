@@ -82,7 +82,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
                 let stmt = create_statement(db, identifier, statement)?;
                 let read_only = stmt.is_read_only();
                 v.insert((stmt, read_only));
-                Ok(QueryResult::OK { to_replicate: true })
+                Ok(QueryResult::OK {})
             }
             Entry::Occupied(_) => {
                 let debug = String::from("Statement already present");
@@ -108,7 +108,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
             Entry::Occupied(o) => {
                 remove_statement(&db, identifier)?;
                 o.remove_entry();
-                Ok(QueryResult::OK { to_replicate: true })
+                Ok(QueryResult::OK {})
             }
         }
     }
@@ -132,7 +132,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
                 let stmt = update_statement(&db, identifier, statement)?;
                 let read_only = stmt.is_read_only();
                 o.insert((stmt, read_only));
-                Ok(QueryResult::OK { to_replicate: true })
+                Ok(QueryResult::OK {})
             }
         }
     }
@@ -283,7 +283,7 @@ impl RedisReply for sql::Entity {
             sql::Entity::Text { ref text } => rm::ReplyWithStringBuffer(ctx, text.as_bytes()),
             sql::Entity::Blob { ref blob } => rm::ReplyWithStringBuffer(ctx, blob.as_bytes()),
             sql::Entity::Null => rm::ReplyWithNull(ctx),
-            sql::Entity::OK { to_replicate } => QueryResult::OK { to_replicate }.reply(ctx),
+            sql::Entity::OK { .. } => QueryResult::OK {}.reply(ctx),
             sql::Entity::DONE {
                 modified_rows,
                 to_replicate,
@@ -663,7 +663,7 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData>(
             match create_statement(db, identifier, statement) {
                 Ok(stmt) => {
                     v.insert((stmt, false));
-                    Ok(QueryResult::OK { to_replicate: true })
+                    Ok(QueryResult::OK {})
                 }
                 Err(e) => Err(e),
             }

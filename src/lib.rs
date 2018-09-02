@@ -520,7 +520,7 @@ extern "C" fn CreateDB(
 
                                 match type_set {
                                     r::rm::ffi::REDISMODULE_OK => {
-                                        let ok = r::QueryResult::OK { to_replicate: true };
+                                        let ok = r::QueryResult::OK {};
                                         ReplicateVerbatim(&context);
                                         ok.reply(&context)
                                     }
@@ -734,9 +734,7 @@ extern "C" fn Backup(
     match r::make_backup(&source_connection, &dest_connection) {
         Err(e) => e.reply(&context),
         _ => {
-            let ok = r::QueryResult::OK {
-                to_replicate: false,
-            };
+            let ok = r::QueryResult::OK {};
             ok.reply(&context)
         }
     }

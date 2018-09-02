@@ -282,7 +282,7 @@ fn get_entity_type(stmt: *mut ffi::sqlite3_stmt, i: i32) -> EntityType {
 impl<'a> From<Cursor<'a>> for QueryResult {
     fn from(mut cursor: Cursor) -> QueryResult {
         match cursor {
-            Cursor::OKCursor {} => QueryResult::OK { to_replicate: true },
+            Cursor::OKCursor {} => QueryResult::OK {},
             Cursor::DONECursor { modified_rows } => QueryResult::DONE {
                 modified_rows,
                 to_replicate: true,
