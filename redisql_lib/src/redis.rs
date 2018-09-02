@@ -36,10 +36,6 @@ pub struct ReplicationBook {
     db: Arc<Mutex<sql::RawConnection>>,
 }
 
-trait ReplicationData {
-    fn to_replicate(&self) -> bool;
-}
-
 pub trait StatementCache<'a> {
     fn new(&Arc<Mutex<sql::RawConnection>>) -> Self;
     fn is_statement_present(&self, &str) -> bool;
@@ -444,9 +440,6 @@ impl QueryResult {
                 reply_with_array(ctx, array)
             }
         }
-    }
-    pub fn to_replicate(&self) -> bool {
-        false
     }
 }
 
