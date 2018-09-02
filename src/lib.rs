@@ -7,9 +7,8 @@ extern crate uuid;
 use env_logger::{LogBuilder, LogTarget};
 use redisql_lib::redis as r;
 use redisql_lib::redis::{
-    register_function, register_write_function,
-    reply_with_error_from_key_type, with_ch_and_loopdata, LoopData,
-    RedisReply,
+    get_dbkey_from_name, register_function, register_write_function,
+    reply_with_error_from_key_type, with_ch_and_loopdata, LoopData, RedisReply,
 };
 use redisql_lib::redis_type::{Context, ReplicateVerbatim};
 use redisql_lib::sqlite as sql;
@@ -790,15 +789,64 @@ unsafe extern "C" fn rdb_load(
                 }
                 Ok(redis_context) => redis_context,
             };
-            let db =
-                r::DBKey::new_from_arc(tx, conn, true, redis_context);
+            let db = r::DBKey::new_from_arc(tx, conn, true, redis_context);
             let mut loop_data = db.loop_data.clone();
 
-            thread::spawn(move || {
-                r::listen_and_execute(&mut loop_data, &rx)
-            });
+            thread::spawn(move || r::listen_and_execute(&mut loop_data, &rx));
 
             Box::into_raw(Box::new(db)) as *mut std::os::raw::c_void
+        }
+    }
+}
+
+// TODO attention with the metadata table
+// What should happen?
+#[allow(non_snake_case)]
+extern "C" fn Backup(
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32 {
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
+
+    if argvector.len() != 3 {
+        let error = CString::new("Wrong number of arguments, it accepts exactly 3").unwrap();
+        return unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(context.as_ptr(), error.as_ptr())
+        };
+    }
+
+    let source_db = get_dbkey_from_name(context.as_ptr(), argvector[1]);
+    if source_db.is_err() {
+        let error = CString::new("Error in opening the SOURCE database").unwrap();
+        return unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(context.as_ptr(), error.as_ptr())
+        };
+    }
+    let source_db = source_db.unwrap();
+
+    let dest_db = get_dbkey_from_name(context.as_ptr(), argvector[2]);
+    if dest_db.is_err() {
+        let error = CString::new("Error in opening the DESTINATION database").unwrap();
+        return unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(context.as_ptr(), error.as_ptr())
+        };
+    }
+    let dest_db = dest_db.unwrap();
+
+    let source_connection = &source_db.loop_data.get_db();
+    let dest_connection = &dest_db.loop_data.get_db();
+
+    let source_connection = source_connection.lock().unwrap();
+    let dest_connection = dest_connection.lock().unwrap();
+
+    match r::make_backup(&source_connection, &dest_connection) {
+        Err(e) => e.reply(&context),
+        _ => {
+            let ok = r::QueryResult::OK {
+                to_replicate: false,
+            };
+            ok.reply(&context)
         }
     }
 }
@@ -942,6 +990,16 @@ pub extern "C" fn RedisModule_OnLoad(
         String::from("REDISQL.QUERY_STATEMENT"),
         String::from("readonly"),
         QueryStatement,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function(
+        &ctx,
+        String::from("REDISQL.BACKUP"),
+        String::from("readonly"),
+        Backup,
     ) {
         Ok(()) => (),
         Err(e) => return e,
