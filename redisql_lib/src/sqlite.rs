@@ -166,27 +166,14 @@ pub enum EntityType {
 
 // TODO XXX explore it is possible to change these String into &str
 pub enum Entity {
-    Integer {
-        int: i32,
-    },
-    Float {
-        float: f64,
-    },
-    Text {
-        text: String,
-    },
-    Blob {
-        blob: String,
-    },
+    Integer { int: i32 },
+    Float { float: f64 },
+    Text { text: String },
+    Blob { blob: String },
 
     Null,
-    OK {
-        to_replicate: bool,
-    },
-    DONE {
-        modified_rows: i32,
-        to_replicate: bool,
-    },
+    OK {},
+    DONE { modified_rows: i32 },
 }
 
 impl Entity {
@@ -304,10 +291,7 @@ impl<'a> From<Cursor<'a>> for QueryResult {
 
                     result.push(row);
                 }
-                QueryResult::Array {
-                    array: result,
-                    to_replicate: true,
-                }
+                QueryResult::Array { array: result }
             }
         }
     }

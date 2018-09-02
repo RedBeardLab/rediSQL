@@ -426,13 +426,8 @@ pub enum Command {
 
 pub enum QueryResult {
     OK {},
-    DONE {
-        modified_rows: i32,
-    },
-    Array {
-        array: Vec<sql::Row>,
-        to_replicate: bool,
-    },
+    DONE { modified_rows: i32 },
+    Array { array: Vec<sql::Row> },
 }
 
 impl QueryResult {
