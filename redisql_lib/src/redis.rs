@@ -284,13 +284,9 @@ impl RedisReply for sql::Entity {
             sql::Entity::Blob { ref blob } => rm::ReplyWithStringBuffer(ctx, blob.as_bytes()),
             sql::Entity::Null => rm::ReplyWithNull(ctx),
             sql::Entity::OK { .. } => QueryResult::OK {}.reply(ctx),
-            sql::Entity::DONE {
-                modified_rows,
-                to_replicate,
-            } => QueryResult::DONE {
-                modified_rows,
-                to_replicate,
-            }.reply(ctx),
+            sql::Entity::DONE { modified_rows, .. } => {
+                QueryResult::DONE { modified_rows }.reply(ctx)
+            }
         }
     }
 }
@@ -432,7 +428,6 @@ pub enum QueryResult {
     OK {},
     DONE {
         modified_rows: i32,
-        to_replicate: bool,
     },
     Array {
         array: Vec<sql::Row>,
