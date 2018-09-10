@@ -13,9 +13,9 @@ uuid = { version = "0.4", features = ["v4"] }
 log = {version = "0.3.8", features = ["release_max_level_warn"]}
 env_logger = "0.4.3"
 redisql_lib = {path = "./redisql_lib"}
-# engine_pro = {path = "./engine_pro", optional = true}
+engine_pro = {path = "./engine_pro", optional = true}
 
 [features]
 default = []
-# pro = ["engine_pro"]
-# trial = ["engine_pro/trial"]
+pro = ["engine_pro"]
+trial = ["engine_pro/trial"]

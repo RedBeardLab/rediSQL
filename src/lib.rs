@@ -594,14 +594,6 @@ extern "C" fn CreateDB(
                         Ok(rc) => {
                             match r::create_metadata_table(rc.clone())
                                 .and_then(|_| {
-                                    r::insert_metadata(
-                                        rc.clone(),
-                                        "setup",
-                                        "path",
-                                        path,
-                                    )
-                                })
-                                .and_then(|_| {
                                     r::enable_foreign_key(rc.clone())
                                 })
                                 .and_then(|_| {
