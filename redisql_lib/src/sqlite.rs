@@ -28,7 +28,9 @@ pub enum SQLiteOK {
 }
 
 impl FromIterator<SQLiteOK> for SQLiteOK {
-    fn from_iter<I: IntoIterator<Item = SQLiteOK>>(_iter: I) -> SQLiteOK {
+    fn from_iter<I: IntoIterator<Item = SQLiteOK>>(
+        _iter: I,
+    ) -> SQLiteOK {
         SQLiteOK::OK
     }
 }
@@ -90,7 +92,8 @@ impl SQLiteConnection for RawConnection {
         self.db
     }
     fn get_last_error(&self) -> SQLite3Error {
-        let error_code = unsafe { ffi::sqlite3_extended_errcode(self.get_db()) };
+        let error_code =
+            unsafe { ffi::sqlite3_extended_errcode(self.get_db()) };
         let error_message = unsafe {
             CStr::from_ptr(ffi::sqlite3_errmsg(self.get_db()))
                 .to_string_lossy()
@@ -110,8 +113,11 @@ impl SQLiteConnection for RawConnection {
 }
 
 impl RawConnection {
-    pub fn open_connection(path: &str) -> Result<RawConnection, SQLite3Error> {
-        let mut db: *mut ffi::sqlite3 = unsafe { mem::uninitialized() };
+    pub fn open_connection(
+        path: &str,
+    ) -> Result<RawConnection, SQLite3Error> {
+        let mut db: *mut ffi::sqlite3 =
+            unsafe { mem::uninitialized() };
         let c_path = CString::new(path).unwrap();
         let r = unsafe {
             let ptr_path = c_path.as_ptr();
@@ -139,17 +145,29 @@ impl RawConnection {
     }
 }
 
-pub fn get_arc_connection(path: &str) -> Result<Arc<Mutex<RawConnection>>, SQLite3Error> {
+pub fn get_arc_connection(
+    path: &str,
+) -> Result<Arc<Mutex<RawConnection>>, SQLite3Error> {
     let raw = RawConnection::open_connection(path)?;
     Ok(Arc::new(Mutex::new(raw)))
 }
 
 pub trait StatementTrait<'a>: Sized {
-    fn new(conn: Arc<Mutex<RawConnection>>, query: &str) -> Result<Self, SQLite3Error>;
+    fn new(
+        conn: Arc<Mutex<RawConnection>>,
+        query: &str,
+    ) -> Result<Self, SQLite3Error>;
     fn reset(&self);
     fn execute(&self) -> Result<Cursor, SQLite3Error>;
-    fn bind_texts(&self, values: &[&str]) -> Result<SQLiteOK, SQLite3Error>;
-    fn bind_index(&self, index: i32, value: &str) -> Result<SQLiteOK, SQLite3Error>;
+    fn bind_texts(
+        &self,
+        values: &[&str],
+    ) -> Result<SQLiteOK, SQLite3Error>;
+    fn bind_index(
+        &self,
+        index: i32,
+        value: &str,
+    ) -> Result<SQLiteOK, SQLite3Error>;
     fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt;
     fn is_read_only(&self) -> bool {
         false
@@ -180,16 +198,24 @@ impl Entity {
     fn new(stmt: &Statement, i: i32) -> Entity {
         match get_entity_type(stmt.get_raw_stmt(), i) {
             EntityType::Integer => {
-                let int = unsafe { ffi::sqlite3_column_int(stmt.get_raw_stmt(), i) };
+                let int = unsafe {
+                    ffi::sqlite3_column_int(stmt.get_raw_stmt(), i)
+                };
                 Entity::Integer { int }
             }
             EntityType::Float => {
-                let value = unsafe { ffi::sqlite3_column_double(stmt.get_raw_stmt(), i) };
+                let value = unsafe {
+                    ffi::sqlite3_column_double(stmt.get_raw_stmt(), i)
+                };
                 Entity::Float { float: value }
             }
             EntityType::Text => {
                 let value = unsafe {
-                    CStr::from_ptr(ffi::sqlite3_column_text(stmt.get_raw_stmt(), i) as *const c_char)
+                    CStr::from_ptr(ffi::sqlite3_column_text(
+                        stmt.get_raw_stmt(),
+                        i,
+                    )
+                        as *const c_char)
                         .to_string_lossy()
                         .into_owned()
                 };
@@ -198,7 +224,11 @@ impl Entity {
 
             EntityType::Blob => {
                 let value = unsafe {
-                    CStr::from_ptr(ffi::sqlite3_column_blob(stmt.get_raw_stmt(), i) as *const c_char)
+                    CStr::from_ptr(ffi::sqlite3_column_blob(
+                        stmt.get_raw_stmt(),
+                        i,
+                    )
+                        as *const c_char)
                         .to_string_lossy()
                         .into_owned()
                 };
@@ -227,7 +257,9 @@ pub enum Cursor<'a> {
 }
 
 impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
-    fn from_iter<I: IntoIterator<Item = Cursor<'a>>>(cursors: I) -> Cursor<'a> {
+    fn from_iter<I: IntoIterator<Item = Cursor<'a>>>(
+        cursors: I,
+    ) -> Cursor<'a> {
         let mut modified = 0;
         let mut last: Option<Cursor<'a>> = None;
         for cursor in cursors {
@@ -254,7 +286,10 @@ impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
     }
 }
 
-fn get_entity_type(stmt: *mut ffi::sqlite3_stmt, i: i32) -> EntityType {
+fn get_entity_type(
+    stmt: *mut ffi::sqlite3_stmt,
+    i: i32,
+) -> EntityType {
     let entity_type = unsafe { ffi::sqlite3_column_type(stmt, i) };
     match entity_type {
         ffi::SQLITE_INTEGER => EntityType::Integer,
@@ -270,7 +305,9 @@ impl<'a> From<Cursor<'a>> for QueryResult {
     fn from(mut cursor: Cursor) -> QueryResult {
         match cursor {
             Cursor::OKCursor {} => QueryResult::OK {},
-            Cursor::DONECursor { modified_rows } => QueryResult::DONE { modified_rows },
+            Cursor::DONECursor { modified_rows } => {
+                QueryResult::DONE { modified_rows }
+            }
 
             Cursor::RowsCursor {
                 stmt,
@@ -280,13 +317,15 @@ impl<'a> From<Cursor<'a>> for QueryResult {
             } => {
                 let mut result = vec![];
                 while *previous_status == ffi::SQLITE_ROW {
-                    let mut row = Vec::with_capacity(num_columns as usize);
+                    let mut row =
+                        Vec::with_capacity(num_columns as usize);
                     for i in 0..num_columns {
                         let entity_value = Entity::new(stmt, i);
                         row.push(entity_value);
                     }
                     unsafe {
-                        *previous_status = ffi::sqlite3_step(stmt.get_raw_stmt());
+                        *previous_status =
+                            ffi::sqlite3_step(stmt.get_raw_stmt());
                     };
 
                     result.push(row);
@@ -307,11 +346,20 @@ impl Backup {
     }
 }
 
-pub fn create_backup(src: &RawConnection, dest: &RawConnection) -> Result<Backup, SQLite3Error> {
+pub fn create_backup(
+    src: &RawConnection,
+    dest: &RawConnection,
+) -> Result<Backup, SQLite3Error> {
     let dest_name = CString::new("main").unwrap();
     let src_name = CString::new("main").unwrap();
-    let result =
-        unsafe { ffi::sqlite3_backup_init(dest.db, dest_name.as_ptr(), src.db, src_name.as_ptr()) };
+    let result = unsafe {
+        ffi::sqlite3_backup_init(
+            dest.db,
+            dest_name.as_ptr(),
+            src.db,
+            src_name.as_ptr(),
+        )
+    };
     match result {
         null if null.is_null() => Err(dest.get_last_error()),
         ptr => Ok(Backup { bk: ptr }),

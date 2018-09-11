@@ -50,8 +50,8 @@ fn main() {
         }
     }
 
-    // let engine_pro = "-DENGINE_PRO=1";
-    let engine_pro = "-DENGINE_PRO=0";
+    let engine_pro = "-DENGINE_PRO=1";
+    //let engine_pro = "-DENGINE_PRO=0";
 
     let bindings = bindgen::Builder::default()
             .parse_callbacks(Box::new(SqliteTypeChooser))

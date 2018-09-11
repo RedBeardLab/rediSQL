@@ -461,7 +461,7 @@ class TestBruteHash(TestRediSQLWithExec):
 
 
 class TestBruteHashSyncronous(TestRediSQLWithExec):
-  def testSimple(self):
+  def testSimpleNow(self):
     with DB(self, "B"):
       catty = 5
       done = self.exec_naked("REDISQL.EXEC.NOW", "B", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")
@@ -493,7 +493,7 @@ class TestBruteHashSyncronous(TestRediSQLWithExec):
       self.assertTrue([3L, "cat:3", "3", None] in result)
       self.assertTrue([4L, "cat:4", "4", "6"] in result)
 
-  def test100(self):
+  def test100_now(self):
     with DB(self, "A"):
       catty = 100
       done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat TEXT, meow INT)")

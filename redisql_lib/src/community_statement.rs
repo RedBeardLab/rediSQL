@@ -28,11 +28,12 @@ unsafe impl Send for MultiStatement {}
 impl<'a> fmt::Display for MultiStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut buffer = String::new();
-        buffer = self.stmts.iter().fold(buffer, |mut buffer, stmt| {
-            buffer.push_str(&stmt.to_string());
-            buffer.push_str("\n");
-            buffer
-        });
+        buffer =
+            self.stmts.iter().fold(buffer, |mut buffer, stmt| {
+                buffer.push_str(&stmt.to_string());
+                buffer.push_str("\n");
+                buffer
+            });
         write!(f, "{}", buffer)
     }
 }
@@ -74,17 +75,25 @@ pub fn generate_statements(
     let arc_db = db.clone();
     let conn = arc_db.lock().unwrap();
     loop {
-        let mut stmt: *mut ffi::sqlite3_stmt = unsafe { mem::uninitialized() };
+        let mut stmt: *mut ffi::sqlite3_stmt =
+            unsafe { mem::uninitialized() };
 
         let r = unsafe {
-            ffi::sqlite3_prepare_v2(conn.get_db(), next_query, -1, &mut stmt, &mut next_query)
+            ffi::sqlite3_prepare_v2(
+                conn.get_db(),
+                next_query,
+                -1,
+                &mut stmt,
+                &mut next_query,
+            )
         };
         match r {
             ffi::SQLITE_OK => {
                 let stmt = Statement { stmt };
                 stmts.push(stmt);
                 if unsafe { *next_query } == 0 {
-                    let (num_parameters, parameters) = count_parameters(&stmts)?;
+                    let (num_parameters, parameters) =
+                        count_parameters(&stmts)?;
                     return Ok(MultiStatement {
                         stmts,
                         db,
@@ -99,15 +108,21 @@ pub fn generate_statements(
 }
 
 impl Statement {
-    fn execute(&self, db: &RawConnection) -> Result<Cursor, SQLite3Error> {
+    fn execute(
+        &self,
+        db: &RawConnection,
+    ) -> Result<Cursor, SQLite3Error> {
         match unsafe { ffi::sqlite3_step(self.stmt) } {
             ffi::SQLITE_OK => Ok(Cursor::OKCursor {}),
             ffi::SQLITE_DONE => {
-                let modified_rows = unsafe { ffi::sqlite3_changes(db.get_db()) };
+                let modified_rows =
+                    unsafe { ffi::sqlite3_changes(db.get_db()) };
                 Ok(Cursor::DONECursor { modified_rows })
             }
             ffi::SQLITE_ROW => {
-                let num_columns = unsafe { ffi::sqlite3_column_count(self.stmt) } as i32;
+                let num_columns = unsafe {
+                    ffi::sqlite3_column_count(self.stmt)
+                } as i32;
                 Ok(Cursor::RowsCursor {
                     stmt: self,
                     num_columns,
@@ -130,10 +145,14 @@ impl<'a> StatementTrait<'a> for Statement {
         Err(self.get_last_error())
     }
 
-    fn new(conn: Arc<Mutex<RawConnection>>, query: &str) -> Result<Statement, SQLite3Error> {
+    fn new(
+        conn: Arc<Mutex<RawConnection>>,
+        query: &str,
+    ) -> Result<Statement, SQLite3Error> {
         let raw_query = CString::new(query).unwrap();
 
-        let mut stmt: *mut ffi::sqlite3_stmt = unsafe { mem::uninitialized() };
+        let mut stmt: *mut ffi::sqlite3_stmt =
+            unsafe { mem::uninitialized() };
 
         let conn = conn.lock().unwrap();
         let r = unsafe {
@@ -158,7 +177,10 @@ impl<'a> StatementTrait<'a> for Statement {
         }
     }
 
-    fn bind_texts(&self, values: &[&str]) -> Result<SQLiteOK, SQLite3Error> {
+    fn bind_texts(
+        &self,
+        values: &[&str],
+    ) -> Result<SQLiteOK, SQLite3Error> {
         let mut index = 0;
         values
             .iter()
@@ -169,7 +191,11 @@ impl<'a> StatementTrait<'a> for Statement {
             .collect()
     }
 
-    fn bind_index(&self, index: i32, value: &str) -> Result<SQLiteOK, SQLite3Error> {
+    fn bind_index(
+        &self,
+        index: i32,
+        value: &str,
+    ) -> Result<SQLiteOK, SQLite3Error> {
         #[allow(non_snake_case)]
         fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
             Some(unsafe { mem::transmute(-1isize) })
@@ -206,16 +232,24 @@ impl<'a> StatementTrait<'a> for MultiStatement {
         let db = self.db.clone();
         let conn = db.lock().unwrap();
         debug!("Execute | Acquired db lock");
-        let rows_modified_before_executing = unsafe { ffi::sqlite3_total_changes(conn.get_db()) };
+        let rows_modified_before_executing =
+            unsafe { ffi::sqlite3_total_changes(conn.get_db()) };
         debug!("Execute | Read row modified before");
-        match self.stmts.iter().map(|stmt| stmt.execute(&conn)).collect() {
+        match self
+            .stmts
+            .iter()
+            .map(|stmt| stmt.execute(&conn))
+            .collect()
+        {
             Err(e) => Err(e),
             Ok(mut v) => {
                 debug!("Execute=> Executed trains of statements");
-                let rows_modified_after_executing =
-                    unsafe { ffi::sqlite3_total_changes(conn.get_db()) };
+                let rows_modified_after_executing = unsafe {
+                    ffi::sqlite3_total_changes(conn.get_db())
+                };
                 let total_modified_rows =
-                    rows_modified_after_executing - rows_modified_before_executing;
+                    rows_modified_after_executing
+                        - rows_modified_before_executing;
                 match v {
                     Cursor::DONECursor {
                         ref mut modified_rows,
@@ -236,13 +270,20 @@ impl<'a> StatementTrait<'a> for MultiStatement {
             }
         }
     }
-    fn bind_index(&self, index: i32, value: &str) -> Result<SQLiteOK, SQLite3Error> {
+    fn bind_index(
+        &self,
+        index: i32,
+        value: &str,
+    ) -> Result<SQLiteOK, SQLite3Error> {
         for stmt in &self.stmts {
             stmt.bind_index(index, value)?;
         }
         Ok(SQLiteOK::OK)
     }
-    fn bind_texts(&self, values: &[&str]) -> Result<SQLiteOK, SQLite3Error> {
+    fn bind_texts(
+        &self,
+        values: &[&str],
+    ) -> Result<SQLiteOK, SQLite3Error> {
         if values.len() != self.number_parameters as usize {
             return Err(SQLite3Error {
                 code: 2021,
@@ -266,7 +307,10 @@ impl<'a> StatementTrait<'a> for MultiStatement {
         }
         Ok(SQLiteOK::OK)
     }
-    fn new(conn: Arc<Mutex<RawConnection>>, query: &str) -> Result<MultiStatement, SQLite3Error> {
+    fn new(
+        conn: Arc<Mutex<RawConnection>>,
+        query: &str,
+    ) -> Result<MultiStatement, SQLite3Error> {
         generate_statements(conn, query)
     }
     fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt {
@@ -284,7 +328,9 @@ impl<'a> StatementTrait<'a> for MultiStatement {
     }
 }
 
-fn count_parameters(statements: &[Statement]) -> Result<(i32, Vec<Vec<Parameters>>), SQLite3Error> {
+fn count_parameters(
+    statements: &[Statement],
+) -> Result<(i32, Vec<Vec<Parameters>>), SQLite3Error> {
     let error_wrong_paramenter = SQLite3Error {
         code: 1021,
         error_message: String::from(
@@ -305,7 +351,9 @@ fn count_parameters(statements: &[Statement]) -> Result<(i32, Vec<Vec<Parameters
             let mut discriminant: Vec<_> = parameters
                 .clone()
                 .iter()
-                .flat_map(|params| params.iter().map(|p| mem::discriminant(p)))
+                .flat_map(|params| {
+                    params.iter().map(|p| mem::discriminant(p))
+                })
                 .collect();
             discriminant.dedup();
             if discriminant.len() > 1 {
@@ -313,7 +361,11 @@ fn count_parameters(statements: &[Statement]) -> Result<(i32, Vec<Vec<Parameters
             }
             match discriminant.first() {
                 None => return Ok((0, vec![])),
-                Some(d) if *d == mem::discriminant(&Parameters::Anonymous) => {
+                Some(d)
+                    if *d == mem::discriminant(
+                        &Parameters::Anonymous,
+                    ) =>
+                {
                     return Err(error_wrong_paramenter);
                 }
                 Some(_) => {}
@@ -335,18 +387,30 @@ fn count_parameters(statements: &[Statement]) -> Result<(i32, Vec<Vec<Parameters
         }
     }
 }
-fn get_parameter_name(stmt: &Statement, index: i32) -> Result<Option<Parameters>, SQLite3Error> {
-    let parameter_name_ptr = unsafe { ffi::sqlite3_bind_parameter_name(stmt.stmt, index) };
-    let index_parameter =
-        unsafe { ffi::sqlite3_bind_parameter_index(stmt.stmt, parameter_name_ptr) };
+fn get_parameter_name(
+    stmt: &Statement,
+    index: i32,
+) -> Result<Option<Parameters>, SQLite3Error> {
+    let parameter_name_ptr =
+        unsafe { ffi::sqlite3_bind_parameter_name(stmt.stmt, index) };
+    let index_parameter = unsafe {
+        ffi::sqlite3_bind_parameter_index(
+            stmt.stmt,
+            parameter_name_ptr,
+        )
+    };
     match index_parameter {
         0 => Ok(None),
         n => Ok(Some(Parameters::Named { index: n })),
     }
 }
 
-fn get_parameters(stmt: &Statement) -> Result<Vec<Parameters>, SQLite3Error> {
-    let total_paramenters = unsafe { ffi::sqlite3_bind_parameter_count(stmt.stmt) } as usize;
+fn get_parameters(
+    stmt: &Statement,
+) -> Result<Vec<Parameters>, SQLite3Error> {
+    let total_paramenters = unsafe {
+        ffi::sqlite3_bind_parameter_count(stmt.stmt)
+    } as usize;
     if total_paramenters == 0 {
         return Ok(vec![]);
     }
@@ -369,7 +433,8 @@ mod test {
 
     #[test]
     fn test_multiple_statements() {
-        let db = sql::open_connection(String::from(":memory:")).unwrap();
+        let db =
+            sql::open_connection(String::from(":memory:")).unwrap();
         let statements = String::from("BEGIN; SELECT 'a'; COMMIT;");
         let stmts = generate_statements(&db, statements).unwrap();
         assert!(stmts.stmts.len() == 3);
@@ -383,14 +448,17 @@ mod test {
 
     #[test]
     fn count_inside_nested_vector() {
-        let nested_vector = vec![vec![1, 2, 3], vec![4, 5, 6, 6], vec![1, 1, 0]];
-        let ten: i32 = nested_vector.iter().map(|v| v.len() as i32).sum();
+        let nested_vector =
+            vec![vec![1, 2, 3], vec![4, 5, 6, 6], vec![1, 1, 0]];
+        let ten: i32 =
+            nested_vector.iter().map(|v| v.len() as i32).sum();
         assert!(ten == 10);
     }
 
     #[test]
     fn test_parameters_standard() {
-        let db = sql::open_connection(String::from(":memory:")).unwrap();
+        let db =
+            sql::open_connection(String::from(":memory:")).unwrap();
         let stmts = String::from(
             "BEGIN; SELECT CASE WHEN ?1 > ?2 \
              THEN ?3 END;",
@@ -401,7 +469,8 @@ mod test {
 
     #[test]
     fn test_gap_parameters() {
-        let db = sql::open_connection(String::from(":memory:")).unwrap();
+        let db =
+            sql::open_connection(String::from(":memory:")).unwrap();
         let stmts = String::from(
             "SELECT CASE WHEN ?1 > ?3 \
              THEN ?10 END;",
@@ -413,7 +482,8 @@ mod test {
 
     #[test]
     fn test_gap_but_valid() {
-        let db = sql::open_connection(String::from(":memory:")).unwrap();
+        let db =
+            sql::open_connection(String::from(":memory:")).unwrap();
         let stmts = String::from(
             "BEGIN; \
             SELECT CASE WHEN ?1 > ?2 THEN ?3 END; \
@@ -426,7 +496,8 @@ mod test {
 
     #[test]
     fn test_nameless_parameters_do_not_count() {
-        let db = sql::open_connection(String::from(":memory:")).unwrap();
+        let db =
+            sql::open_connection(String::from(":memory:")).unwrap();
         let stmts = String::from(
             "BEGIN; \
             SELECT CASE WHEN ? > ? THEN ? END; \

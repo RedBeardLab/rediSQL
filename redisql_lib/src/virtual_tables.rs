@@ -89,7 +89,9 @@ impl<'vtab> Drop for VirtualTableCursor<'vtab> {
 }
 
 impl<'vtab> VirtualTableCursor<'vtab> {
-    unsafe fn from_raw_vtab(vtab: *mut VirtualTable) -> VirtualTableCursor<'vtab> {
+    unsafe fn from_raw_vtab(
+        vtab: *mut VirtualTable,
+    ) -> VirtualTableCursor<'vtab> {
         VirtualTableCursor {
             vtabc: ffi::sqlite3_vtab_cursor {
                 pVtab: ptr::null_mut(),
@@ -168,7 +170,8 @@ fn create_table_name(
 ) -> Result<(String, Vec<&'static str>), &'static str> {
     let table_name = unsafe { get_str_at_index(argv, 2)? };
     let mut table = format!("CREATE TABLE {} (", table_name);
-    let mut columns: Vec<&str> = Vec::with_capacity((argc - 3) as usize);
+    let mut columns: Vec<&str> =
+        Vec::with_capacity((argc - 3) as usize);
 
     debug!("Argc: {}, columns size: {}", argc, (argc - 3));
 
@@ -190,7 +193,10 @@ fn create_table_name(
 
 fn set_error(to_set: *mut *mut raw::c_char, error: &str) {
     let error = CString::new(error).unwrap();
-    unsafe { *to_set = ffi::sqlite3_mprintf(error.as_ptr() as *const raw::c_char) };
+    unsafe {
+        *to_set =
+            ffi::sqlite3_mprintf(error.as_ptr() as *const raw::c_char)
+    };
 }
 
 pub unsafe extern "C" fn create_brute_hash(
@@ -202,7 +208,10 @@ pub unsafe extern "C" fn create_brute_hash(
     pz_err: *mut *mut raw::c_char,
 ) -> raw::c_int {
     debug!("Creating REDISQL_TABLES_BRUTE_HASH");
-    let (table_name, columns) = match create_table_name(argc as isize, argv) {
+    let (table_name, columns) = match create_table_name(
+        argc as isize,
+        argv,
+    ) {
         Ok((name, columns)) => (CString::new(name).unwrap(), columns),
         Err(err) => {
             set_error(pz_err, err);
@@ -210,11 +219,14 @@ pub unsafe extern "C" fn create_brute_hash(
         }
     };
     debug!("Table: {:?}", table_name);
-    if ffi::sqlite3_declare_vtab(conn, table_name.as_ptr()) != ffi::SQLITE_OK {
+    if ffi::sqlite3_declare_vtab(conn, table_name.as_ptr())
+        != ffi::SQLITE_OK
+    {
         set_error(pz_err, "Impossible to create the vtab");
         return ffi::SQLITE_ERROR;
     }
-    let redis_context: Arc<Mutex<RefCell<Option<Context>>>> = Arc::from_raw(aux as *mut Mutex<_>);
+    let redis_context: Arc<Mutex<RefCell<Option<Context>>>> =
+        Arc::from_raw(aux as *mut Mutex<_>);
     let vtab = Box::new(VirtualTable::new(redis_context, columns));
 
     *pp_vtab = Box::into_raw(vtab) as *mut ffi::sqlite3_vtab;
@@ -234,7 +246,11 @@ extern "C" fn best_index_brute_hash(
     ffi::SQLITE_OK
 }
 
-fn do_scan(redis_context: &Context, index: &str, to_match: &str) -> CallReply {
+fn do_scan(
+    redis_context: &Context,
+    index: &str,
+    to_match: &str,
+) -> CallReply {
     let scan = CString::new("SCAN").unwrap();
 
     // 3 Null terminated C string as argument
@@ -260,7 +276,9 @@ fn do_scan(redis_context: &Context, index: &str, to_match: &str) -> CallReply {
     unsafe { CallReply::new(reply) }
 }
 
-fn get_next_index_and_results(cr: &CallReply) -> Option<(String, VecDeque<String>)> {
+fn get_next_index_and_results(
+    cr: &CallReply,
+) -> Option<(String, VecDeque<String>)> {
     debug!("get_next_index_and_results");
     let index_cr = cr.access_array_subelement(0)?;
     let index = index_cr.access_string()?;
@@ -276,7 +294,9 @@ fn get_next_index_and_results(cr: &CallReply) -> Option<(String, VecDeque<String
     Some((index, results))
 }
 
-fn advance_redis_cursor(vtab_cur: &mut VirtualTableCursor) -> Result<(), ()> {
+fn advance_redis_cursor(
+    vtab_cur: &mut VirtualTableCursor,
+) -> Result<(), ()> {
     let index = match vtab_cur.get_cursor() {
         None => String::from("0"),
         Some(i) => i,
@@ -318,7 +338,8 @@ extern "C" fn filter_brute_hash(
 ) -> i32 {
     debug!("Filter");
 
-    let mut vtab_cur = unsafe { &mut *(p_vtab_cursor as *mut VirtualTableCursor) };
+    let mut vtab_cur =
+        unsafe { &mut *(p_vtab_cursor as *mut VirtualTableCursor) };
 
     debug!("Filter got vtab_cur");
 
@@ -329,10 +350,13 @@ extern "C" fn filter_brute_hash(
     }
 }
 
-extern "C" fn next_brute_hash(p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor) -> i32 {
+extern "C" fn next_brute_hash(
+    p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor,
+) -> i32 {
     debug!("Next");
 
-    let vtab_cur = unsafe { &mut *(p_vtab_cursor as *mut VirtualTableCursor) };
+    let vtab_cur =
+        unsafe { &mut *(p_vtab_cursor as *mut VirtualTableCursor) };
 
     let key = vtab_cur.rows.as_mut().unwrap().pop_front().unwrap();
 
@@ -343,7 +367,11 @@ extern "C" fn next_brute_hash(p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor) -> i
 }
 
 #[no_mangle]
-pub fn do_hget(redis_context: &Context, obj: &str, key: &str) -> CallReply {
+pub fn do_hget(
+    redis_context: &Context,
+    obj: &str,
+    key: &str,
+) -> CallReply {
     let hmget = CString::new("HGET").unwrap();
 
     let call_specifiers = CString::new("!cc").unwrap();
@@ -375,7 +403,8 @@ extern "C" fn column_brute_hash(
 ) -> i32 {
     debug!("Column {}", n);
 
-    let vtab_cur = unsafe { &*(p_vtab_cursor as *mut VirtualTableCursor) };
+    let vtab_cur =
+        unsafe { &*(p_vtab_cursor as *mut VirtualTableCursor) };
 
     debug!("Column get vtab");
 
@@ -403,9 +432,13 @@ extern "C" fn column_brute_hash(
                 } else {
                     let key = vtab_cur.columns[n as usize];
 
-                    debug!("Column Getting column from {} -> {}", obj, key);
+                    debug!(
+                        "Column Getting column from {} -> {}",
+                        obj, key
+                    );
 
-                    let locked = vtab_cur.redis_context.lock().unwrap();
+                    let locked =
+                        vtab_cur.redis_context.lock().unwrap();
 
                     let redis_context = locked.borrow();
                     let rc = redis_context.as_ref().unwrap();
@@ -443,16 +476,26 @@ extern "C" fn column_brute_hash(
     ffi::SQLITE_OK
 }
 
-extern "C" fn disconnect_brute_hash(p_vtab: *mut ffi::sqlite3_vtab) -> i32 {
+extern "C" fn disconnect_brute_hash(
+    p_vtab: *mut ffi::sqlite3_vtab,
+) -> i32 {
     debug!("Disconnect");
-    let result = VirtualTable::with_vtab(p_vtab, |ref _vtab| -> i32 { ffi::SQLITE_OK });
+    let result = VirtualTable::with_vtab(
+        p_vtab,
+        |ref _vtab| -> i32 { ffi::SQLITE_OK },
+    );
     debug!("Disconnect Exit");
     result
 }
 
-extern "C" fn destroy_brute_hash(p_vtab: *mut ffi::sqlite3_vtab) -> i32 {
+extern "C" fn destroy_brute_hash(
+    p_vtab: *mut ffi::sqlite3_vtab,
+) -> i32 {
     debug!("Disconnect");
-    let result = VirtualTable::with_vtab(p_vtab, |ref _vtab| -> i32 { ffi::SQLITE_OK });
+    let result = VirtualTable::with_vtab(
+        p_vtab,
+        |ref _vtab| -> i32 { ffi::SQLITE_OK },
+    );
     debug!("Disconnect Exit");
     result
 }
@@ -467,23 +510,31 @@ extern "C" fn open_brute_hash(
         let vtab_cur = Box::new(VirtualTableCursor::from_raw_vtab(
             p_vtab as *mut VirtualTable,
         ));
-        *p_vtab_cursor = Box::into_raw(vtab_cur) as *mut ffi::sqlite3_vtab_cursor
+        *p_vtab_cursor =
+            Box::into_raw(vtab_cur) as *mut ffi::sqlite3_vtab_cursor
     };
     debug!("Open Exit");
     ffi::SQLITE_OK
 }
 
-extern "C" fn close_brute_hash(p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor) -> i32 {
+extern "C" fn close_brute_hash(
+    p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor,
+) -> i32 {
     debug!("Close");
-    unsafe { Box::from_raw(p_vtab_cursor as *mut VirtualTableCursor) };
+    unsafe {
+        Box::from_raw(p_vtab_cursor as *mut VirtualTableCursor)
+    };
     debug!("Close Exit");
     ffi::SQLITE_OK
 }
 
-extern "C" fn eof_brute_hash(p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor) -> i32 {
+extern "C" fn eof_brute_hash(
+    p_vtab_cursor: *mut ffi::sqlite3_vtab_cursor,
+) -> i32 {
     debug!("EOF");
 
-    let mut vtab_cur = unsafe { &mut *(p_vtab_cursor as *mut VirtualTableCursor) };
+    let mut vtab_cur =
+        unsafe { &mut *(p_vtab_cursor as *mut VirtualTableCursor) };
 
     debug!("vtab_cur begin: {:?}", vtab_cur);
     let result = match vtab_cur.rows.as_ref().unwrap().len() {
@@ -518,40 +569,46 @@ extern "C" fn rowid_brute_hash(
 ) -> i32 {
     debug!("Rowid");
 
-    let vtab_cur = unsafe { &*(p_vtab_cursor as *mut VirtualTableCursor) };
+    let vtab_cur =
+        unsafe { &*(p_vtab_cursor as *mut VirtualTableCursor) };
 
     match vtab_cur.rows {
         None => {
             debug!("Empty rows");
             return ffi::SQLITE_ERROR;
         }
-        Some(ref rows) => match rows.front() {
-            None => {
-                debug!("No front row");
-                return ffi::SQLITE_ERROR;
-            }
-            Some(obj) => match obj.split(':').nth(1) {
+        Some(ref rows) => {
+            match rows.front() {
                 None => {
-                    debug!("Error in formatting of the keys");
+                    debug!("No front row");
                     return ffi::SQLITE_ERROR;
                 }
-                Some(index) => match index.parse::<i64>() {
-                    Err(_) => {
-                        debug!("Impossible to parse index {} into i64", index);
+                Some(obj) => match obj.split(':').nth(1) {
+                    None => {
+                        debug!("Error in formatting of the keys");
                         return ffi::SQLITE_ERROR;
                     }
-                    Ok(idx) => unsafe {
-                        *row_id = idx;
+                    Some(index) => match index.parse::<i64>() {
+                        Err(_) => {
+                            debug!("Impossible to parse index {} into i64", index);
+                            return ffi::SQLITE_ERROR;
+                        }
+                        Ok(idx) => unsafe {
+                            *row_id = idx;
+                        },
                     },
                 },
-            },
-        },
+            }
+        }
     }
 
     debug!("Rowid Exit");
     ffi::SQLITE_OK
 }
 
-extern "C" fn rename_brute_hash(_p_vtab: *mut ffi::sqlite3_vtab, _new: *const raw::c_char) -> i32 {
+extern "C" fn rename_brute_hash(
+    _p_vtab: *mut ffi::sqlite3_vtab,
+    _new: *const raw::c_char,
+) -> i32 {
     ffi::SQLITE_OK
 }

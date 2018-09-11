@@ -13,7 +13,10 @@ pub struct RediSQLError {
 }
 
 impl RediSQLError {
-    pub fn new(debug: String, error_description: String) -> RediSQLError {
+    pub fn new(
+        debug: String,
+        error_description: String,
+    ) -> RediSQLError {
         RediSQLError {
             debug,
             error_description,
