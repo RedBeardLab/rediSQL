@@ -30,21 +30,32 @@ impl Context {
         self.ctx
     }
     pub fn thread_safe(blocked_client: &BlockedClient) -> Context {
-        let ctx =
-            unsafe { ffi::RedisModule_GetThreadSafeContext.unwrap()(blocked_client.as_ptr()) };
+        let ctx = unsafe {
+            ffi::RedisModule_GetThreadSafeContext.unwrap()(
+                blocked_client.as_ptr(),
+            )
+        };
         Context {
             ctx,
             thread_safe: true,
         }
     }
     pub fn lock(&self) {
-        unsafe {
-            ffi::RedisModule_ThreadSafeContextLock.unwrap()(self.as_ptr());
+        if self.thread_safe {
+            unsafe {
+                ffi::RedisModule_ThreadSafeContextLock.unwrap()(
+                    self.as_ptr(),
+                );
+            }
         }
     }
     pub fn release(&self) {
-        unsafe {
-            ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(self.as_ptr());
+        if self.thread_safe {
+            unsafe {
+                ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(
+                    self.as_ptr(),
+                );
+            }
         }
     }
 }
