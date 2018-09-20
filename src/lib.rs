@@ -806,14 +806,13 @@ unsafe extern "C" fn rdb_load(
     }
 }
 
-// TODO attention with the metadata table
-// What should happen?
 #[allow(non_snake_case)]
 extern "C" fn Backup(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
+    debug!("Backup | Start");
     let (context, argvector) = r::create_argument(ctx, argv, argc);
 
     if argvector.len() != 3 {
@@ -857,18 +856,38 @@ extern "C" fn Backup(
     }
     let dest_db = dest_db.unwrap();
 
-    let source_connection = &source_db.loop_data.get_db();
-    let dest_connection = &dest_db.loop_data.get_db();
+    let blocked_client = r::rm::BlockedClient {
+        client: unsafe {
+            r::rm::ffi::RedisModule_BlockClient.unwrap()(
+                context.as_ptr(),
+                Some(reply_create_statement),
+                Some(timeout),
+                Some(free_privdata),
+                10000,
+            )
+        },
+    };
 
-    let source_connection = source_connection.lock().unwrap();
-    let dest_connection = dest_connection.lock().unwrap();
+    let source_connection = source_db.loop_data.get_db();
+    let dest_connection = dest_db.loop_data.get_db();
 
-    match r::make_backup(&source_connection, &dest_connection) {
-        Err(e) => e.reply(&context),
-        _ => {
-            let ok = r::QueryResult::OK {};
-            ok.reply(&context)
+    let cmd = r::Command::Copy {
+        source: source_connection,
+        destination: dest_connection,
+        client: blocked_client,
+    };
+
+    let ch = &source_db.tx.clone();
+    std::mem::forget(source_db);
+    std::mem::forget(dest_db);
+
+    debug!("Backup | End");
+    match ch.send(cmd) {
+        Ok(()) => {
+            debug!("Backup | Successfully send command");
+            r::rm::ffi::REDISMODULE_OK
         }
+        Err(_) => r::rm::ffi::REDISMODULE_OK,
     }
 }
 

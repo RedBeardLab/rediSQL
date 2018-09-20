@@ -489,6 +489,11 @@ pub enum Command {
         arguments: Vec<&'static str>,
         client: BlockedClient,
     },
+    Copy {
+        source: Arc<Mutex<sql::RawConnection>>,
+        destination: Arc<Mutex<sql::RawConnection>>,
+        client: BlockedClient,
+    },
 }
 
 pub enum QueryResult {
@@ -720,6 +725,20 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                         return_value(&client, result);
                     },
                 );
+            }
+            Ok(Command::Copy {
+                source,
+                destination,
+                client,
+            }) => {
+                let source = source.lock().unwrap();
+                let destination = destination.lock().unwrap();
+                let result = match make_backup(&source, &destination)
+                {
+                    Err(e) => Err(RediSQLError::from(e)),
+                    Ok(_) => Ok(QueryResult::OK {}),
+                };
+                return_value(&client, result);
             }
             Ok(Command::Stop) => {
                 debug!("Stop, exiting from work loop");
@@ -1020,7 +1039,8 @@ pub fn get_dbkey_from_name(
     name: &str,
 ) -> Result<DBKey, i32> {
     let dbptr = get_dbkeyptr_from_name(ctx, name)?;
-    Ok(unsafe { dbptr.read() })
+    let dbkey = unsafe { dbptr.read() };
+    Ok(dbkey)
 }
 
 pub fn with_ch_and_loopdata<F>(
