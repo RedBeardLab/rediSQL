@@ -580,48 +580,41 @@ extern "C" fn CreateDB(
                         _ => (":memory:", true),
                     };
                     match sql::get_arc_connection(path) {
-                        Ok(rc) => match r::create_metadata_table(
-                            rc.clone(),
-                        ).and_then(|_| {
-                            r::insert_metadata(
-                                rc.clone(),
-                                "setup",
-                                "path",
-                                path,
-                            )
-                        })
-                            .and_then(|_| {
-                                r::enable_foreign_key(rc.clone())
-                            })
-                            .and_then(|_| vtab::register_modules(&rc))
-                        {
-                            Err(e) => e.reply(&context),
-                            Ok(mut vtab_context) => {
-                                let (tx, rx) = channel();
-                                let db = r::DBKey::new_from_arc(
-                                    tx,
-                                    rc,
-                                    in_memory,
-                                    vtab_context,
-                                );
-                                let mut loop_data =
-                                    db.loop_data.clone();
-                                thread::spawn(move || {
-                                    r::listen_and_execute(
-                                        &mut loop_data,
-                                        &rx,
+                        Ok(rc) => {
+                            match r::create_metadata_table(rc.clone())
+                                .and_then(|_| {
+                                    r::enable_foreign_key(rc.clone())
+                                }).and_then(|_| {
+                                    vtab::register_modules(&rc)
+                                }) {
+                                Err(e) => e.reply(&context),
+                                Ok(mut vtab_context) => {
+                                    let (tx, rx) = channel();
+                                    let db = r::DBKey::new_from_arc(
+                                        tx,
+                                        rc,
+                                        in_memory,
+                                        vtab_context,
                                     );
-                                });
-                                let ptr = Box::into_raw(Box::new(db));
-                                let type_set = unsafe {
-                                    r::rm::ffi::RedisModule_ModuleTypeSetValue.unwrap()(
+                                    let mut loop_data =
+                                        db.loop_data.clone();
+                                    thread::spawn(move || {
+                                        r::listen_and_execute(
+                                            &mut loop_data,
+                                            &rx,
+                                        );
+                                    });
+                                    let ptr =
+                                        Box::into_raw(Box::new(db));
+                                    let type_set = unsafe {
+                                        r::rm::ffi::RedisModule_ModuleTypeSetValue.unwrap()(
                                         safe_key.key,
                                         r::rm::ffi::DBType,
                                         ptr as *mut std::os::raw::c_void,
                                     )
-                                };
+                                    };
 
-                                match type_set {
+                                    match type_set {
                                     r::rm::ffi::REDISMODULE_OK => {
                                         let ok =
                                             r::QueryResult::OK {};
@@ -649,8 +642,9 @@ extern "C" fn CreateDB(
                                         }
                                     }
                                 }
+                                }
                             }
-                        },
+                        }
                         Err(_) => {
                             let error = CString::new(
                                 "Err - Error \
@@ -830,9 +824,9 @@ extern "C" fn Backup(
     let source_db =
         get_dbkey_from_name(context.as_ptr(), argvector[1]);
     if source_db.is_err() {
-        let error = CString::new(
-            "Error in opening the SOURCE database",
-        ).unwrap();
+        let error =
+            CString::new("Error in opening the SOURCE database")
+                .unwrap();
         return unsafe {
             r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                 context.as_ptr(),
@@ -844,9 +838,9 @@ extern "C" fn Backup(
 
     let dest_db = get_dbkey_from_name(context.as_ptr(), argvector[2]);
     if dest_db.is_err() {
-        let error = CString::new(
-            "Error in opening the DESTINATION database",
-        ).unwrap();
+        let error =
+            CString::new("Error in opening the DESTINATION database")
+                .unwrap();
         return unsafe {
             r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                 context.as_ptr(),

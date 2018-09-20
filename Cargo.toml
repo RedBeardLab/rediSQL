@@ -18,4 +18,4 @@ engine_pro = {path = "./engine_pro", optional = true}
 [features]
 default = []
 pro = ["engine_pro"]
-# trial = ["engine_pro/trial"]
+trial = ["engine_pro/trial"]
