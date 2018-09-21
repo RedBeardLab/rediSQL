@@ -862,10 +862,6 @@ extern "C" fn MakeCopy(
         },
     };
 
-    /*
-    let source_connection = source_db.loop_data.get_db();
-    let dest_connection = dest_db.loop_data.get_db();
-    */
     let ch = &source_db.tx.clone();
 
     let cmd = r::Command::MakeCopy {
@@ -874,15 +870,13 @@ extern "C" fn MakeCopy(
         client: blocked_client,
     };
 
-    /*
-    std::mem::forget(source_db);
-    std::mem::forget(dest_db);
-    */
-
     debug!("MakeCopy | End");
     match ch.send(cmd) {
         Ok(()) => {
             debug!("MakeCopy | Successfully send command");
+            unsafe {
+                Replicate(&context, "REDISQL.COPY.NOW", argv, argc);
+            }
             r::rm::ffi::REDISMODULE_OK
         }
         Err(_) => r::rm::ffi::REDISMODULE_OK,
@@ -1033,10 +1027,9 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
-    match register_function(
+    match register_write_function(
         &ctx,
         String::from("REDISQL.COPY"),
-        String::from("readonly"),
         MakeCopy,
     ) {
         Ok(()) => (),

@@ -592,6 +592,35 @@ class TestCopy(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
         self.assertEquals(result, [[1L]])
 
+class TestCopySyncronous(TestRediSQLWithExec):
+    def test_copy_now_mem_from_mem(self):
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        self.assertEquals(done, "OK")
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        self.assertEquals(done, "OK")
+        done = self.exec_naked("REDISQL.EXEC", "DB1", "CREATE TABLE foo(a INT);")
+        self.assertEquals(done, ["DONE", 0L])
+
+        for i in xrange(10):
+            done = self.exec_naked("REDISQL.EXEC", "DB1", "INSERT INTO foo VALUES({})".format(i))
+            self.assertEquals(done, ["DONE", 1L])
+
+        done = self.exec_naked("REDISQL.COPY.NOW", "DB1", "DB2")
+        result = self.exec_naked("REDISQL.QUERY", "DB2", "SELECT a FROM foo ORDER BY a")
+        self.assertEquals(result, [[0L], [1L], [2L], [3L], [4L], [5L], [6L], [7L], [8L], [9L]])
+
+    def test_statements_copy_now_mem_from_mem(self):
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        self.assertEquals(done, "OK")
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        self.assertEquals(done, "OK")
+        done = self.exec_naked("REDISQL.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
+        self.assertEquals(done, "OK")
+
+        done = self.exec_naked("REDISQL.COPY.NOW", "DB1", "DB2")
+        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
+        self.assertEquals(result, [[1L]])
+
 
 if __name__ == '__main__':
    unittest.main()
