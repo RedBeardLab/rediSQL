@@ -435,9 +435,9 @@ pub unsafe fn string_ptr_len(
     str: *mut rm::ffi::RedisModuleString,
 ) -> &'static str {
     let mut len = 0;
-    let base = rm::ffi::RedisModule_StringPtrLen.unwrap()(
-        str, &mut len,
-    ) as *mut u8;
+    let base =
+        rm::ffi::RedisModule_StringPtrLen.unwrap()(str, &mut len)
+            as *mut u8;
     let slice = slice::from_raw_parts(base, len);
     str::from_utf8_unchecked(slice)
 }
@@ -489,9 +489,9 @@ pub enum Command {
         arguments: Vec<&'static str>,
         client: BlockedClient,
     },
-    Copy {
-        source: Arc<Mutex<sql::RawConnection>>,
-        destination: Arc<Mutex<sql::RawConnection>>,
+    MakeCopy {
+        source: DBKey,
+        destination: DBKey,
         client: BlockedClient,
     },
 }
@@ -545,6 +545,32 @@ pub fn do_query(
     }
 }
 
+/// implements the copy of the source database into the destination one
+/// it also leak the two DBKeys
+pub fn do_copy(
+    source: DBKey,
+    destination: DBKey,
+) -> Result<QueryResult, err::RediSQLError> {
+    let source_connection = source.loop_data.get_db();
+    let destination_connection = destination.loop_data.get_db();
+
+    let backup_result = {
+        let source_db = source_connection.lock().unwrap();
+        let destination_db = destination_connection.lock().unwrap();
+        match make_backup(&source_db, &destination_db) {
+            Err(e) => Err(RediSQLError::from(e)),
+            Ok(_) => Ok(QueryResult::OK {}),
+        }
+    };
+
+    restore_previous_statements(&destination.loop_data);
+
+    std::mem::forget(source);
+    std::mem::forget(destination);
+
+    backup_result
+}
+
 fn bind_statement<'a>(
     stmt: &'a MultiStatement,
     arguments: &[&str],
@@ -577,6 +603,13 @@ impl error::Error for RedisError {
     }
 }
 
+/// restore_previous_statements wread the statements written in the database and add them to the
+/// loopdata datastructure.
+/// At the moment this function returns `()` no matter if there are errors or not.
+/// Errors are pretty unlikely, especially if nobody touched manually the metadata database, but
+/// still they may happens.
+/// I am not sure if it is a good idea or if I should upgrade the code to return an error, and
+/// maybe just ignore the error to keep the whole flow as it is now.
 fn restore_previous_statements<'a, L: 'a + LoopData>(
     loopdata: &L,
 ) -> () {
@@ -726,18 +759,13 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     },
                 );
             }
-            Ok(Command::Copy {
+            Ok(Command::MakeCopy {
                 source,
                 destination,
                 client,
             }) => {
-                let source = source.lock().unwrap();
-                let destination = destination.lock().unwrap();
-                let result = match make_backup(&source, &destination)
-                {
-                    Err(e) => Err(RediSQLError::from(e)),
-                    Ok(_) => Ok(QueryResult::OK {}),
-                };
+                // The DBKeys MUST be leaked, they are leaked by do_copy
+                let result = do_copy(source, destination);
                 return_value(&client, result);
             }
             Ok(Command::Stop) => {
@@ -819,7 +847,7 @@ impl Drop for DBKey {
 pub fn create_metadata_table(
     db: Arc<Mutex<sql::RawConnection>>,
 ) -> Result<(), sql::SQLite3Error> {
-    let statement = "CREATE TABLE RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
+    let statement = "CREATE TABLE IF NOT EXISTS RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
     let stmt = MultiStatement::new(db, statement)?;
     stmt.execute()?;
@@ -1018,10 +1046,8 @@ pub fn get_dbkeyptr_from_name(
         rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
     };
     if unsafe {
-        rm::ffi::DBType
-            == rm::ffi::RedisModule_ModuleTypeGetType.unwrap()(
-                safe_key.key,
-            )
+        rm::ffi::DBType == rm::ffi::RedisModule_ModuleTypeGetType
+            .unwrap()(safe_key.key)
     } {
         let db_ptr = unsafe {
             rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(

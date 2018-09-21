@@ -801,12 +801,12 @@ unsafe extern "C" fn rdb_load(
 }
 
 #[allow(non_snake_case)]
-extern "C" fn Backup(
+extern "C" fn MakeCopy(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    debug!("Backup | Start");
+    debug!("MakeCopy | Start");
     let (context, argvector) = r::create_argument(ctx, argv, argc);
 
     if argvector.len() != 3 {
@@ -862,23 +862,27 @@ extern "C" fn Backup(
         },
     };
 
+    /*
     let source_connection = source_db.loop_data.get_db();
     let dest_connection = dest_db.loop_data.get_db();
+    */
+    let ch = &source_db.tx.clone();
 
-    let cmd = r::Command::Copy {
-        source: source_connection,
-        destination: dest_connection,
+    let cmd = r::Command::MakeCopy {
+        source: source_db,
+        destination: dest_db,
         client: blocked_client,
     };
 
-    let ch = &source_db.tx.clone();
+    /*
     std::mem::forget(source_db);
     std::mem::forget(dest_db);
+    */
 
-    debug!("Backup | End");
+    debug!("MakeCopy | End");
     match ch.send(cmd) {
         Ok(()) => {
-            debug!("Backup | Successfully send command");
+            debug!("MakeCopy | Successfully send command");
             r::rm::ffi::REDISMODULE_OK
         }
         Err(_) => r::rm::ffi::REDISMODULE_OK,
@@ -1031,9 +1035,9 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function(
         &ctx,
-        String::from("REDISQL.BACKUP"),
+        String::from("REDISQL.COPY"),
         String::from("readonly"),
-        Backup,
+        MakeCopy,
     ) {
         Ok(()) => (),
         Err(e) => return e,
