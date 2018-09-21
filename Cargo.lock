@@ -360,7 +360,7 @@ dependencies = [
 
 [[package]]
 name = "rediSQL"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "engine_pro 0.4.0",
  "env_logger 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
