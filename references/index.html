@@ -201,6 +201,8 @@
         
             <li><a href="#redisqlupdate_statement">REDISQL.UPDATE_STATEMENT</a></li>
         
+            <li><a href="#redisqlcopy">REDISQL.COPY</a></li>
+        
     
         <li class="main "><a href="#virtual-tables">Virtual Tables</a></li>
         
@@ -387,6 +389,25 @@ So if the statements is from the following query:</p>
 <li><a href="#redisqlexec_statement"><code>REDISQL.EXEC_STATEMENT</code></a></li>
 <li><a href="#redisqldelete_statement"><code>REDISQL.DELETE_STATEMENT</code></a></li>
 <li><a href="https://redis.io/topics/modules-blocking-ops">Redis Blocking Command</a></li>
+</ol>
+<h2 id="redisqlcopy">REDISQL.COPY</h2>
+<h4 id="redisqlcopynow-db_key_source-db_key_destination">REDISQL.COPY[.NOW] db_key_source db_key_destination</h4>
+<p>The command copies the source database into the destination database.</p>
+<p>The content of the destination databases is completely ignored and lost.</p>
+<p>It is not important if the databases are stored in memory or backed by disk, the <code>COPY</code> command will work nevertheless.</p>
+<p>This command is useful to:</p>
+<ol>
+<li>Create backups of databases</li>
+<li>Load data from a slow, disk based, databases into a fast in-memory one</li>
+<li>To persist data from a in-memory database into a disk based database</li>
+<li>Initialize a database with a predefined status</li>
+</ol>
+<p>Usually the destination database is an empty database just created, while the source one is a databases where we have been working for a while.</p>
+<p>This command use the <a href="https://www.sqlite.org/backup.html">backup API</a> of sqlite.</p>
+<p><strong>Complexity</strong>: The complexity is linear on the number of page (dimension) of the source database, beware it can be "slow" if the source database is big, during the copy the <code>source</code> database is busy and it cannot serve other queries. </p>
+<p><strong>See also</strong>:</p>
+<ol>
+<li><a href="https://www.sqlite.org/backup.html">Backup API</a></li>
 </ol>
 <h1 id="virtual-tables">Virtual Tables</h1>
 <p>What follows is not a RediSQL command but an SQLite virtual table introduced by the module.</p>
