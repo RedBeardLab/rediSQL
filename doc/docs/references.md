@@ -266,6 +266,33 @@ This command is not blocking as well.
 4. [`REDISQL.DELETE_STATEMENT`][delete_statement]
 5. [Redis Blocking Command][Redis Blocking Command]
 
+## REDISQL.COPY
+
+#### REDISQL.COPY[.NOW] db_key_source db_key_destination 
+
+The command copies the source database into the destination database.
+
+The content of the destination databases is completely ignored and lost.
+
+It is not important if the databases are stored in memory or backed by disk, the `COPY` command will work nevertheless.
+
+This command is useful to:
+
+1. Create backups of databases
+2. Load data from a slow, disk based, databases into a fast in-memory one
+3. To persist data from a in-memory database into a disk based database
+4. Initialize a database with a predefined status
+
+Usually the destination database is an empty database just created, while the source one is a databases where we have been working for a while.
+
+This command use the [backup API][backup_api] of sqlite.
+
+**Complexity**: The complexity is linear on the number of page (dimension) of the source database, beware it can be "slow" if the source database is big, during the copy the `source` database is busy and it cannot serve other queries. 
+
+**See also**:
+
+1. [Backup API][backup_api]
+
 
 # Virtual Tables
 
@@ -393,3 +420,4 @@ This virtual table does not support `INSERT`, `UPDATE` or `DELETE`.
 [redis_hash]: https://redis.io/topics/data-types#hashes
 [scan]: https://redis.io/commands/scan
 [hget]: https://redis.io/commands/hget
+[backup_api]: https://www.sqlite.org/backup.html
