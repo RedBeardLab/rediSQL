@@ -184,7 +184,7 @@ pub enum EntityType {
 
 // TODO XXX explore it is possible to change these String into &str
 pub enum Entity {
-    Integer { int: i32 },
+    Integer { int: i64 },
     Float { float: f64 },
     Text { text: String },
     Blob { blob: String },
@@ -199,7 +199,7 @@ impl Entity {
         match get_entity_type(stmt.get_raw_stmt(), i) {
             EntityType::Integer => {
                 let int = unsafe {
-                    ffi::sqlite3_column_int(stmt.get_raw_stmt(), i)
+                    ffi::sqlite3_column_int64(stmt.get_raw_stmt(), i)
                 };
                 Entity::Integer { int }
             }
@@ -215,9 +215,8 @@ impl Entity {
                         stmt.get_raw_stmt(),
                         i,
                     )
-                        as *const c_char)
-                        .to_string_lossy()
-                        .into_owned()
+                        as *const c_char).to_string_lossy()
+                    .into_owned()
                 };
                 Entity::Text { text: value }
             }
@@ -228,9 +227,8 @@ impl Entity {
                         stmt.get_raw_stmt(),
                         i,
                     )
-                        as *const c_char)
-                        .to_string_lossy()
-                        .into_owned()
+                        as *const c_char).to_string_lossy()
+                    .into_owned()
                 };
                 Entity::Blob { blob: value }
             }
