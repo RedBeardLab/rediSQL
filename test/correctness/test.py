@@ -621,6 +621,25 @@ class TestCopySyncronous(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
         self.assertEquals(result, [[1L]])
 
+class TestBigInt(TestRediSQLWithExec):
+    def test_big_int(self):
+        with DB(self, "A"):
+            done = self.exec_naked("REDISQL.EXEC", "A", "CREATE TABLE ip_to_asn(start INT8, end INT8, asn int, hosts int8)")
+            self.assertEquals(done, ["DONE", 0L])
+
+            done = self.exec_naked("REDISQL.EXEC", "A", "insert into ip_to_asn values (2883484276228096000, 2883484280523063295, 265030, 4294967295)")
+            self.assertEquals(done, ["DONE", 1L])
+
+            result = self.exec_naked("REDISQL.EXEC", "A", "SELECT * FROM ip_to_asn;")
+            self.assertEquals(result, [
+                [
+                    2883484276228096000,
+                    2883484280523063295,
+                    265030,
+                    4294967295]
+                ])
+
+
 
 if __name__ == '__main__':
    unittest.main()
