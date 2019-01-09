@@ -8,10 +8,9 @@ name = "redis_sql"
 crate-type = ["cdylib"]
 
 [dependencies]
-fnv = "1.0.5"
-uuid = { version = "0.4", features = ["v4"] }
-log = {version = "0.3.8", features = ["release_max_level_warn"]}
-env_logger = "0.4.3"
+uuid = { version = "0.7", features = ["v4"] }
+log = {version = "0.4", features = ["release_max_level_warn"]}
+env_logger = "0.6"
 redisql_lib = {path = "./redisql_lib"}
 # engine_pro = {path = "./engine_pro", optional = true}
 
