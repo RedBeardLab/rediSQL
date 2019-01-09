@@ -9,7 +9,7 @@ use std::os::raw::{c_char, c_int};
 #[allow(improper_ctypes)]
 #[allow(unknown_lints)]
 pub mod ffi {
-    #![allow(clippy)]
+    #![allow(clippy::all)]
     include!(concat!(env!("OUT_DIR"), "/bindings_redis.rs"));
 }
 

@@ -1,10 +1,13 @@
+#![warn(unused_extern_crates)]
+
 extern crate env_logger;
+
 #[macro_use]
 extern crate log;
 extern crate redisql_lib;
 extern crate uuid;
 
-use env_logger::{LogBuilder, LogTarget};
+use env_logger::{Builder as logBuilder, Target as logTarget};
 use redisql_lib::redis as r;
 use redisql_lib::redis::{
     get_dbkey_from_name, register_function, register_write_function,
@@ -112,7 +115,8 @@ extern "C" fn ExecStatement(
             let error = CString::new(
                 "Wrong number of arguments, it \
                  needs at least 3",
-            ).unwrap();
+            )
+            .unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
@@ -180,7 +184,8 @@ extern "C" fn QueryStatement(
             let error = CString::new(
                 "Wrong number of arguments, it \
                  needs at least 3",
-            ).unwrap();
+            )
+            .unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
@@ -285,7 +290,8 @@ extern "C" fn Exec(
                 "Wrong number of arguments, it \
                  accepts 3, you provide {}",
                 n
-            )).unwrap();
+            ))
+            .unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
@@ -342,7 +348,8 @@ extern "C" fn Query(
                 "Wrong number of arguments, it \
                  accepts 3, you provide {}",
                 n
-            )).unwrap();
+            ))
+            .unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
@@ -406,7 +413,8 @@ extern "C" fn CreateStatement(
             let error = CString::new(
                 "Wrong number of arguments, it \
                  accepts 4",
-            ).unwrap();
+            )
+            .unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
@@ -472,7 +480,8 @@ extern "C" fn UpdateStatement(
             let error = CString::new(
                 "Wrong number of arguments, it \
                  accepts 4",
-            ).unwrap();
+            )
+            .unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
@@ -537,7 +546,8 @@ extern "C" fn DeleteStatement(
             let error = CString::new(
                 "Wrong number of arguments, it \
                  accepts 3",
-            ).unwrap();
+            )
+            .unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
@@ -572,19 +582,18 @@ extern "C" fn CreateDB(
                 r::rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
             } {
                 r::rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
-                    let (path, in_memory): (
-                        &str,
-                        bool,
-                    ) = match argvector.len() {
-                        3 => (argvector[2], false),
-                        _ => (":memory:", true),
-                    };
+                    let (path, in_memory): (&str, bool) =
+                        match argvector.len() {
+                            3 => (argvector[2], false),
+                            _ => (":memory:", true),
+                        };
                     match sql::get_arc_connection(path) {
                         Ok(rc) => {
                             match r::create_metadata_table(rc.clone())
                                 .and_then(|_| {
                                     r::enable_foreign_key(rc.clone())
-                                }).and_then(|_| {
+                                })
+                                .and_then(|_| {
                                     vtab::register_modules(&rc)
                                 }) {
                                 Err(e) => e.reply(&context),
@@ -650,7 +659,8 @@ extern "C" fn CreateDB(
                                 "Err - Error \
                                  opening the in \
                                  memory databade",
-                            ).unwrap();
+                            )
+                            .unwrap();
                             unsafe {
                                 r::rm::ffi::RedisModule_ReplyWithError
                                     .unwrap()(
@@ -664,7 +674,8 @@ extern "C" fn CreateDB(
                 _ => {
                     let error = CStr::from_bytes_with_nul(
                         r::rm::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
-                    ).unwrap();
+                    )
+                    .unwrap();
                     unsafe {
                         r::rm::ffi::RedisModule_ReplyWithError
                             .unwrap()(
@@ -679,7 +690,8 @@ extern "C" fn CreateDB(
             let error = CString::new(
                 "Wrong number of arguments, it \
                  accepts 2 or 3",
-            ).unwrap();
+            )
+            .unwrap();
             unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
@@ -812,7 +824,8 @@ extern "C" fn MakeCopy(
     if argvector.len() != 3 {
         let error = CString::new(
             "Wrong number of arguments, it accepts exactly 3",
-        ).unwrap();
+        )
+        .unwrap();
         return unsafe {
             r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                 context.as_ptr(),
@@ -894,11 +907,10 @@ pub extern "C" fn RedisModule_OnLoad(
 
     sql::disable_global_memory_statistics();
 
-    LogBuilder::new()
-        .filter(None, log::LogLevelFilter::Debug)
-        .target(LogTarget::Stdout)
-        .init()
-        .unwrap();
+    logBuilder::new()
+        .filter_level(log::LevelFilter::Debug)
+        .target(logTarget::Stdout)
+        .init();
 
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();
