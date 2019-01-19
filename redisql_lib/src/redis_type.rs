@@ -121,6 +121,39 @@ impl<'a> Drop for RMString<'a> {
     }
 }
 
+//this structure contains an array of pointer to RMString, however, on drop, it drops only the
+//array and leak the RMString.
+//It is to be used as argument to RM_Call when the format includes the `v`, an array of RMString.
+pub struct LeakyArrayOfRMString<'a> {
+    array: Vec<*mut ffi::RedisModuleString>,
+    ctx: &'a Context,
+}
+
+impl<'a> LeakyArrayOfRMString<'a> {
+    pub fn new(ctx: &'a Context) -> LeakyArrayOfRMString {
+        LeakyArrayOfRMString {
+            array: Vec::with_capacity(24),
+            ctx: ctx,
+        }
+    }
+    pub fn push(&mut self, s: &str) {
+        let ptr = unsafe {
+            ffi::RedisModule_CreateString.unwrap()(
+                self.ctx.as_ptr(),
+                s.as_ptr() as *const c_char,
+                s.len(),
+            )
+        };
+        self.array.push(ptr);
+    }
+    pub fn as_ptr(&mut self) -> *mut *mut ffi::RedisModuleString {
+        self.array.as_mut_ptr()
+    }
+    pub fn len(&self) -> usize {
+        self.array.len()
+    }
+}
+
 #[allow(non_snake_case)]
 pub fn CreateCommand(
     ctx: &Context,

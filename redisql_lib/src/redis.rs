@@ -454,6 +454,11 @@ impl Drop for RedisKey {
     }
 }
 
+pub enum ReturnMethod {
+    Reply,
+    Stream { name: &'static str },
+}
+
 pub enum Command {
     Stop,
     Exec {
@@ -462,6 +467,7 @@ pub enum Command {
     },
     Query {
         query: &'static str,
+        return_method: ReturnMethod,
         client: BlockedClient,
     },
     CompileStatement {
@@ -486,6 +492,7 @@ pub enum Command {
     QueryStatement {
         identifier: &'static str,
         arguments: Vec<&'static str>,
+        return_method: ReturnMethod,
         client: BlockedClient,
     },
     MakeCopy {
@@ -647,6 +654,47 @@ fn return_value(
     }
 }
 
+fn return_value_v2(
+    client: &BlockedClient,
+    return_method: &ReturnMethod,
+    result: Result<QueryResult, err::RediSQLError>,
+) {
+    match return_method {
+        ReturnMethod::Reply => return_value(client, result),
+        ReturnMethod::Stream { name } => match result {
+            Err(_) => return_value(client, result),
+            Ok(QueryResult::OK {}) => return_value(client, result),
+            Ok(QueryResult::DONE { .. }) => {
+                return_value(client, result)
+            }
+            Ok(QueryResult::Array { array: rows }) => {
+                let context = Context::thread_safe(client);
+                // acquire the lock
+                context.lock();
+                for (i, row) in rows.iter().enumerate() {
+                    if i % 256 == 255 {
+                        // avoid that a big results lock the context for too long, should help in
+                        // keeping the latency low.
+                        context.release();
+                        context.lock();
+                    }
+                    let xadd = CString::new("XADD").unwrap();
+
+                    let mut call_specifier =
+                        CString::new("!v").unwrap();
+                    let mut array =
+                        rm::LeakyArrayOfRMString::new(&context);
+                    for (j, entity) in row.iter().enumerate() {}
+
+                    // XADD
+                }
+                // release the lock
+                context.release();
+            }
+        },
+    }
+}
+
 pub fn listen_and_execute<'a, L: 'a + LoopData>(
     loopdata: &mut L,
     rx: &Receiver<Command>,
@@ -668,14 +716,22 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 );
                 debug!("Exec | DONE, returning result");
             }
-            Ok(Command::Query { query, client }) => {
+            Ok(Command::Query {
+                query,
+                return_method,
+                client,
+            }) => {
                 debug!("Query | Query = {:?}", query);
                 loopdata.with_contex_set(
                     Context::thread_safe(&client),
                     |_| {
                         let result =
                             do_query(&loopdata.get_db(), query);
-                        return_value(&client, result);
+                        return_value_v2(
+                            &client,
+                            &return_method,
+                            result,
+                        );
                     },
                 );
             }
@@ -741,6 +797,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             Ok(Command::QueryStatement {
                 identifier,
                 arguments,
+                return_method,
                 client,
             }) => {
                 loopdata.with_contex_set(
@@ -752,7 +809,11 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                                 identifier,
                                 arguments.as_slice(),
                             );
-                        return_value(&client, result);
+                        return_value_v2(
+                            &client,
+                            &return_method,
+                            result,
+                        );
                     },
                 );
             }

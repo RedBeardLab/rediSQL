@@ -215,9 +215,10 @@ extern "C" fn QueryStatement(
                         },
                     };
 
-                    let cmd = r::Command::ExecStatement {
+                    let cmd = r::Command::QueryStatement {
                         identifier: argvector[2],
                         arguments: argvector[3..].to_vec(),
+                        return_method: r::ReturnMethod::Reply,
                         client: blocked_client,
                     };
 
@@ -334,6 +335,7 @@ extern "C" fn Query(
 
                     let cmd = r::Command::Query {
                         query: argvector[2],
+                        return_method: r::ReturnMethod::Reply,
                         client: blocked_client,
                     };
                     match ch.send(cmd) {
