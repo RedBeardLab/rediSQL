@@ -120,9 +120,9 @@ impl Statement {
                 Ok(Cursor::DONECursor { modified_rows })
             }
             ffi::SQLITE_ROW => {
-                let num_columns = unsafe {
-                    ffi::sqlite3_column_count(self.stmt)
-                } as i32;
+                let num_columns =
+                    unsafe { ffi::sqlite3_column_count(self.stmt) }
+                        as i32;
                 Ok(Cursor::RowsCursor {
                     stmt: self,
                     num_columns,
@@ -148,7 +148,7 @@ impl<'a> StatementTrait<'a> for Statement {
     fn new(
         conn: Arc<Mutex<RawConnection>>,
         query: &str,
-    ) -> Result<Statement, SQLite3Error> {
+    ) -> Result<Self, SQLite3Error> {
         let raw_query = CString::new(query).unwrap();
 
         let mut stmt: *mut ffi::sqlite3_stmt =
@@ -310,7 +310,7 @@ impl<'a> StatementTrait<'a> for MultiStatement {
     fn new(
         conn: Arc<Mutex<RawConnection>>,
         query: &str,
-    ) -> Result<MultiStatement, SQLite3Error> {
+    ) -> Result<Self, SQLite3Error> {
         generate_statements(conn, query)
     }
     fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt {
@@ -362,9 +362,10 @@ fn count_parameters(
             match discriminant.first() {
                 None => return Ok((0, vec![])),
                 Some(d)
-                    if *d == mem::discriminant(
-                        &Parameters::Anonymous,
-                    ) =>
+                    if *d
+                        == mem::discriminant(
+                            &Parameters::Anonymous,
+                        ) =>
                 {
                     return Err(error_wrong_paramenter);
                 }
@@ -408,14 +409,14 @@ fn get_parameter_name(
 fn get_parameters(
     stmt: &Statement,
 ) -> Result<Vec<Parameters>, SQLite3Error> {
-    let total_paramenters = unsafe {
-        ffi::sqlite3_bind_parameter_count(stmt.stmt)
-    } as usize;
+    let total_paramenters =
+        unsafe { ffi::sqlite3_bind_parameter_count(stmt.stmt) }
+            as usize;
     if total_paramenters == 0 {
         return Ok(vec![]);
     }
     let mut parameters = Vec::with_capacity(total_paramenters - 1);
-    for i in 1..(total_paramenters + 1) {
+    for i in 1..=total_paramenters {
         let param = get_parameter_name(stmt, i as i32)?;
         match param {
             None => {}

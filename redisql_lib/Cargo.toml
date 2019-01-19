@@ -4,11 +4,10 @@ version = "0.3.1"
 authors = ["Simone Mosciatti <mweb.sim@gmail.com>"]
 
 [build-dependencies]
-bindgen = "0.30.0"
-cc = {version = "1.0.3", features = ["parallel"]}
+bindgen = "0.46.0"
+cc = {version = "1.0.28", features = ["parallel"]}
 
 [dependencies]
-log = "0.3.8"
-env_logger = "0.4.3"
-fnv = "1.0.5"
-uuid = { version = "0.4", features = ["v4"] }
+log = "0.4"
+env_logger = "0.6"
+fnv = "1.0"

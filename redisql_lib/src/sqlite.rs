@@ -19,7 +19,7 @@ use community_statement::Statement;
 #[allow(non_upper_case_globals)]
 #[allow(unknown_lints)]
 pub mod ffi {
-    #![allow(clippy)]
+    #![allow(clippy::all)]
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
@@ -215,7 +215,8 @@ impl Entity {
                         stmt.get_raw_stmt(),
                         i,
                     )
-                        as *const c_char).to_string_lossy()
+                        as *const c_char)
+                    .to_string_lossy()
                     .into_owned()
                 };
                 Entity::Text { text: value }
@@ -227,7 +228,8 @@ impl Entity {
                         stmt.get_raw_stmt(),
                         i,
                     )
-                        as *const c_char).to_string_lossy()
+                        as *const c_char)
+                    .to_string_lossy()
                     .into_owned()
                 };
                 Entity::Blob { blob: value }

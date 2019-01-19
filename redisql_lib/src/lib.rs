@@ -1,3 +1,5 @@
+#![warn(unused_extern_crates)]
+
 #[macro_use]
 extern crate log;
 

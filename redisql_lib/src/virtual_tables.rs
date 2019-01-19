@@ -33,6 +33,7 @@ static BRUTE_HASH_MODULE: ffi::sqlite3_module = ffi::sqlite3_module {
     xSavepoint: None,
     xSync: None,
     xUpdate: None,
+    xShadowName: None,
 };
 
 static BRUTE_HASH_NAME: &[u8] = b"REDISQL_TABLES_BRUTE_HASH\0";
@@ -208,16 +209,16 @@ pub unsafe extern "C" fn create_brute_hash(
     pz_err: *mut *mut raw::c_char,
 ) -> raw::c_int {
     debug!("Creating REDISQL_TABLES_BRUTE_HASH");
-    let (table_name, columns) = match create_table_name(
-        argc as isize,
-        argv,
-    ) {
-        Ok((name, columns)) => (CString::new(name).unwrap(), columns),
-        Err(err) => {
-            set_error(pz_err, err);
-            return ffi::SQLITE_ERROR;
-        }
-    };
+    let (table_name, columns) =
+        match create_table_name(argc as isize, argv) {
+            Ok((name, columns)) => {
+                (CString::new(name).unwrap(), columns)
+            }
+            Err(err) => {
+                set_error(pz_err, err);
+                return ffi::SQLITE_ERROR;
+            }
+        };
     debug!("Table: {:?}", table_name);
     if ffi::sqlite3_declare_vtab(conn, table_name.as_ptr())
         != ffi::SQLITE_OK
@@ -480,10 +481,10 @@ extern "C" fn disconnect_brute_hash(
     p_vtab: *mut ffi::sqlite3_vtab,
 ) -> i32 {
     debug!("Disconnect");
-    let result = VirtualTable::with_vtab(
-        p_vtab,
-        |ref _vtab| -> i32 { ffi::SQLITE_OK },
-    );
+    let result =
+        VirtualTable::with_vtab(p_vtab, |ref _vtab| -> i32 {
+            ffi::SQLITE_OK
+        });
     debug!("Disconnect Exit");
     result
 }
@@ -492,10 +493,10 @@ extern "C" fn destroy_brute_hash(
     p_vtab: *mut ffi::sqlite3_vtab,
 ) -> i32 {
     debug!("Disconnect");
-    let result = VirtualTable::with_vtab(
-        p_vtab,
-        |ref _vtab| -> i32 { ffi::SQLITE_OK },
-    );
+    let result =
+        VirtualTable::with_vtab(p_vtab, |ref _vtab| -> i32 {
+            ffi::SQLITE_OK
+        });
     debug!("Disconnect Exit");
     result
 }

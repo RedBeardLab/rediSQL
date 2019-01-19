@@ -1,5 +1,4 @@
 extern crate fnv;
-extern crate uuid;
 
 use self::fnv::FnvHashMap;
 use std;
@@ -308,7 +307,7 @@ impl RedisReply for sql::Entity {
     fn reply(&self, ctx: &rm::Context) -> i32 {
         match *self {
             sql::Entity::Integer { int } => {
-                rm::ReplyWithLongLong(ctx, i64::from(int))
+                rm::ReplyWithLongLong(ctx, int)
             }
             sql::Entity::Float { float } => {
                 rm::ReplyWithDouble(ctx, float)
@@ -610,9 +609,7 @@ impl error::Error for RedisError {
 /// still they may happens.
 /// I am not sure if it is a good idea or if I should upgrade the code to return an error, and
 /// maybe just ignore the error to keep the whole flow as it is now.
-fn restore_previous_statements<'a, L: 'a + LoopData>(
-    loopdata: &L,
-) -> () {
+fn restore_previous_statements<'a, L: 'a + LoopData>(loopdata: &L) {
     let saved_statements = get_statement_metadata(loopdata.get_db());
     match saved_statements {
         Ok(QueryResult::Array { array, .. }) => {
@@ -1046,8 +1043,10 @@ pub fn get_dbkeyptr_from_name(
         rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
     };
     if unsafe {
-        rm::ffi::DBType == rm::ffi::RedisModule_ModuleTypeGetType
-            .unwrap()(safe_key.key)
+        rm::ffi::DBType
+            == rm::ffi::RedisModule_ModuleTypeGetType.unwrap()(
+                safe_key.key,
+            )
     } {
         let db_ptr = unsafe {
             rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(
@@ -1116,7 +1115,8 @@ pub fn reply_with_error_from_key_type(
         _ => {
             let error = CStr::from_bytes_with_nul(
                 rm::ffi::REDISMODULE_ERRORMSG_WRONGTYPE,
-            ).unwrap();
+            )
+            .unwrap();
             ReplyWithError(context, error.to_str().unwrap())
         }
     }
