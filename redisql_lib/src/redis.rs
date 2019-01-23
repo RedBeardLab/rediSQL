@@ -668,31 +668,184 @@ fn return_value_v2(
                 return_value(client, result)
             }
             Ok(QueryResult::Array { array: rows }) => {
+                let row_last_index = rows.len() - 1;
+
+                let mut result = Vec::with_capacity(3);
+                result.push(sql::Entity::Text {
+                    text: name.to_string(),
+                });
+
                 let context = Context::thread_safe(client);
                 // acquire the lock
-                context.lock();
+                let mut lock = context.lock();
                 for (i, row) in rows.iter().enumerate() {
                     if i % 256 == 255 {
                         // avoid that a big results lock the context for too long, should help in
                         // keeping the latency low.
-                        context.release();
-                        context.lock();
+                        context.release(lock);
+                        lock = context.lock();
                     }
-                    let xadd = CString::new("XADD").unwrap();
-
-                    let mut call_specifier =
-                        CString::new("!v").unwrap();
-                    let mut array =
-                        rm::LeakyArrayOfRMString::new(&context);
-                    for (j, entity) in row.iter().enumerate() {}
-
-                    // XADD
+                    let mut xadd =
+                        rm::XADDCommand::new(&context, name);
+                    for (j, entity) in row.iter().enumerate() {
+                        match entity {
+                            sql::Entity::Null
+                            | sql::Entity::OK {}
+                            | sql::Entity::DONE { .. } => {
+                                // do nothing
+                            }
+                            sql::Entity::Integer { int } => {
+                                xadd.add_element(
+                                    &j.to_string(),
+                                    &int.to_string(),
+                                );
+                            }
+                            sql::Entity::Float { float } => {
+                                xadd.add_element(
+                                    &i.to_string(),
+                                    &float.to_string(),
+                                );
+                            }
+                            sql::Entity::Text { text } => {
+                                xadd.add_element(
+                                    &j.to_string(),
+                                    text,
+                                );
+                            }
+                            sql::Entity::Blob { blob } => {
+                                xadd.add_element(
+                                    &j.to_string(),
+                                    blob,
+                                );
+                            }
+                        }
+                    }
+                    let xadd_result = xadd.execute(&lock);
+                    match xadd_result {
+                        rm::CallReply::RString { .. } => match i {
+                            0 => {
+                                result.push(sql::Entity::Text {
+                                    text: xadd_result
+                                        .access_string()
+                                        .unwrap(),
+                                });
+                            }
+                            n if n == row_last_index => {
+                                result.push(sql::Entity::Text {
+                                    text: xadd_result
+                                        .access_string()
+                                        .unwrap(),
+                                });
+                            }
+                            _ => {
+                                // do nothing
+                            }
+                        },
+                        rm::CallReply::RError { .. } => {
+                            // return an error and unlock
+                        }
+                        _ => panic!(),
+                    }
                 }
                 // release the lock
-                context.release();
+                context.release(lock);
+                return_value(
+                    client,
+                    Ok(QueryResult::Array {
+                        array: vec![result],
+                    }),
+                );
             }
         },
     }
+}
+
+pub fn stream_query_result_array(
+    client: &BlockedClient,
+    stream_name: &str,
+    array: Vec<sql::Row>,
+) -> Result<QueryResult, err::RediSQLError> {
+    let row_last_index = array.len() - 1;
+
+    let mut result = Vec::with_capacity(3);
+    result.push(sql::Entity::Text {
+        text: stream_name.to_string(),
+    });
+
+    let context = Context::thread_safe(client);
+
+    let mut lock = context.lock();
+    for (i, row) in array.iter().enumerate() {
+        if i % 256 == 255 {
+            // avoid that a big results lock the context for too long, should help in
+            // keeping the latency low.
+            context.release(lock);
+            lock = context.lock();
+        }
+        let mut xadd = rm::XADDCommand::new(&context, stream_name);
+        for (j, entity) in row.iter().enumerate() {
+            match entity {
+                sql::Entity::Null
+                | sql::Entity::OK {}
+                | sql::Entity::DONE { .. } => {
+                    // do nothing
+                }
+                sql::Entity::Integer { int } => {
+                    xadd.add_element(
+                        &j.to_string(),
+                        &int.to_string(),
+                    );
+                }
+                sql::Entity::Float { float } => {
+                    xadd.add_element(
+                        &i.to_string(),
+                        &float.to_string(),
+                    );
+                }
+                sql::Entity::Text { text } => {
+                    xadd.add_element(&j.to_string(), text);
+                }
+                sql::Entity::Blob { blob } => {
+                    xadd.add_element(&j.to_string(), blob);
+                }
+            }
+        }
+        let xadd_result = xadd.execute(&lock);
+        match xadd_result {
+            rm::CallReply::RString { .. } => match i {
+                0 => {
+                    result.push(sql::Entity::Text {
+                        text: xadd_result.access_string().unwrap(),
+                    });
+                }
+                n if n == row_last_index => {
+                    result.push(sql::Entity::Text {
+                        text: xadd_result.access_string().unwrap(),
+                    });
+                }
+                _ => {
+                    // do nothing
+                }
+            },
+            rm::CallReply::RError { .. } => {
+                context.release(lock);
+                return Err(RediSQLError::new(
+                    format!(
+                        "{}",
+                        xadd_result.access_error().unwrap()
+                    ),
+                    format!("Error in XADD to {}", stream_name),
+                ));
+                // return an error and unlock
+            }
+            _ => panic!(),
+        }
+    }
+
+    context.release(lock);
+    Ok(QueryResult::Array {
+        array: vec![result],
+    })
 }
 
 pub fn listen_and_execute<'a, L: 'a + LoopData>(

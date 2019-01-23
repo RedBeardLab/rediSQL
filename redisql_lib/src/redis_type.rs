@@ -19,6 +19,8 @@ pub struct Context {
     thread_safe: bool,
 }
 
+pub struct ContextLock {}
+
 impl Context {
     pub fn new(ctx: *mut ffi::RedisModuleCtx) -> Context {
         Context {
@@ -40,7 +42,7 @@ impl Context {
             thread_safe: true,
         }
     }
-    pub fn lock(&self) {
+    pub fn lock(&self) -> ContextLock {
         if self.thread_safe {
             unsafe {
                 ffi::RedisModule_ThreadSafeContextLock.unwrap()(
@@ -48,8 +50,9 @@ impl Context {
                 );
             }
         }
+        ContextLock {}
     }
-    pub fn release(&self) {
+    pub fn release(&self, _lock: ContextLock) {
         if self.thread_safe {
             unsafe {
                 ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(
@@ -151,6 +154,38 @@ impl<'a> LeakyArrayOfRMString<'a> {
     }
     pub fn len(&self) -> usize {
         self.array.len()
+    }
+}
+
+pub struct XADDCommand<'a> {
+    ctx: &'a Context,
+    array: LeakyArrayOfRMString<'a>,
+}
+
+impl<'a> XADDCommand<'a> {
+    pub fn new(ctx: &'a Context, key: &str) -> XADDCommand<'a> {
+        let mut array = LeakyArrayOfRMString::new(ctx);
+        array.push(key);
+        XADDCommand { ctx, array }
+    }
+    pub fn add_element(&mut self, field: &str, value: &str) {
+        self.array.push(field);
+        self.array.push(value);
+    }
+    // this command must be called inside a transaction with the context locked
+    pub fn execute(&mut self, _lock: &ContextLock) -> CallReply {
+        let xadd = CString::new("XADD").unwrap();
+        let call_specifiers = CString::new("!v").unwrap();
+        let reply = unsafe {
+            ffi::RedisModule_Call.unwrap()(
+                self.ctx.as_ptr(),
+                xadd.as_ptr(),
+                call_specifiers.as_ptr(),
+                self.array.as_ptr(),
+                self.array.len(),
+            )
+        };
+        unsafe { CallReply::new(reply) }
     }
 }
 
@@ -427,6 +462,42 @@ impl CallReply {
                     Some(to_return)
                 }
             }
+        }
+    }
+
+    pub fn access_error(&self) -> Option<String> {
+        match self {
+            CallReply::RString { .. }
+            | CallReply::RInteger { .. }
+            | CallReply::RArray { .. }
+            | CallReply::RNull { .. } => None,
+
+            CallReply::RError { ptr } => {
+                let mut size = 0;
+                unsafe {
+                    let ptr = ffi::RedisModule_CallReplyStringPtr
+                        .unwrap()(
+                        *ptr, &mut size
+                    );
+                    let string = String::from_raw_parts(
+                        ptr as *mut u8,
+                        size,
+                        size,
+                    );
+                    debug!("access_string about to drop");
+                    let to_return = string.clone();
+                    mem::forget(string);
+                    Some(to_return)
+                }
+            }
+        }
+    }
+}
+
+impl Drop for CallReply {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::RedisModule_FreeCallReply.unwrap()(self.as_ptr())
         }
     }
 }

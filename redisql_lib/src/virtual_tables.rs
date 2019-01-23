@@ -262,7 +262,7 @@ fn do_scan(
     let to_match = to_match.to_string();
     let to_match = CString::new(to_match).unwrap();
 
-    redis_context.lock();
+    let lock = redis_context.lock();
     let reply = unsafe {
         rffi::RedisModule_Call.unwrap()(
             redis_context.as_ptr(),
@@ -273,7 +273,7 @@ fn do_scan(
             to_match.as_ptr(),
         )
     };
-    redis_context.release();
+    redis_context.release(lock);
     unsafe { CallReply::new(reply) }
 }
 
@@ -383,7 +383,7 @@ pub fn do_hget(
     debug!("do_HGET {:?} {:?}", obj, key);
 
     debug!("Real one");
-    redis_context.lock();
+    let lock = redis_context.lock();
     let reply = unsafe {
         rffi::RedisModule_Call.unwrap()(
             redis_context.as_ptr(),
@@ -393,7 +393,7 @@ pub fn do_hget(
             key.as_ptr(),
         )
     };
-    redis_context.release();
+    redis_context.release(lock);
     unsafe { CallReply::new(reply) }
 }
 
