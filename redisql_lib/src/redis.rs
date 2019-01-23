@@ -1007,7 +1007,8 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData>(
             let db = loop_data.get_db();
             match create_statement(db, identifier, statement) {
                 Ok(stmt) => {
-                    v.insert((stmt, false));
+                    let read_only = stmt.is_read_only();
+                    v.insert((stmt, read_only));
                     Ok(QueryResult::OK {})
                 }
                 Err(e) => Err(e),
