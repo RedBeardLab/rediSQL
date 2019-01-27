@@ -504,8 +504,13 @@ pub enum Command {
 
 pub enum QueryResult {
     OK {},
-    DONE { modified_rows: i32 },
-    Array { array: Vec<sql::Row> },
+    DONE {
+        modified_rows: i32,
+    },
+    Array {
+        names: Option<Vec<String>>,
+        array: Vec<sql::Row>,
+    },
 }
 
 impl QueryResult {
@@ -667,7 +672,8 @@ fn return_value_v2(
             Ok(QueryResult::DONE { .. }) => {
                 return_value(client, result)
             }
-            Ok(QueryResult::Array { array: rows }) => {
+            // use names to give well names... to the element in the stream
+            Ok(QueryResult::Array { array: rows, names }) => {
                 let result =
                     stream_query_result_array(client, name, rows);
                 return_value(client, result)
@@ -760,6 +766,11 @@ pub fn stream_query_result_array(
 
     context.release(lock);
     Ok(QueryResult::Array {
+        names: Some(vec![
+            String::from("stream"),
+            String::from("first_id"),
+            String::from("last_id"),
+        ]),
         array: vec![result],
     })
 }

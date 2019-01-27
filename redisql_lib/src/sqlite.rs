@@ -316,6 +316,19 @@ impl<'a> From<Cursor<'a>> for QueryResult {
                 ..
             } => {
                 let mut result = vec![];
+                let mut names =
+                    Vec::with_capacity(num_columns as usize);
+                for i in 0..num_columns {
+                    let name = unsafe {
+                        CStr::from_ptr(ffi::sqlite3_column_name(
+                            stmt.get_raw_stmt(),
+                            i,
+                        ))
+                        .to_string_lossy()
+                        .into_owned()
+                    };
+                    names.push(name);
+                }
                 while *previous_status == ffi::SQLITE_ROW {
                     let mut row =
                         Vec::with_capacity(num_columns as usize);
@@ -330,7 +343,10 @@ impl<'a> From<Cursor<'a>> for QueryResult {
 
                     result.push(row);
                 }
-                QueryResult::Array { array: result }
+                QueryResult::Array {
+                    names: Some(names),
+                    array: result,
+                }
             }
         }
     }
