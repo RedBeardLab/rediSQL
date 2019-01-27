@@ -35,6 +35,25 @@ use engine_pro::Replicate;
 #[cfg(not(feature = "pro"))]
 use redisql_lib::redis::Replicate;
 
+use std::alloc::{GlobalAlloc, Layout};
+
+struct RedisAllocator;
+
+unsafe impl GlobalAlloc for RedisAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        r::rm::ffi::RedisModule_Alloc.unwrap()(layout.size())
+            as *mut u8
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        r::rm::ffi::RedisModule_Free.unwrap()(
+            ptr as *mut std::ffi::c_void,
+        )
+    }
+}
+
+#[global_allocator]
+static A: RedisAllocator = RedisAllocator;
+
 extern "C" fn reply_exec(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
     _argv: *mut *mut r::rm::ffi::RedisModuleString,
