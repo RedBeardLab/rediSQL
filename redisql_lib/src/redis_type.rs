@@ -127,6 +127,7 @@ impl<'a> Drop for RMString<'a> {
 //this structure contains an array of pointer to RMString, however, on drop, it drops only the
 //array and leak the RMString.
 //It is to be used as argument to RM_Call when the format includes the `v`, an array of RMString.
+#[derive(Debug)]
 pub struct LeakyArrayOfRMString<'a> {
     array: Vec<*mut ffi::RedisModuleString>,
     ctx: &'a Context,
@@ -157,6 +158,7 @@ impl<'a> LeakyArrayOfRMString<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct XADDCommand<'a> {
     ctx: &'a Context,
     array: LeakyArrayOfRMString<'a>,
@@ -164,15 +166,24 @@ pub struct XADDCommand<'a> {
 
 impl<'a> XADDCommand<'a> {
     pub fn new(ctx: &'a Context, key: &str) -> XADDCommand<'a> {
+        XADDCommand::new_with_id(ctx, key, "*")
+    }
+    pub fn new_with_id(
+        ctx: &'a Context,
+        key: &str,
+        id: &str,
+    ) -> XADDCommand<'a> {
         let mut array = LeakyArrayOfRMString::new(ctx);
         array.push(key);
+        array.push(id);
         XADDCommand { ctx, array }
     }
     pub fn add_element(&mut self, field: &str, value: &str) {
         self.array.push(field);
         self.array.push(value);
     }
-    // this command must be called inside a transaction with the context locked
+    // this command must be called inside a transaction with the context locked, hence we use as
+    // parameter also a ContextLock
     pub fn execute(&mut self, _lock: &ContextLock) -> CallReply {
         let xadd = CString::new("XADD").unwrap();
         let call_specifiers = CString::new("!v").unwrap();

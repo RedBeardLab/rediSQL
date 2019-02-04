@@ -666,16 +666,36 @@ fn return_value_v2(
 ) {
     match return_method {
         ReturnMethod::Reply => return_value(client, result),
-        ReturnMethod::Stream { name } => match result {
+        ReturnMethod::Stream { name: stream_name } => match result {
             Err(_) => return_value(client, result),
             Ok(QueryResult::OK {}) => return_value(client, result),
             Ok(QueryResult::DONE { .. }) => {
                 return_value(client, result)
             }
-            // use names to give well names... to the element in the stream
-            Ok(QueryResult::Array { array: rows, names }) => {
-                let result =
-                    stream_query_result_array(client, name, rows);
+            Ok(QueryResult::Array {
+                array: rows,
+                names: columns_names,
+            }) => {
+                let columns_names = match columns_names {
+                    Some(c) => c,
+                    // if for some weird reason we don't have columns names we can create them
+                    None => match rows.len() {
+                        // if the result has no row, an empty vector is enough to make the compiler
+                        // happy
+                        0 => Vec::with_capacity(0),
+                        // if there are rows we will simply use integers to indicate the name of
+                        // the columns, not ideal but there is nothing more we can do here.
+                        _n => (1..(rows[0].len() + 1))
+                            .map(|i| i.to_string())
+                            .collect(),
+                    },
+                };
+                let result = stream_query_result_array(
+                    client,
+                    stream_name,
+                    columns_names.as_slice(),
+                    rows,
+                );
                 return_value(client, result)
             }
         },
@@ -685,6 +705,7 @@ fn return_value_v2(
 pub fn stream_query_result_array(
     client: &BlockedClient,
     stream_name: &str,
+    columns_names: &[String],
     array: Vec<sql::Row>,
 ) -> Result<QueryResult, err::RediSQLError> {
     let row_last_index = array.len() - 1;
@@ -714,24 +735,25 @@ pub fn stream_query_result_array(
                 }
                 sql::Entity::Integer { int } => {
                     xadd.add_element(
-                        &j.to_string(),
+                        &columns_names[j],
                         &int.to_string(),
                     );
                 }
                 sql::Entity::Float { float } => {
                     xadd.add_element(
-                        &i.to_string(),
+                        &columns_names[j],
                         &float.to_string(),
                     );
                 }
                 sql::Entity::Text { text } => {
-                    xadd.add_element(&j.to_string(), text);
+                    xadd.add_element(&columns_names[j], text);
                 }
                 sql::Entity::Blob { blob } => {
-                    xadd.add_element(&j.to_string(), blob);
+                    xadd.add_element(&columns_names[j], blob);
                 }
             }
         }
+        debug!("XADD {:?}", xadd);
         let xadd_result = xadd.execute(&lock);
         match xadd_result {
             rm::CallReply::RString { .. } => match i {
@@ -760,8 +782,15 @@ pub fn stream_query_result_array(
                 ));
                 // return an error and unlock
             }
-            _ => panic!(),
+            _ => {
+                debug!("XADD result: {:?}", xadd_result);
+                panic!();
+            }
         }
+    }
+    if result.len() == 2 {
+        let start_and_end = result[1].clone();
+        result.push(start_and_end);
     }
 
     context.release(lock);

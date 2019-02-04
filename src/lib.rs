@@ -363,6 +363,71 @@ extern "C" fn Query(
 }
 
 #[allow(non_snake_case)]
+extern "C" fn QueryInto(
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32 {
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    match argvector.len() {
+        4 => {
+            let stream_name = argvector[1];
+            let db = argvector[2];
+            with_ch_and_loopdata(
+                context.as_ptr(),
+                db,
+                |ch_loopdata| match ch_loopdata {
+                    Err(key_type) => reply_with_error_from_key_type(
+                        context.as_ptr(),
+                        key_type,
+                    ),
+                    Ok((ch, _loopdata)) => {
+                        let blocked_client = r::rm::BlockedClient {
+                            client: unsafe {
+                                r::rm::ffi::RedisModule_BlockClient
+                                    .unwrap()(
+                                    context.as_ptr(),
+                                    Some(reply_exec),
+                                    Some(timeout),
+                                    Some(free_privdata),
+                                    10000,
+                                )
+                            },
+                        };
+
+                        let cmd = r::Command::Query {
+                            query: argvector[3],
+                            return_method: r::ReturnMethod::Stream {
+                                name: stream_name,
+                            },
+                            client: blocked_client,
+                        };
+                        match ch.send(cmd) {
+                            Ok(()) => r::rm::ffi::REDISMODULE_OK,
+                            Err(_) => r::rm::ffi::REDISMODULE_OK,
+                        }
+                    }
+                },
+            )
+        }
+        n => {
+            let error = CString::new(format!(
+                "Wrong number of arguments, it \
+                 accepts 4, you provide {}",
+                n
+            ))
+            .unwrap();
+            unsafe {
+                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                    context.as_ptr(),
+                    error.as_ptr(),
+                )
+            }
+        }
+    }
+}
+
+#[allow(non_snake_case)]
 extern "C" fn CreateStatement(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
     argv: *mut *mut r::rm::ffi::RedisModuleString,
@@ -990,6 +1055,16 @@ pub extern "C" fn RedisModule_OnLoad(
         String::from("REDISQL.QUERY"),
         String::from("readonly"),
         Query,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function(
+        &ctx,
+        String::from("REDISQL.QUERY.INTO"),
+        String::from("readonly"),
+        QueryInto,
     ) {
         Ok(()) => (),
         Err(e) => return e,

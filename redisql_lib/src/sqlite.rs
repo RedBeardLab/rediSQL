@@ -183,6 +183,8 @@ pub enum EntityType {
 }
 
 // TODO XXX explore it is possible to change these String into &str
+// and then use Copy instead of Clone
+#[derive(Clone)]
 pub enum Entity {
     Integer { int: i64 },
     Float { float: f64 },
