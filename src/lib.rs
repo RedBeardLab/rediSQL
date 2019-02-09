@@ -1101,38 +1101,27 @@ pub extern "C" fn RedisModule_OnLoad(
         return r::rm::ffi::REDISMODULE_ERR;
     }
 
-    match register_write_function(
-        &ctx,
-        String::from("REDISQL.CREATE_DB"),
-        CreateDB,
-    ) {
+    match register_write_function(&ctx, "REDISQL.CREATE_DB", CreateDB)
+    {
         Ok(()) => (),
         Err(e) => return e,
     }
 
-    match register_write_function(
-        &ctx,
-        String::from("REDISQL.EXEC"),
-        Exec,
-    ) {
+    match register_write_function(&ctx, "REDISQL.EXEC", Exec) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
-    match register_function(
-        &ctx,
-        String::from("REDISQL.QUERY"),
-        String::from("readonly"),
-        Query,
-    ) {
+    match register_function(&ctx, "REDISQL.QUERY", "readonly", Query)
+    {
         Ok(()) => (),
         Err(e) => return e,
     }
 
     match register_function_with_keys(
         &ctx,
-        String::from("REDISQL.QUERY.INTO"),
-        String::from("readonly"),
+        "REDISQL.QUERY.INTO",
+        "readonly",
         1,
         2,
         1,
@@ -1144,7 +1133,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        String::from("REDISQL.CREATE_STATEMENT"),
+        "REDISQL.CREATE_STATEMENT",
         CreateStatement,
     ) {
         Ok(()) => (),
@@ -1153,7 +1142,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        String::from("REDISQL.EXEC_STATEMENT"),
+        "REDISQL.EXEC_STATEMENT",
         ExecStatement,
     ) {
         Ok(()) => (),
@@ -1162,7 +1151,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        String::from("REDISQL.UPDATE_STATEMENT"),
+        "REDISQL.UPDATE_STATEMENT",
         UpdateStatement,
     ) {
         Ok(()) => (),
@@ -1171,7 +1160,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        String::from("REDISQL.DELETE_STATEMENT"),
+        "REDISQL.DELETE_STATEMENT",
         DeleteStatement,
     ) {
         Ok(()) => (),
@@ -1180,8 +1169,8 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function(
         &ctx,
-        String::from("REDISQL.QUERY_STATEMENT"),
-        String::from("readonly"),
+        "REDISQL.QUERY_STATEMENT",
+        "readonly",
         QueryStatement,
     ) {
         Ok(()) => (),
@@ -1190,8 +1179,8 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function_with_keys(
         &ctx,
-        String::from("REDISQL.QUERY_STATEMENT.INTO"),
-        String::from("readonly"),
+        "REDISQL.QUERY_STATEMENT.INTO",
+        "readonly",
         1,
         2,
         1,
@@ -1201,11 +1190,7 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
-    match register_write_function(
-        &ctx,
-        String::from("REDISQL.COPY"),
-        MakeCopy,
-    ) {
+    match register_write_function(&ctx, "REDISQL.COPY", MakeCopy) {
         Ok(()) => (),
         Err(e) => return e,
     }

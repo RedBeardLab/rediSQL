@@ -203,9 +203,9 @@ impl<'a> XADDCommand<'a> {
 #[allow(non_snake_case)]
 pub fn CreateCommand(
     ctx: &Context,
-    name: String,
+    name: &str,
     f: ffi::RedisModuleCmdFunc,
-    flags: String,
+    flags: &str,
 ) -> i32 {
     CreateCommandWithKeys(ctx, name, f, flags, 1, 1, 1)
 }
@@ -213,9 +213,9 @@ pub fn CreateCommand(
 #[allow(non_snake_case)]
 pub fn CreateCommandWithKeys(
     ctx: &Context,
-    name: String,
+    name: &str,
     f: ffi::RedisModuleCmdFunc,
-    flags: String,
+    flags: &str,
     first_key: i32,
     last_key: i32,
     key_step: i32,

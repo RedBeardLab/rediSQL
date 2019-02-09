@@ -508,7 +508,7 @@ pub enum QueryResult {
         modified_rows: i32,
     },
     Array {
-        names: Option<Vec<String>>,
+        names: Vec<String>,
         array: Vec<sql::Row>,
     },
 }
@@ -676,22 +676,9 @@ fn return_value_v2(
                 array: rows,
                 names: columns_names,
             }) => {
-                let columns_names = match columns_names {
-                    Some(c) => c,
-                    // if for some weird reason we don't have columns names we can create them
-                    None => match rows.len() {
-                        // if the result has no row, an empty vector is enough to make the compiler
-                        // happy
-                        0 => Vec::with_capacity(0),
-                        // if there are rows we will simply use integers to indicate the name of
-                        // the columns, not ideal but there is nothing more we can do here.
-                        _n => (1..(rows[0].len() + 1))
-                            .map(|i| i.to_string())
-                            .collect(),
-                    },
-                };
+                let context = Context::thread_safe(client);
                 let result = stream_query_result_array(
-                    client,
+                    &context,
                     stream_name,
                     columns_names.as_slice(),
                     rows,
@@ -703,7 +690,7 @@ fn return_value_v2(
 }
 
 pub fn stream_query_result_array(
-    client: &BlockedClient,
+    context: &Context,
     stream_name: &str,
     columns_names: &[String],
     array: Vec<sql::Row>,
@@ -714,8 +701,6 @@ pub fn stream_query_result_array(
     result.push(sql::Entity::Text {
         text: stream_name.to_string(),
     });
-
-    let context = Context::thread_safe(client);
 
     let mut lock = context.lock();
     for (i, row) in array.iter().enumerate() {
@@ -795,11 +780,11 @@ pub fn stream_query_result_array(
 
     context.release(lock);
     Ok(QueryResult::Array {
-        names: Some(vec![
+        names: vec![
             String::from("stream"),
             String::from("first_id"),
             String::from("last_id"),
-        ]),
+        ],
         array: vec![result],
     })
 }
@@ -1332,8 +1317,8 @@ pub unsafe fn Replicate(
 
 pub fn register_function(
     context: &rm::Context,
-    name: String,
-    flags: String,
+    name: &str,
+    flags: &str,
     f: extern "C" fn(
         *mut rm::ffi::RedisModuleCtx,
         *mut *mut rm::ffi::RedisModuleString,
@@ -1352,8 +1337,8 @@ pub fn register_function(
 
 pub fn register_function_with_keys(
     context: &rm::Context,
-    name: String,
-    flags: String,
+    name: &str,
+    flags: &str,
     first_key: i32,
     last_key: i32,
     key_step: i32,
@@ -1378,12 +1363,12 @@ pub fn register_function_with_keys(
 }
 pub fn register_write_function(
     ctx: &rm::Context,
-    name: String,
+    name: &str,
     f: extern "C" fn(
         *mut rm::ffi::RedisModuleCtx,
         *mut *mut rm::ffi::RedisModuleString,
         ::std::os::raw::c_int,
     ) -> i32,
 ) -> Result<(), i32> {
-    register_function(ctx, name, String::from("write"), f)
+    register_function(ctx, name, "write", f)
 }

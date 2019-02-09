@@ -346,7 +346,7 @@ impl<'a> From<Cursor<'a>> for QueryResult {
                     result.push(row);
                 }
                 QueryResult::Array {
-                    names: Some(names),
+                    names: names,
                     array: result,
                 }
             }
