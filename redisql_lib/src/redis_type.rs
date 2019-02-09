@@ -207,6 +207,19 @@ pub fn CreateCommand(
     f: ffi::RedisModuleCmdFunc,
     flags: String,
 ) -> i32 {
+    CreateCommandWithKeys(ctx, name, f, flags, 1, 1, 1)
+}
+
+#[allow(non_snake_case)]
+pub fn CreateCommandWithKeys(
+    ctx: &Context,
+    name: String,
+    f: ffi::RedisModuleCmdFunc,
+    flags: String,
+    first_key: i32,
+    last_key: i32,
+    key_step: i32,
+) -> i32 {
     let command_c_name = CString::new(name).unwrap();
     let command_ptr_name = command_c_name.as_ptr();
 
@@ -219,9 +232,9 @@ pub fn CreateCommand(
             command_ptr_name,
             f,
             flag_ptr_name,
-            1,
-            1,
-            1,
+            first_key,
+            last_key,
+            key_step,
         )
     }
 }

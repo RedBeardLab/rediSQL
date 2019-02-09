@@ -10,7 +10,8 @@ extern crate uuid;
 use env_logger::{Builder as logBuilder, Target as logTarget};
 use redisql_lib::redis as r;
 use redisql_lib::redis::{
-    get_dbkey_from_name, register_function, register_write_function,
+    get_dbkey_from_name, register_function,
+    register_function_with_keys, register_write_function,
     reply_with_error_from_key_type, with_ch_and_loopdata, LoopData,
     RedisReply,
 };
@@ -229,6 +230,74 @@ extern "C" fn QueryStatement(
                 }
             },
         ),
+    }
+}
+
+#[allow(non_snake_case)]
+extern "C" fn QueryStatementInto(
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32 {
+    let (context, argvector) = r::create_argument(ctx, argv, argc);
+
+    match argvector.len() {
+        0...3 => {
+            let error = CString::new(
+                "Wrong number of arguments, it \
+                 needs at least 4",
+            )
+            .unwrap();
+            unsafe {
+                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                    context.as_ptr(),
+                    error.as_ptr(),
+                )
+            }
+        }
+        _ => {
+            let stream_name = argvector[1];
+            let db = argvector[2];
+
+            with_ch_and_loopdata(
+                context.as_ptr(),
+                db,
+                |ch_loopdata| match ch_loopdata {
+                    Err(key_type) => reply_with_error_from_key_type(
+                        context.as_ptr(),
+                        key_type,
+                    ),
+                    Ok((ch, _loopdata)) => {
+                        let blocked_client = r::rm::BlockedClient {
+                            client: unsafe {
+                                r::rm::ffi::RedisModule_BlockClient
+                                    .unwrap()(
+                                    context.as_ptr(),
+                                    Some(reply_exec_statement),
+                                    Some(timeout),
+                                    Some(free_privdata),
+                                    10000,
+                                )
+                            },
+                        };
+
+                        let cmd = r::Command::QueryStatement {
+                            identifier: argvector[3],
+                            arguments: argvector[4..].to_vec(),
+                            return_method: r::ReturnMethod::Stream {
+                                name: stream_name,
+                            },
+                            client: blocked_client,
+                        };
+
+                        match ch.send(cmd) {
+                            Ok(()) => r::rm::ffi::REDISMODULE_OK,
+                            Err(_) => r::rm::ffi::REDISMODULE_OK,
+                        }
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -1060,10 +1129,13 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
-    match register_function(
+    match register_function_with_keys(
         &ctx,
         String::from("REDISQL.QUERY.INTO"),
         String::from("readonly"),
+        1,
+        2,
+        1,
         QueryInto,
     ) {
         Ok(()) => (),
@@ -1111,6 +1183,19 @@ pub extern "C" fn RedisModule_OnLoad(
         String::from("REDISQL.QUERY_STATEMENT"),
         String::from("readonly"),
         QueryStatement,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function_with_keys(
+        &ctx,
+        String::from("REDISQL.QUERY_STATEMENT.INTO"),
+        String::from("readonly"),
+        1,
+        2,
+        1,
+        QueryStatementInto,
     ) {
         Ok(()) => (),
         Err(e) => return e,

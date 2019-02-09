@@ -1350,6 +1350,32 @@ pub fn register_function(
     Ok(())
 }
 
+pub fn register_function_with_keys(
+    context: &rm::Context,
+    name: String,
+    flags: String,
+    first_key: i32,
+    last_key: i32,
+    key_step: i32,
+    f: extern "C" fn(
+        *mut rm::ffi::RedisModuleCtx,
+        *mut *mut rm::ffi::RedisModuleString,
+        ::std::os::raw::c_int,
+    ) -> i32,
+) -> Result<(), i32> {
+    let create_db: rm::ffi::RedisModuleCmdFunc = Some(f);
+
+    if {
+        rm::CreateCommandWithKeys(
+            context, name, create_db, flags, first_key, last_key,
+            key_step,
+        )
+    } == rm::ffi::REDISMODULE_ERR
+    {
+        return Err(rm::ffi::REDISMODULE_ERR);
+    }
+    Ok(())
+}
 pub fn register_write_function(
     ctx: &rm::Context,
     name: String,
