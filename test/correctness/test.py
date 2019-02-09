@@ -683,6 +683,51 @@ class TestStreams(TestRediSQLWithExec):
             for i, row in enumerate(result):
                 self.assertEquals(row[1], ['a', str(i), 'b', "bar", 'c', str(i-1)])
 
+class TestStreamsSynchronous(TestRediSQLWithExec):
+    def test_stream_query(self):
+        with DB(self, "A"):
+            total_len = 513
+            done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE TABLE foo(a int, b string, c int);")
+            self.assertEquals(done, ["DONE", 0L])
+
+            for i in xrange(total_len):
+                insert_stmt = "INSERT INTO foo VALUES({}, '{}', {})".format(i, "bar", i+1)
+                done = self.exec_naked("REDISQL.EXEC.NOW", "A", insert_stmt)
+                self.assertEquals(done, ["DONE", 1L])
+
+            result = self.exec_naked("REDISQL.QUERY.INTO.NOW", "{A}:1", "A", "SELECT * FROM foo")
+            self.assertEquals(result[0][0], "{A}:1")
+
+            result = self.exec_naked("XRANGE", "{A}:1", "-", "+")
+            self.assertEquals(len(result), total_len)
+
+            for i, row in enumerate(result):
+                self.assertEquals(row[1], ['a', str(i), 'b', "bar", 'c', str(i+1)])
+
+    def test_stream_query_statement(self):
+        with DB(self, "B"):
+            total_len = 513
+            done = self.exec_naked("REDISQL.EXEC.NOW", "B", "CREATE TABLE foo(a int, b string, c int);")
+            self.assertEquals(done, ["DONE", 0L])
+
+            for i in xrange(total_len):
+                insert_stmt = "INSERT INTO foo VALUES({}, '{}', {})".format(i, "bar", i-1)
+                done = self.exec_naked("REDISQL.EXEC.NOW", "B", insert_stmt)
+                self.assertEquals(done, ["DONE", 1L])
+
+            done = self.exec_naked("REDISQL.CREATE_STATEMENT.NOW", "B", "select_all", "SELECT * FROM foo;")
+            self.assertEquals(done, "OK")
+
+            result = self.exec_naked("REDISQL.QUERY_STATEMENT.INTO.NOW",
+                    "{B}:1", "B", "select_all")
+            self.assertEquals(result[0][0], "{B}:1")
+
+            result = self.exec_naked("XRANGE", "{B}:1", "-", "+")
+            self.assertEquals(len(result), total_len)
+
+            for i, row in enumerate(result):
+                self.assertEquals(row[1], ['a', str(i), 'b', "bar", 'c', str(i-1)])
+
 
 if __name__ == '__main__':
    unittest.main()
