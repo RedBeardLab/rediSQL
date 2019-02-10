@@ -652,6 +652,7 @@ class TestStreams(TestRediSQLWithExec):
 
             result = self.exec_naked("REDISQL.QUERY.INTO", "{A}:1", "A", "SELECT * FROM foo")
             self.assertEquals(result[0][0], "{A}:1")
+            self.assertEquals(result[0][3], 513)
 
             result = self.exec_naked("XRANGE", "{A}:1", "-", "+")
             self.assertEquals(len(result), total_len)
@@ -676,6 +677,7 @@ class TestStreams(TestRediSQLWithExec):
             result = self.exec_naked("REDISQL.QUERY_STATEMENT.INTO",
                     "{B}:1", "B", "select_all")
             self.assertEquals(result[0][0], "{B}:1")
+            self.assertEquals(result[0][3], 513)
 
             result = self.exec_naked("XRANGE", "{B}:1", "-", "+")
             self.assertEquals(len(result), total_len)
@@ -697,6 +699,7 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
 
             result = self.exec_naked("REDISQL.QUERY.INTO.NOW", "{A}:1", "A", "SELECT * FROM foo")
             self.assertEquals(result[0][0], "{A}:1")
+            self.assertEquals(result[0][3], 513)
 
             result = self.exec_naked("XRANGE", "{A}:1", "-", "+")
             self.assertEquals(len(result), total_len)
@@ -721,6 +724,7 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
             result = self.exec_naked("REDISQL.QUERY_STATEMENT.INTO.NOW",
                     "{B}:1", "B", "select_all")
             self.assertEquals(result[0][0], "{B}:1")
+            self.assertEquals(result[0][3], 513)
 
             result = self.exec_naked("XRANGE", "{B}:1", "-", "+")
             self.assertEquals(len(result), total_len)

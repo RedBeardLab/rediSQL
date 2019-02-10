@@ -697,7 +697,7 @@ pub fn stream_query_result_array(
 ) -> Result<QueryResult, err::RediSQLError> {
     let row_last_index = array.len() - 1;
 
-    let mut result = Vec::with_capacity(3);
+    let mut result = Vec::with_capacity(4);
     result.push(sql::Entity::Text {
         text: stream_name.to_string(),
     });
@@ -780,17 +780,22 @@ pub fn stream_query_result_array(
             }
         }
     }
+    context.release(lock);
+
     if result.len() == 2 {
         let start_and_end = result[1].clone();
         result.push(start_and_end);
     }
+    result.push(sql::Entity::Integer {
+        int: array.len() as i64,
+    });
 
-    context.release(lock);
     Ok(QueryResult::Array {
         names: vec![
             String::from("stream"),
             String::from("first_id"),
             String::from("last_id"),
+            String::from("size"),
         ],
         array: vec![result],
     })
