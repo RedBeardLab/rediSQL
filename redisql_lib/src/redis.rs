@@ -759,10 +759,7 @@ pub fn stream_query_result_array(
             rm::CallReply::RError { .. } => {
                 context.release(lock);
                 return Err(RediSQLError::new(
-                    format!(
-                        "{}",
-                        xadd_result.access_error().unwrap()
-                    ),
+                    xadd_result.access_error().unwrap().to_string(),
                     format!("Error in XADD to {}", stream_name),
                 ));
                 // return an error and unlock

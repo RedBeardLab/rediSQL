@@ -137,7 +137,7 @@ impl<'a> LeakyArrayOfRMString<'a> {
     pub fn new(ctx: &'a Context) -> LeakyArrayOfRMString {
         LeakyArrayOfRMString {
             array: Vec::with_capacity(24),
-            ctx: ctx,
+            ctx,
         }
     }
     pub fn push(&mut self, s: &str) {
@@ -155,6 +155,9 @@ impl<'a> LeakyArrayOfRMString<'a> {
     }
     pub fn len(&self) -> usize {
         self.array.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
