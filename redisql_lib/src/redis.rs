@@ -713,28 +713,38 @@ pub fn stream_query_result_array(
         let mut xadd = rm::XADDCommand::new(&context, stream_name);
         for (j, entity) in row.iter().enumerate() {
             match entity {
-                sql::Entity::Null
-                | sql::Entity::OK {}
-                | sql::Entity::DONE { .. } => {
+                sql::Entity::OK {} | sql::Entity::DONE { .. } => {
                     // do nothing
+                }
+                sql::Entity::Null => {
+                    xadd.add_element(
+                        &format!("null:{}", &columns_names[j]),
+                        "(null)",
+                    );
                 }
                 sql::Entity::Integer { int } => {
                     xadd.add_element(
-                        &columns_names[j],
+                        &format!("int:{}", &columns_names[j]),
                         &int.to_string(),
                     );
                 }
                 sql::Entity::Float { float } => {
                     xadd.add_element(
-                        &columns_names[j],
+                        &format!("real:{}", &columns_names[j]),
                         &float.to_string(),
                     );
                 }
                 sql::Entity::Text { text } => {
-                    xadd.add_element(&columns_names[j], text);
+                    xadd.add_element(
+                        &format!("text:{}", &columns_names[j]),
+                        text,
+                    );
                 }
                 sql::Entity::Blob { blob } => {
-                    xadd.add_element(&columns_names[j], blob);
+                    xadd.add_element(
+                        &format!("blob:{}", &columns_names[j]),
+                        blob,
+                    );
                 }
             }
         }

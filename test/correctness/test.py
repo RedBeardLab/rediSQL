@@ -657,7 +657,7 @@ class TestStreams(TestRediSQLWithExec):
             self.assertEquals(len(result), total_len)
 
             for i, row in enumerate(result):
-                self.assertEquals(row[1], ['a', str(i), 'b', "bar", 'c', str(i+1)])
+                self.assertEquals(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i+1)])
 
     def test_stream_query_statement(self):
         with DB(self, "B"):
@@ -681,7 +681,7 @@ class TestStreams(TestRediSQLWithExec):
             self.assertEquals(len(result), total_len)
 
             for i, row in enumerate(result):
-                self.assertEquals(row[1], ['a', str(i), 'b', "bar", 'c', str(i-1)])
+                self.assertEquals(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i-1)])
 
 class TestStreamsSynchronous(TestRediSQLWithExec):
     def test_stream_query(self):
@@ -702,7 +702,7 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
             self.assertEquals(len(result), total_len)
 
             for i, row in enumerate(result):
-                self.assertEquals(row[1], ['a', str(i), 'b', "bar", 'c', str(i+1)])
+                self.assertEquals(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i+1)])
 
     def test_stream_query_statement(self):
         with DB(self, "B"):
@@ -726,7 +726,7 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
             self.assertEquals(len(result), total_len)
 
             for i, row in enumerate(result):
-                self.assertEquals(row[1], ['a', str(i), 'b', "bar", 'c', str(i-1)])
+                self.assertEquals(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i-1)])
 
 
 if __name__ == '__main__':
