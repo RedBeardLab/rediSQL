@@ -9,7 +9,7 @@
         
         <link rel="shortcut icon" href="../../img/favicon.ico">
 
-	<title>Release 0.6.0 - RediSQL</title>
+	<title>Release 0.8.0 - RediSQL</title>
 
         <link href="../../css/bootstrap-custom.min.css" rel="stylesheet">
         <link href="../../css/font-awesome-4.0.3.css" rel="stylesheet">
@@ -107,8 +107,8 @@
                         <ul class="dropdown-menu">
                         
                             
-<li >
-    <a href="../release_0.8.0/">Release 0.8.0</a>
+<li class="active">
+    <a href="./">Release 0.8.0</a>
 </li>
 
                         
@@ -119,8 +119,8 @@
 
                         
                             
-<li class="active">
-    <a href="./">Release 0.6.0</a>
+<li >
+    <a href="../release_0.6.0/">Release 0.6.0</a>
 </li>
 
                         
@@ -163,12 +163,12 @@
                 </li>
                 
                     <li >
-                        <a rel="next" href="../release_0.7.0/">
+                        <a rel="next" href="../../pro_motivations/">
                             <i class="fa fa-arrow-left"></i> Previous
                         </a>
                     </li>
                     <li >
-                        <a rel="prev" href="../release_0.5.0/">
+                        <a rel="prev" href="../release_0.7.0/">
                             Next <i class="fa fa-arrow-right"></i>
                         </a>
                     </li>
@@ -193,56 +193,96 @@
                 <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
     <ul class="nav bs-sidenav">
     
-        <li class="main active"><a href="#release-060-of-redisql-sql-steroids-for-redis">Release 0.6.0 of RediSQL, SQL steroids for Redis</a></li>
+        <li class="main active"><a href="#release-080-of-redisql-sql-steroids-for-redis">Release 0.8.0 of RediSQL, SQL steroids for Redis</a></li>
         
             <li><a href="#redisql-redis-on-sql-steroids">RediSQL, Redis on SQL steroids.</a></li>
         
-            <li><a href="#virtual-table">Virtual Table</a></li>
+            <li><a href="#motivation">Motivation</a></li>
         
-            <li><a href="#importance-of-this-release">Importance of this release</a></li>
-        
-            <li><a href="#end">End</a></li>
+            <li><a href="#how-to-use">How to use</a></li>
         
     
     </ul>
 </div></div>
                 <div class="col-md-9" role="main">
 
-<h1 id="release-060-of-redisql-sql-steroids-for-redis">Release 0.6.0 of RediSQL, SQL steroids for Redis</h1>
+<h1 id="release-080-of-redisql-sql-steroids-for-redis">Release 0.8.0 of RediSQL, SQL steroids for Redis</h1>
 <h4 id="redisql-redis-on-sql-steroids">RediSQL, Redis on SQL steroids.</h4>
 <p>RediSQL is a Redis module that provides full SQL capabilities to Redis, it is the simplest and fastest way to get an SQL database up and running, without incurring in difficult operational issues and it can scale quite well with your business.</p>
 <p>The fastest introduction to RediSQL is <a href="https://redisql.com">our homepage</a></p>
-<p><strong>tl;dr</strong> This release does not introduce new commands, but it provides a SQLite virtual table implementation that allows making SQL queries against Redis Hashes.
-The release is important because set the foundation to write more complex commands or SQLite functions.
-Possible ideas could be SQLite functions that append to a list or to a stream, these functions could be used inside triggers to generate an event log of all the operation that happened to a particular table.</p>
-<h2 id="virtual-table">Virtual Table</h2>
-<p>Inside RediSQL is now possible to use the virtual table: <a href="../../references/#redisql_tables_brute_hash">REDISQL_TABLES_BRUTE_HASH</a>.</p>
-<p>This virtual table allows to only query Redis hashes that follow a common structure.</p>
-<p>The understood structure is:</p>
-<pre><code>HSET $tableName:$id $col1 $val1 $col2 $val2 ... $colN $valN
+<p><strong>tl;dr</strong> This release introduce two new commands <code>REDISQL.QUERY.INTO[.NOW]</code> and <code>REDISQL.QUERY_STATEMENT.INTO[.NOW]</code>. The new commands behave similary to <code>REDISQL.QUERY</code> and <code>REDISQL.QUERY_STATEMENT</code> but they <code>XADD</code> the results to a Redis Stream passed as first argument.</p>
+<h2 id="motivation">Motivation</h2>
+<p>Being able to write the result of a query into a stream opens several possibilities.</p>
+<p>First off all allow to easily cache the result of expensive queries.</p>
+<p>Then, it separate the creation of a result with its consuption.</p>
+<p>For very big results this is a very important improvements.</p>
+<p>While computing the result can be (and usually is) off-load to another thread so that it does not block the execution of the main redis thread. Returning the result must be done in the main Redis thread. </p>
+<p>Hence a long result can take a lot of time to be returned to the client and in that time Redis cannot serve other requests.</p>
+<p>Moreover, on the other side of the network, a small consumer might not expect a big result and could be overlwhelmed by the size.</p>
+<p>In standard databases this problem is usually solved using cursors, however Redis itself does not provide this facility.</p>
+<p>Redis provide lists, but they are simply flat list and can store only strings, it would be complex to create the cursors on top of them.</p>
+<p>The streams however are a better fit. While also them can store only strings, they store them into entry, which are key-values objects. 
+The use of entry allow to group together the rows.</p>
+<h2 id="how-to-use">How to use</h2>
+<p>An example of <code>REDISQL.QUERY.INTO</code> is the following:</p>
+<pre><code>REDISQL.QUERY.INTO result_stream DB &quot;SELECT foo, bar FROM baz WHERE n &gt; 42&quot;
 </code></pre>
 
-<p>Where the <code>$col</code>s are constant in the hashes and, of course, the <code>$val</code>s change from row to row.</p>
-<p>In order to create a <a href="../../references/#redisql_tables_brute_hash">REDISQL_TABLES_BRUTE_HASH</a> the syntax is the following:</p>
-<pre><code>CREATE VIRTUAL TABLE funny_cats USING REDISQL_TABLES_BRUTE_HASH($tableName, $col1, $col2, ..., $colN);
+<p>The command will execute the query <code>SELECT foo, bar FROM baz WHERE n &gt; 42</code> agains the database <code>DB</code> and it will <code>XADD</code> each row of the result to the stream <code>result_stream</code>.</p>
+<p>If the result is empty, the command will return <code>["DONE", 0]</code> to the Redis client.</p>
+<p>If the result is not empty, the command will return, to the Redis client, the name of the stream used (hence <code>result_stream</code> in this example) along with the first ID added and the last ID added and the size of the cursor (the number of entries added to the stream.)</p>
+<p>In the following example we start by creating a database, then we create a new table <code>foo</code> in the database, and we store 4 rows into the table.</p>
+<p>Then we use the new <code>REDISQL.QUERY.NOW</code> command to store the result of the query <code>SELECT * FROM foo</code> agains the database <code>DB</code> in the stream <code>{DB}:all_foo</code>.</p>
+<pre><code>127.0.0.1:6379&gt; REDISQL.CREATE_DB DB
+OK
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;CREATE TABLE foo(a int, b int);&quot;
+1) DONE
+2) (integer) 0
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO foo(a) VALUES(1)&quot;
+1) DONE
+2) (integer) 1
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO foo VALUES(3, 4)&quot;
+1) DONE
+2) (integer) 1
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO foo VALUES(5, 6)&quot;
+1) DONE
+2) (integer) 1
+127.0.0.1:6379&gt; REDISQL.EXEC DB &quot;INSERT INTO foo VALUES(10, 19)&quot;
+1) DONE
+2) (integer) 1
+127.0.0.1:6379&gt; REDISQL.QUERY.INTO {DB}:all_foo DB &quot;SELECT * FROM foo&quot;
+1) 1) &quot;{DB}:all_foo&quot;
+   2) &quot;1549811093979-0&quot;
+   3) &quot;1549811093979-3&quot;
+   4) (integer) 4
+127.0.0.1:6379&gt; XRANGE {DB}:all_foo - +
+1) 1) &quot;1549811093979-0&quot;
+   2) 1) &quot;int:a&quot;
+      2) &quot;1&quot;
+      3) &quot;null:b&quot;
+      4) &quot;(null)&quot;
+2) 1) &quot;1549811093979-1&quot;
+   2) 1) &quot;int:a&quot;
+      2) &quot;3&quot;
+      3) &quot;int:b&quot;
+      4) &quot;4&quot;
+3) 1) &quot;1549811093979-2&quot;
+   2) 1) &quot;int:a&quot;
+      2) &quot;5&quot;
+      3) &quot;int:b&quot;
+      4) &quot;6&quot;
+4) 1) &quot;1549811093979-3&quot;
+   2) 1) &quot;int:a&quot;
+      2) &quot;10&quot;
+      3) &quot;int:b&quot;
+      4) &quot;19&quot;
 </code></pre>
 
-<p>Please note that the first parameter of the virtual table is not, as we could expect, the first column of the table, but is the name of hashes that we want to use as table, of course without specifying any <code>$id</code>.</p>
-<p>Also note that is pointless to provide a type to the columns since Redis does store only strings inside the hashes, hence you will get only strings from the virtual table as well.</p>
-<p>What you can do to get numbers, integer or floats, is to exploit the <a href="https://www.sqlite.org/lang_expr.html#castexpr"><code>CAST</code></a> capabilities of SQLite.</p>
-<p>You can find examples of this feature in <a href="../../references/#redisql_tables_brute_hash">the documentation.</a></p>
-<p>Let me make clear that this virtual table does <strong>not</strong> implements updates, inserts or deletes, at the moment you can only query this type of virtual tables.</p>
-<p>The implementation of update and inserts and deletes should not pose significant challenges.</p>
-<h2 id="importance-of-this-release">Importance of this release</h2>
-<p>This release is extremely important for architectural reasons inside the module itself.</p>
-<p>In order to implement the above virtual table was necessary to keep a pointer to an internal structure of Redis that actually allow calling any Redis command from inside a module.</p>
-<p>Including this pointer into the RediSQL structures make possible to call arbitrary Redis commands.</p>
-<p>This opens the gate to quite interesting features, as an example, imagine to be able to call <code>LPUSH</code> or <code>XADD</code> inside a trigger.</p>
-<p>This will allow to log every operation you are doing against your dataset. You could replay them later in a different instance of RediSQL or maybe also against a different database.</p>
-<p>You could write all you operation very fast in memory using RediSQL and when you have enough of them write them to disk against PostgreSQL, MySQL or any other database.</p>
-<h2 id="end">End</h2>
-<p>As always you can find all the public releases on the <a href="https://github.com/RedBeardLab/rediSQL/releases/tag/v0.5.0">github page</a>, you can openly access the same public release on the <a href="https://plasso.com/s/epp4GbsJdp-redisql/">open page of our shop</a> or you can buy the complete PRO package <a href="https://plasso.com/s/epp4GbsJdp-redisql/signup/">signing up in the shop</a>.</p>
-<p>Remember that signing up for the PRO product also provide you free support from us, the creator of the project, so that we can point you to the right direction and suggest the best use cases for our product.</p></div>
+<p>The first thing to notice is that the stream entity contains both the type of the column and it's name as well. The format is <code>$column_type:$column_name</code>. This is necessary because stream support only strings.</p>
+<p>In the example above the string <code>int:a</code> means that, for this row, the column <code>a</code> is of type <code>int</code>. Usually the type of a column is constant, however, it may be null, in that case it would be something like: <code>null:b</code>.</p>
+<p>Another interesting thing to notice is the name of the stream used which can look peculiar. Indeed it is the same name of the database <code>DB</code>, between curly braces <code>{DB}</code> and then a useful identifier <code>{DB}:all_foo</code>. The name of the stream can be any name, so is not important to use this schema, however this schema is useful if you use redis cluster.</p>
+<p>Indeed, both keys, the target stream <code>{DB}:all_foo</code> and the source database <code>DB</code>, need to be on the same redis cluster node. Since redis use the part of the key between curly bracket to decide in which node a key should resize, this schema allow us to make sure that this invariant is always respected.</p>
+<p>Moreover this schema is also quite nice, allowing with a glance to know what stream refer to what database. But again, it is not necessary at all.</p></div>
             
         </div>
 
