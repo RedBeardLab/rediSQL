@@ -100,6 +100,95 @@ If you need to execute the same query over and over it is a good idea to create 
 7. [SQLite `sqlite3_stmt_readonly`][sqlite_readonly]
 8. [`REDISQL.QUERY_STATEMENT`][query_statement] 
 
+## REDISQL.QUERY.INTO
+
+#### REDISQL.QUERY.INTO[.NOW] stream_name db_key "query"
+
+This command is similar to [`REDISQL.QUERY`][query] but instead of returning the result of the query, it append each row to the [stream][redis_streams_intro] `stream_name` passed as first argument. 
+
+The query must be a read-only one, exactly as [`REDISQL.QUERY`][query].
+
+The command executes [`XADD`][redis_xadd] to the stream, hence if the stream does not exists a new one is created. On the other hand, if the stream already exists the rows are simply appended.
+
+The command itself is eager, hence it compute the whole result, append it into the stream, and then it returns. Once the command returns, the whole result set is already in the Redis stream.
+
+The return value of the command depends on the result of the query:
+
+1. If the result of the query is empty, it simply returns `["DONE", 0]`, exactly like [`REDISQL.QUERY`][query].
+2. If at least one row is returnend by the query the command returns the name of the stream where it appended the resulting rows, which is exactly the one passed as input, the first and the last ID added to the stream and the total number of entries added to the stream.
+
+The stream will use autogeneratated IDs.
+
+Each entry in a stream is a set of field-value (key-value) pairs. The field (key) will be the type of the row and its name separated by a colon. It cpuld be something like `int:users` or `text:user_name` or even `real:x_coordinate`.
+
+The value will simply store the value of the column untouched. 
+
+```
+127.0.0.1:6379> REDISQL.CREATE_DB DB
+OK
+127.0.0.1:6379> REDISQL.EXEC DB "CREATE TABLE foo(a int, b int);"
+1) DONE
+2) (integer) 0
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO foo(a) VALUES(1)"
+1) DONE
+2) (integer) 1
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO foo VALUES(3, 4)"
+1) DONE
+2) (integer) 1
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO foo VALUES(5, 6)"
+1) DONE
+2) (integer) 1
+127.0.0.1:6379> REDISQL.EXEC DB "INSERT INTO foo VALUES(10, 19)"
+1) DONE
+2) (integer) 1
+127.0.0.1:6379> REDISQL.QUERY.INTO {DB}:all_foo DB "SELECT * FROM foo"
+1) 1) "{DB}:all_foo"
+   2) "1549811093979-0"
+   3) "1549811093979-3"
+   4) (integer) 4
+127.0.0.1:6379> XRANGE {DB}:all_foo - +
+1) 1) "1549811093979-0"
+   2) 1) "int:a"
+      2) "1"
+      3) "null:b"
+      4) "(null)"
+2) 1) "1549811093979-1"
+   2) 1) "int:a"
+      2) "3"
+      3) "int:b"
+      4) "4"
+3) 1) "1549811093979-2"
+   2) 1) "int:a"
+      2) "5"
+      3) "int:b"
+      4) "6"
+4) 1) "1549811093979-3"
+   2) 1) "int:a"
+      2) "10"
+      3) "int:b"
+      4) "19"
+```
+
+
+Using a standard Redis Stream all the standard consideration applies.
+
+1. The stream is not deleted by RediSQL, hence it can definitely be used for caching, on the other hand too many streams will use memory.
+2. The stream use a standard Redis key, in a cluster environment you should be sure that the database that is executing the query and the stream that will accomodate the result are on the same cluster node. 
+This can be accomplished easily by forcing the stream name to hash to the same cluster node of the database, it is sufficiento to use a `stream_name` composed as such `{db_key}:what:ever:here`. Redis will hash only the part between the `{` and `}` in order to compute the cluster node.
+3. The result can be consumed using the standard [Redis streams commands][redis_stream_commands], two good starting points are [`XREAD`][redis_xread] and [`XRANGE`][redis_xrange].
+
+**Complexity**: The complexity of the command is `O(n)` where `n` is the amount of row returned by the query.
+
+**See also**:
+
+1. [`REDISQL.QUERY`][query] 
+2. [`REDISQL.QUERY_STATEMENT.INTO`][query_statement_into] 
+3. [Redis Streams Intro][redis_streams_intro]
+4. [Redis Streams Commands][redis_stream_commands]
+5. [`XADD`][redis_xadd]
+6. [`XREAD`][redis_xread]
+7. [`XRANGE`][redis_xrange]
+
 ## REDISQL.CREATE_STATEMENT
 
 #### REDISQL.CREATE_STATEMENT[.NOW] db_key stmt_identifier "statement"
@@ -222,6 +311,26 @@ If you don't want to create a statement to run a query just once you can use [`R
 6. [`REDISQL.EXEC_STATEMENT`][exec_statement]
 7. [SQLite `sqlite3_stmt_readonly`][sqlite_readonly]
 8. [`REDISQL.QUERY`][query] 
+
+
+## REDISQL.QUERY_STATEMENT.INTO
+
+#### REDISQL.QUERY_STATEMENT.INTO[.NOW] stream_name db_key stmt_identifier [binding_parameters ...]
+
+This command behave like [`REDISQL.QUERY.INTO`][query_into] but instead of a query it takes as input a read-only statement and its binding paramenters.
+
+**Complexity**: The complexity of the command is `O(n)` where `n` is the amount of row returned by the query.
+
+**See also**:
+
+1. [`REDISQL.QUERY.INTO`][query_into] 
+2. [`REDISQL.QUERY_STATEMENT`][query_statement] 
+3. [Redis Streams Intro][redis_streams_intro]
+4. [Redis Streams Commands][redis_stream_commands]
+5. [`XADD`][redis_xadd]
+6. [`XREAD`][redis_xread]
+7. [`XRANGE`][redis_xrange]
+
 
 
 ## REDISQL.DELETE_STATEMENT
@@ -421,3 +530,10 @@ This virtual table does not support `INSERT`, `UPDATE` or `DELETE`.
 [scan]: https://redis.io/commands/scan
 [hget]: https://redis.io/commands/hget
 [backup_api]: https://www.sqlite.org/backup.html
+[redis_streams_intro]: https://redis.io/topics/streams-intro
+[redis_stream_commands]: https://redis.io/commands#stream
+[redis_xadd]: https://redis.io/commands/xadd
+[redis_xread]: https://redis.io/commands/xread
+[redis_xrange]: https://redis.io/commands/xrange
+[query_into]: #redisqlqueryinto
+[query_statement_into]: #redisqlquery_statementinto
