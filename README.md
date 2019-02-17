@@ -22,7 +22,7 @@ Between all the SQL implementation, the one that best fitted the need for this m
 
 There are three main way to get RediSQL.
 
-The first way is to download the public release directly from [this link](https://plasso.com/s/epp4GbsJdp-redisql).
+The first way is to download the public release directly from [this link](https://payhip.com/RediSQL).
 
 These will provide you with the community version that is free, however, you have the possibility to leave a donation (20€ would be the suggested ammount). Indeed, is not necessary to pay anything for the community edition and feel free to just input 0€.
 
@@ -37,6 +37,12 @@ With the `.so` you can start redis passing the object as argument like so:
 Please note that you need to run redis > 4.0 to use modules and RediSQL is not an exception.
 
 The last way is to compile the module yourself:
+
+## Tutorials:
+
+We provide tutorials to get started with different languages, if you need help for a particular programming language please open an issue.
+
+- [Using RediSQL with Python](http://redbeardlab.tech/rediSQL/blog/python/using-redisql-with-python/)
 
 ## Compiling and contributing
 
@@ -244,8 +250,8 @@ I am starting with only an Open Source version and then move to an enterprise ve
 
 This software is licensed under the AGPL-v3, it is possible to purchase more permissive licenses.
 
-<RediSQL, SQL capabilities to redis.>
-Copyright (C) 2017  Simone Mosciatti
+<RediSQL, SQL steroids for Redis.>
+Copyright (C) 2019  Simone Mosciatti
 
 [api]: http://redbeardlab.tech/rediSQL/references/
 
