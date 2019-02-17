@@ -85,6 +85,12 @@
      <changefreq>daily</changefreq>
     </url>
         
+    <url>
+     <loc>None/blog/python/using-redisql-with-python/</loc>
+     <lastmod>2019-02-17</lastmod>
+     <changefreq>daily</changefreq>
+    </url>
+        
     
 
 </urlset>
