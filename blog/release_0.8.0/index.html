@@ -210,19 +210,22 @@
 <h4 id="redisql-redis-on-sql-steroids">RediSQL, Redis on SQL steroids.</h4>
 <p>RediSQL is a Redis module that provides full SQL capabilities to Redis, it is the simplest and fastest way to get an SQL database up and running, without incurring in difficult operational issues and it can scale quite well with your business.</p>
 <p>The fastest introduction to RediSQL is <a href="https://redisql.com">our homepage</a></p>
-<p><strong>tl;dr</strong> This release introduce two new commands <code>REDISQL.QUERY.INTO[.NOW]</code> and <code>REDISQL.QUERY_STATEMENT.INTO[.NOW]</code>. The new commands behave similary to <code>REDISQL.QUERY</code> and <code>REDISQL.QUERY_STATEMENT</code> but they <code>XADD</code> the results to a Redis Stream passed as first argument.</p>
+<p><strong>tl;dr</strong> This release introduce two new commands <a href="../../references/#redisqlqueryinto"><code>REDISQL.QUERY.INTO[.NOW]</code></a> and <a href="../../references/#redisqlquery_statementinto"><code>REDISQL.QUERY_STATEMENT.INTO[.NOW]</code></a>. 
+The new commands behave similary to <code>REDISQL.QUERY</code> and <code>REDISQL.QUERY_STATEMENT</code> but they <a href="https://redis.io/commands/xadd"><code>XADD</code></a> the results to a <a href="https://redis.io/topics/streams-intro">Redis Stream</a> passed as first argument.</p>
 <h2 id="motivation">Motivation</h2>
-<p>Being able to write the result of a query into a stream opens several possibilities.</p>
-<p>First off all allow to easily cache the result of expensive queries.</p>
-<p>Then, it separate the creation of a result with its consuption.</p>
-<p>For very big results this is a very important improvements.</p>
-<p>While computing the result can be (and usually is) off-load to another thread so that it does not block the execution of the main redis thread. Returning the result must be done in the main Redis thread. </p>
-<p>Hence a long result can take a lot of time to be returned to the client and in that time Redis cannot serve other requests.</p>
+<p>Being able to write the result of a query into a stream opens several possibilities.
+First off all allow to easily cache the result of expensive queries.
+Then, it separate the creation of a result with its consuption which is a very important step forward especially for big results.</p>
+<p>Indeed, while the computation of a query is not done by the main redis thread but it is off-load to another thread to allow redis to keep serving the client. Returning the result must be done in the main Redis thread. 
+Hence a long result can take a lot of time to be returned to the client and in that time Redis cannot serve other requests.
+Writing the result into a stream make it much more efficient use of the main Redis thread time.</p>
 <p>Moreover, on the other side of the network, a small consumer might not expect a big result and could be overlwhelmed by the size.</p>
-<p>In standard databases this problem is usually solved using cursors, however Redis itself does not provide this facility.</p>
-<p>Redis provide lists, but they are simply flat list and can store only strings, it would be complex to create the cursors on top of them.</p>
-<p>The streams however are a better fit. While also them can store only strings, they store them into entry, which are key-values objects. 
-The use of entry allow to group together the rows.</p>
+<p>In standard databases this problem is usually solved using cursors, however Redis itself does not provide this facility.
+Redis provide lists, but they are simply flat list and can store only strings, it would be complex to create the cursors on top of them.</p>
+<p>The streams however are a better fit. While also them can store only strings, they store them into entries, which are small key-values objects.
+Each entry represent a row of our result set.
+Where we encode the column name and type into the key, and we use the value field to store the actual value of the column.</p>
+<p>An example will be easier to follow.</p>
 <h2 id="how-to-use">How to use</h2>
 <p>An example of <code>REDISQL.QUERY.INTO</code> is the following:</p>
 <pre><code>REDISQL.QUERY.INTO result_stream DB &quot;SELECT foo, bar FROM baz WHERE n &gt; 42&quot;
