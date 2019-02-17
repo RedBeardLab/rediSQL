@@ -12,7 +12,7 @@ You can obtain RediSQL from [our shop](https://payhip.com/b/Ri4d) or from the [g
 
 To load RediSQL is sufficient to pass it as argument to the redis-server: `./redis-server --loadmodule /path/to/redisql.so`
 
-The whole code show in this example is reachable [here]() while we also created a [more sophisticate example]() that stress much more the infrastructure to show that the bottle neck is not RediSQL but python and the network.
+The whole code show in this example is reachable [here](https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/python/src/simple.py) while we also created a [more sophisticate example](https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/python/src/main.py) that stress much more the infrastructure to show that the bottle neck is not RediSQL but python and the network.
 
 ## RediSQL and aioredis
 
