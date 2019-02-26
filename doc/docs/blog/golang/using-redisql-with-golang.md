@@ -12,7 +12,7 @@ You can obtain RediSQL from [our shop](https://payhip.com/b/Ri4d) or from the [g
 
 To load RediSQL is sufficient to pass it as argument to the redis-server: `./redis-server --loadmodule /path/to/redisql.so`
 
-The whole code show in this example is reachable [here](https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/python/src/simple.py).
+The whole code show in this example is reachable [here](https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/golang/main.go)
 
 ## Creating a Redis Pooled Connection
 
@@ -148,7 +148,7 @@ Finally to query back the data is possible to use:
 
 Feel free to explore our [references documentation][ref] to understand better what capabilities RediSQL provides you.
 
-The complete code of this example is available here.
+The complete code of this example is [available here.](https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/golang/main.go)
 
 
 
