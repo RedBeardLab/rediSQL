@@ -43,6 +43,7 @@ The last way is to compile the module yourself:
 We provide tutorials to get started with different languages, if you need help for a particular programming language please open an issue.
 
 - [Using RediSQL with Python](http://redbeardlab.tech/rediSQL/blog/python/using-redisql-with-python/)
+- [Using RediSQL with Golang](http://redbeardlab.tech/rediSQL/blog/golang/using-redisql-with-golang/)
 
 ## Compiling and contributing
 
