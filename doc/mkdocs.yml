@@ -26,3 +26,4 @@ pages:
       - 'JSON on Redis using RediSQL, SQL steroids for Redis': 'blog/JaaS.md'
       - 'Double performances of RediSQL going zero copy': 'blog/performances.md'
       - 'Using RediSQL with Python': 'blog/python/using-redisql-with-python.md'
+      - 'Using RediSQL with Go(lang)': 'blog/golang/using-redisql-with-golang.md'
