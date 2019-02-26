@@ -238,9 +238,11 @@ if err != nil {
 </code></pre>
 
 <h2 id="setting-up-the-database">Setting up the database</h2>
-<p>In order to work with RediSQL is necessary to do a small setup. The first step is always to create a database, then we create the tables inside the databases and finally the different statements if they are necessary.</p>
-<p>It is always a good idea to use statements instead of building query by hand. but it is not mandatory. The use of statements eliminate the risk of SQL injection and it is more performant, since the query is parsed only once and not every time it get executed.</p>
-<p>In our case we create a simple database, <code>HN</code>.</p>
+<p>In order to work with RediSQL is necessary to do a small setup. 
+The first step is always to create a database, then we create the tables inside the databases and finally the different statements if they are necessary.</p>
+<p>It is always a good idea to use statements instead of building query by hand, but it is not mandatory. 
+The use of statements eliminate the risk of SQL injection and it is more performant, since the query is parsed only once and not every time it get executed.</p>
+<p>In our case we create a simple database that we will call <code>HN</code>.</p>
 <pre><code class="golang">r.Do(radix.Cmd(nil, &quot;REDISQL.CREATE_DB&quot;, &quot;HN&quot;))
 </code></pre>
 
@@ -259,7 +261,9 @@ r.Do(radix.Cmd(nil, &quot;REDISQL.EXEC&quot;, &quot;HN&quot;, table))
 r.Do(radix.Cmd(nil, &quot;REDISQL.CREATE_STATEMENT&quot;, &quot;HN&quot;, &quot;insert_item&quot;, stmt))
 </code></pre>
 
-<p>The statement is a little complex. It exploit the <a href="https://www.sqlite.org/json1.html">JSON1</a> sqlite extension to extract the necessary fields from a JSON string. In particular we extract the <code>id</code>, the <code>by</code> (author) and the <code>time</code> fields.</p>
+<p>The statement is a little complex. 
+It exploit the <a href="https://www.sqlite.org/json1.html">JSON1</a> sqlite extension to extract the necessary fields from a JSON string. 
+In particular we extract the <code>id</code>, the <code>by</code> (author) and the <code>time</code> fields.</p>
 <p>After that those fields are extracted from the JSON string we store all of them into the database along with the whole item.</p>
 <h2 id="the-loop">The loop</h2>
 <p>After the database is ready to accept data, we start to poll the HN API in order to fetch the newest item. 
@@ -278,7 +282,7 @@ go func() {
 }()
 </code></pre>
 
-<p>The <code>getMaxItem()</code> function is implemented as:</p>
+<p>The API provide an endpoint that show the biggest element in HN at the moment, it is a simple auto-incremental id that we can fetch using the <code>getMaxItem()</code> function implemented as:</p>
 <pre><code class="golang">func getMaxItem() int {
     resp, _ := http.Get(&quot;https://hacker-news.firebaseio.com/v0/maxitem.json&quot;)
     defer resp.Body.Close()
@@ -333,7 +337,8 @@ Indeed is sufficient to set up the database following always the same steps:</p>
 <li>simple exec <code>REDISQL.EXEC $db_name "SELECT * FROM ... etc"</code></li>
 </ul>
 <p>Feel free to explore our <a href="../../../../references">references documentation</a> to understand better what capabilities RediSQL provides you.</p>
-<p>The complete code of this example is <a href="https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/golang/main.go">available here.</a></p></div>
+<p>The complete code of this example is <a href="https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/golang/main.go">available here.</a></p>
+<p>If you wish to see a similar tutorial for a different language, <a href="https://github.com/RedBeardLab/rediSQL/issues/new">open an issue on github.</a></p></div>
             
         </div>
 
