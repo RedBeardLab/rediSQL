@@ -181,6 +181,8 @@ Then we obtain the data from the Hacker News API and we show how to insert the d
 
 Hopefully this tutorial will be helpful and sufficient to get started, but if you have any question feel free to get in touch or to open an issue.
 
+If you wish to see a similar tutorial for a different language, [open an issue on github.](https://github.com/RedBeardLab/rediSQL/issues/new)
+
 [asyncio]: https://docs.python.org/3/library/asyncio.html
 [aiohttp]: https://github.com/aio-libs/aiohttp/
 [aioredis]: https://github.com/aio-libs/aioredis

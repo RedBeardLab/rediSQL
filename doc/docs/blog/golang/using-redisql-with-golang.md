@@ -28,11 +28,13 @@ if err != nil {
 
 ## Setting up the database
 
-In order to work with RediSQL is necessary to do a small setup. The first step is always to create a database, then we create the tables inside the databases and finally the different statements if they are necessary.
+In order to work with RediSQL is necessary to do a small setup. 
+The first step is always to create a database, then we create the tables inside the databases and finally the different statements if they are necessary.
 
-It is always a good idea to use statements instead of building query by hand. but it is not mandatory. The use of statements eliminate the risk of SQL injection and it is more performant, since the query is parsed only once and not every time it get executed.
+It is always a good idea to use statements instead of building query by hand, but it is not mandatory. 
+The use of statements eliminate the risk of SQL injection and it is more performant, since the query is parsed only once and not every time it get executed.
 
-In our case we create a simple database, `HN`.
+In our case we create a simple database that we will call `HN`.
 
 ```golang
 r.Do(radix.Cmd(nil, "REDISQL.CREATE_DB", "HN"))
@@ -58,7 +60,9 @@ stmt := `INSERT INTO hn VALUES(
 r.Do(radix.Cmd(nil, "REDISQL.CREATE_STATEMENT", "HN", "insert_item", stmt))
 ```
 
-The statement is a little complex. It exploit the [JSON1][json1] sqlite extension to extract the necessary fields from a JSON string. In particular we extract the `id`, the `by` (author) and the `time` fields.
+The statement is a little complex. 
+It exploit the [JSON1][json1] sqlite extension to extract the necessary fields from a JSON string. 
+In particular we extract the `id`, the `by` (author) and the `time` fields.
 
 After that those fields are extracted from the JSON string we store all of them into the database along with the whole item.
 
@@ -83,7 +87,7 @@ go func() {
 }()
 ```
 
-The `getMaxItem()` function is implemented as:
+The API provide an endpoint that show the biggest element in HN at the moment, it is a simple auto-incremental id that we can fetch using the `getMaxItem()` function implemented as:
 
 ```golang
 func getMaxItem() int {
@@ -150,7 +154,7 @@ Feel free to explore our [references documentation][ref] to understand better wh
 
 The complete code of this example is [available here.](https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/golang/main.go)
 
-
+If you wish to see a similar tutorial for a different language, [open an issue on github.](https://github.com/RedBeardLab/rediSQL/issues/new)
 
 [hn-api]: https://github.com/HackerNews/API
 [json1]: https://www.sqlite.org/json1.html
