@@ -18,7 +18,6 @@ use redisql_lib::redis::{
 use redisql_lib::redis_type::Context;
 use redisql_lib::sqlite as sql;
 use redisql_lib::virtual_tables as vtab;
-use std::ffi::CString;
 use std::fs::{remove_file, File};
 use std::ptr;
 use std::sync::mpsc::channel;
@@ -37,6 +36,32 @@ use commands::{
     MakeCopy, Query, QueryInto, QueryStatement, QueryStatementInto,
     UpdateStatement,
 };
+
+use std::alloc::{GlobalAlloc, Layout};
+
+struct RedisAllocator;
+
+unsafe impl GlobalAlloc for RedisAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        match r::rm::ffi::RedisModule_Alloc {
+            None => {
+                println!("Hummm");
+                panic!("Fooo");
+            }
+            Some(f) => f(layout.size()) as *mut u8,
+        }
+        //r::rm::ffi::RedisModule_Alloc.unwrap()(layout.size())
+        //    as *mut u8
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        r::rm::ffi::RedisModule_Free.unwrap()(
+            ptr as *mut std::ffi::c_void,
+        )
+    }
+}
+
+#[global_allocator]
+static A: RedisAllocator = RedisAllocator;
 
 unsafe extern "C" fn rdb_save(
     rdb: *mut r::rm::ffi::RedisModuleIO,
@@ -148,6 +173,11 @@ unsafe extern "C" fn free_db(db_ptr: *mut ::std::os::raw::c_void) {
     }
 }
 
+// untill we don't execute RedisModule_Init we don't have an allocator,
+// hence everything we may need must be allocate statically.
+static MODULE_NAME: &str = "rediSQL\0";
+static DATATYPE_NAME: &str = "rediSQLDB\0";
+
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn RedisModule_OnLoad(
@@ -155,6 +185,18 @@ pub extern "C" fn RedisModule_OnLoad(
     _argv: *mut *mut r::rm::ffi::RedisModuleString,
     _argc: i32,
 ) -> i32 {
+    if unsafe {
+        r::rm::ffi::Export_RedisModule_Init(
+            ctx,
+            MODULE_NAME.as_ptr() as *const i8,
+            1,
+            r::rm::ffi::REDISMODULE_APIVER_1,
+        )
+    } == r::rm::ffi::REDISMODULE_ERR
+    {
+        return r::rm::ffi::REDISMODULE_ERR;
+    }
+
     let ctx = Context::new(ctx);
 
     sql::disable_global_memory_statistics();
@@ -163,9 +205,6 @@ pub extern "C" fn RedisModule_OnLoad(
         .filter_level(log::LevelFilter::Debug)
         .target(logTarget::Stdout)
         .init();
-
-    let c_data_type_name = CString::new("rediSQLDB").unwrap();
-    let ptr_data_type_name = c_data_type_name.as_ptr();
 
     #[cfg(feature = "pro")]
     let mut types = r::rm::ffi::RedisModuleTypeMethods {
@@ -189,25 +228,11 @@ pub extern "C" fn RedisModule_OnLoad(
         free: Some(free_db),
     };
 
-    let module_c_name = CString::new("rediSQL").unwrap();
-    let module_ptr_name = module_c_name.as_ptr();
-    if unsafe {
-        r::rm::ffi::Export_RedisModule_Init(
-            ctx.as_ptr(),
-            module_ptr_name,
-            1,
-            r::rm::ffi::REDISMODULE_APIVER_1,
-        )
-    } == r::rm::ffi::REDISMODULE_ERR
-    {
-        return r::rm::ffi::REDISMODULE_ERR;
-    }
-
     unsafe {
         r::rm::ffi::DBType = r::rm::ffi::RedisModule_CreateDataType
             .unwrap()(
             ctx.as_ptr(),
-            ptr_data_type_name,
+            DATATYPE_NAME.as_ptr() as *const i8,
             1,
             &mut types,
         );
