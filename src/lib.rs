@@ -38,6 +38,25 @@ use commands::{
     UpdateStatement,
 };
 
+use std::alloc::{GlobalAlloc, Layout};
+
+struct RedisAllocator;
+
+unsafe impl GlobalAlloc for RedisAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        r::rm::ffi::RedisModule_Alloc.unwrap()(layout.size())
+            as *mut u8
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        r::rm::ffi::RedisModule_Free.unwrap()(
+            ptr as *mut std::ffi::c_void,
+        )
+    }
+}
+
+#[global_allocator]
+static A: RedisAllocator = RedisAllocator;
+
 unsafe extern "C" fn rdb_save(
     rdb: *mut r::rm::ffi::RedisModuleIO,
     value: *mut std::os::raw::c_void,
