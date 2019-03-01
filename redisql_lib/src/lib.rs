@@ -4,6 +4,7 @@
 extern crate log;
 
 pub mod community_statement;
+pub mod memory_allocator;
 pub mod redis;
 pub mod redis_type;
 pub mod redisql_error;

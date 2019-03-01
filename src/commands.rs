@@ -771,11 +771,13 @@ pub extern "C" fn CreateDB(
                                 }
                             }
                         }
-                        Err(_) => {
+                        Err(error) => {
+                            debug!("{}", error);
+                            panic!();
                             let error = CString::new(
                                 "Err - Error \
                                  opening the in \
-                                 memory databade",
+                                 memory database",
                             )
                             .unwrap();
                             unsafe {

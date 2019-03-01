@@ -37,21 +37,16 @@ use commands::{
     UpdateStatement,
 };
 
+use redisql_lib::memory_allocator::set_sqlite_allocator;
+
 use std::alloc::{GlobalAlloc, Layout};
 
 struct RedisAllocator;
 
 unsafe impl GlobalAlloc for RedisAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        match r::rm::ffi::RedisModule_Alloc {
-            None => {
-                println!("Hummm");
-                panic!("Fooo");
-            }
-            Some(f) => f(layout.size()) as *mut u8,
-        }
-        //r::rm::ffi::RedisModule_Alloc.unwrap()(layout.size())
-        //    as *mut u8
+        r::rm::ffi::RedisModule_Alloc.unwrap()(layout.size())
+            as *mut u8
     }
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
         r::rm::ffi::RedisModule_Free.unwrap()(
@@ -195,6 +190,10 @@ pub extern "C" fn RedisModule_OnLoad(
     } == r::rm::ffi::REDISMODULE_ERR
     {
         return r::rm::ffi::REDISMODULE_ERR;
+    }
+
+    unsafe {
+        set_sqlite_allocator();
     }
 
     let ctx = Context::new(ctx);
