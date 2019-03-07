@@ -8,4 +8,5 @@ pub mod redis;
 pub mod redis_type;
 pub mod redisql_error;
 pub mod sqlite;
+pub mod statistics;
 pub mod virtual_tables;
