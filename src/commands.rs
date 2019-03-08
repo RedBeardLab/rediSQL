@@ -1,4 +1,5 @@
 use std::ffi::{CStr, CString};
+use std::os::raw::c_long;
 use std::sync::mpsc::channel;
 use std::thread;
 
@@ -802,6 +803,7 @@ pub extern "C" fn CreateDB(
                                     r::rm::ffi::REDISMODULE_OK => {
                                         let ok =
                                             r::QueryResult::OK {};
+                                        STATISTICS.create_db_ok();
                                         ReplicateVerbatim(&context);
                                         ok.reply(&context)
                                     }
@@ -968,4 +970,34 @@ pub extern "C" fn MakeCopy(
         }
         Err(_) => r::rm::ffi::REDISMODULE_OK,
     }
+}
+
+#[allow(non_snake_case)]
+pub extern "C" fn GetStatistics(
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32 {
+    let (context, _argvector) = r::create_argument(ctx, argv, argc);
+    let data = STATISTICS.values();
+
+    let len = data.len() as c_long;
+    unsafe {
+        r::rm::ffi::RedisModule_ReplyWithArray.unwrap()(
+            context.as_ptr(),
+            len,
+        );
+    }
+    for statics in data {
+        unsafe {
+            r::rm::ffi::RedisModule_ReplyWithArray.unwrap()(
+                context.as_ptr(),
+                2,
+            );
+        }
+        r::rm::ReplyWithStringBuffer(&context, statics.0.as_bytes());
+        r::rm::ReplyWithLongLong(&context, statics.1 as i64);
+    }
+
+    r::rm::ffi::REDISMODULE_OK
 }
