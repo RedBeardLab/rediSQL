@@ -29,6 +29,8 @@ use community_statement::MultiStatement;
 
 use sqlite as sql;
 
+use statistics::STATISTICS;
+
 #[derive(Clone)]
 pub struct ReplicationBook {
     data: Arc<RwLock<FnvHashMap<String, (MultiStatement, bool)>>>,
@@ -817,6 +819,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     |_| {
                         let result =
                             do_execute(&loopdata.get_db(), query);
+                        match result {
+                            Ok(_) => STATISTICS.exec_ok(),
+                            Err(_) => STATISTICS.exec_err(),
+                        }
                         return_value(&client, result);
                     },
                 );
@@ -833,6 +839,20 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     |_| {
                         let result =
                             do_query(&loopdata.get_db(), query);
+                        match (&return_method, &result) {
+                            (ReturnMethod::Reply, Ok(_)) => {
+                                STATISTICS.query_ok()
+                            }
+                            (ReturnMethod::Reply, Err(_)) => {
+                                STATISTICS.query_err()
+                            }
+                            (ReturnMethod::Stream { .. }, Ok(_)) => {
+                                STATISTICS.query_into_ok()
+                            }
+                            (ReturnMethod::Stream { .. }, Err(_)) => {
+                                STATISTICS.query_into_err()
+                            }
+                        };
                         return_value_v2(
                             &client,
                             &return_method,
@@ -853,6 +873,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 let result = loopdata
                     .get_replication_book()
                     .update_statement(identifier, statement);
+                match result {
+                    Ok(_) => STATISTICS.update_statement_ok(),
+                    Err(_) => STATISTICS.update_statement_err(),
+                };
                 return_value(&client, result)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
@@ -863,7 +887,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 let result = loopdata
                     .get_replication_book()
                     .delete_statement(identifier);
-
+                match result {
+                    Ok(_) => STATISTICS.delete_statement_ok(),
+                    Err(_) => STATISTICS.delete_statement_err(),
+                }
                 return_value(&client, result);
             }
             Ok(Command::CompileStatement {
@@ -878,6 +905,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 let result = loopdata
                     .get_replication_book()
                     .insert_new_statement(identifier, statement);
+                match result {
+                    Ok(_) => STATISTICS.create_statement_ok(),
+                    Err(_) => STATISTICS.create_statement_err(),
+                }
                 return_value(&client, result);
             }
 
@@ -896,6 +927,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                         let result = loopdata
                             .get_replication_book()
                             .exec_statement(identifier, &arguments);
+                        match result {
+                            Ok(_) => STATISTICS.exec_statement_ok(),
+                            Err(_) => STATISTICS.exec_statement_err(),
+                        }
                         return_value(&client, result);
                     },
                 );
@@ -915,6 +950,20 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                                 identifier,
                                 arguments.as_slice(),
                             );
+                        match (&return_method, &result) {
+                            (ReturnMethod::Reply, Ok(_)) => {
+                                STATISTICS.query_statement_ok()
+                            }
+                            (ReturnMethod::Reply, Err(_)) => {
+                                STATISTICS.query_statement_err()
+                            }
+                            (ReturnMethod::Stream { .. }, Ok(_)) => {
+                                STATISTICS.query_statement_into_ok()
+                            }
+                            (ReturnMethod::Stream { .. }, Err(_)) => {
+                                STATISTICS.query_statement_into_err()
+                            }
+                        };
                         return_value_v2(
                             &client,
                             &return_method,

@@ -34,8 +34,8 @@ use engine_pro::{register, WriteAOF};
 
 use commands::{
     CreateDB, CreateStatement, DeleteStatement, Exec, ExecStatement,
-    MakeCopy, Query, QueryInto, QueryStatement, QueryStatementInto,
-    UpdateStatement,
+    GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
+    QueryStatementInto, UpdateStatement,
 };
 
 unsafe extern "C" fn rdb_save(
@@ -307,6 +307,16 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_write_function(&ctx, "REDISQL.COPY", MakeCopy) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function(
+        &ctx,
+        "REDISQL.STATISTICS",
+        "readonly",
+        GetStatistics,
+    ) {
         Ok(()) => (),
         Err(e) => return e,
     }
