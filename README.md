@@ -44,6 +44,7 @@ We provide tutorials to get started with different languages, if you need help f
 
 - [Using RediSQL with Python](http://redbeardlab.tech/rediSQL/blog/python/using-redisql-with-python/)
 - [Using RediSQL with Golang](http://redbeardlab.tech/rediSQL/blog/golang/using-redisql-with-golang/)
+- [Using RediSQL with Node.js](http://redbeardlab.tech/rediSQL/blog/node/using-redisql-with-node/)
 
 ## Compiling and contributing
 
