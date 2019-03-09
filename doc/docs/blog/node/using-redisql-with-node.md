@@ -12,7 +12,7 @@ You can obtain RediSQL from [our shop](https://payhip.com/b/Ri4d) or from the [g
 
 To load RediSQL is sufficient to pass it as argument to the redis-server: `./redis-server --loadmodule /path/to/redisql.so`
 
-The whole code show in this example is reachable [here](https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/node/hn.js)
+The whole code show in this example is reachable [here.](https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/node/hn.js)
 
 
 ## Dependencies
@@ -168,4 +168,4 @@ If you wish to see a similar tutorial for a different language, [open an issue o
 
 [hn-api]: https://github.com/HackerNews/API
 [json1]: https://www.sqlite.org/json1.html
-[ref]: ../../../references
+[ref]: ../../references

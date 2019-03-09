@@ -158,4 +158,4 @@ If you wish to see a similar tutorial for a different language, [open an issue o
 
 [hn-api]: https://github.com/HackerNews/API
 [json1]: https://www.sqlite.org/json1.html
-[ref]: ../../../references
+[ref]: ../../references
