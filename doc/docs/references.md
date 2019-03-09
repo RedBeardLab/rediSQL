@@ -403,6 +403,122 @@ This command use the [backup API][backup_api] of sqlite.
 1. [Backup API][backup_api]
 
 
+## REDISQL.STATISTICS
+
+#### REDISQL.STATISTICS
+
+The command print the internal statistics of RediSQL.
+
+There are 3 counter associated to each command. 
+The first one for counting the number of times the command is been invoked.
+The second (`OK` counter) keep tracks of how many times the command returned successfully.
+The third (`ERR` counter) memorize the amount of times the command returned an error. 
+
+The counters are implemented as atomic counters, they don't use locks nor introduces any notiaceble slowdown to the application.
+
+```
+127.0.0.1:6379> REDISQL.STATISTICS
+ 1) 1) "CREATE_DB"
+    2) (integer) 1
+ 2) 1) "CREATE_DB OK"
+    2) (integer) 1
+ 3) 1) "CREATE_DB ERR"
+    2) (integer) 0
+ 4) 1) "EXEC"
+    2) (integer) 4
+ 5) 1) "EXEC OK"
+    2) (integer) 4
+ 6) 1) "EXEC ERR"
+    2) (integer) 0
+ 7) 1) "QUERY"
+    2) (integer) 0
+ 8) 1) "QUERY OK"
+    2) (integer) 0
+ 9) 1) "QUERY ERR"
+    2) (integer) 0
+10) 1) "QUERY.INTO"
+    2) (integer) 0
+11) 1) "QUERY.INTO OK"
+    2) (integer) 0
+12) 1) "QUERY.INTO ERR"
+    2) (integer) 0
+13) 1) "CREATE_STATEMENT"
+    2) (integer) 3
+14) 1) "CREATE_STATEMENT OK"
+    2) (integer) 1
+15) 1) "CREATE_STATEMENT ERR"
+    2) (integer) 2
+16) 1) "EXEC_STATEMENT"
+    2) (integer) 2
+17) 1) "EXEC_STATEMENT OK"
+    2) (integer) 2
+18) 1) "EXEC_STATEMENT ERR"
+    2) (integer) 0
+19) 1) "UPDATE_STATEMENT"
+    2) (integer) 2
+20) 1) "UPDATE_STATEMENT OK"
+    2) (integer) 1
+21) 1) "UPDATE_STATEMENT ERR"
+    2) (integer) 1
+22) 1) "DELETE_STATEMENT"
+    2) (integer) 0
+23) 1) "DELETE_STATEMENT OK"
+    2) (integer) 0
+24) 1) "DELETE_STATEMENT ERR"
+    2) (integer) 0
+25) 1) "QUERY_STATEMENT"
+    2) (integer) 0
+26) 1) "QUERY_STATEMENT OK"
+    2) (integer) 0
+27) 1) "QUERY_STATEMENT ERR"
+    2) (integer) 0
+28) 1) "QUERY_STATEMENT.INTO"
+    2) (integer) 0
+29) 1) "QUERY_STATEMENT.INTO OK"
+    2) (integer) 0
+30) 1) "QUERY_STATEMENT.INTO ERR"
+    2) (integer) 0
+31) 1) "COPY"
+    2) (integer) 0
+32) 1) "COPY OK"
+    2) (integer) 0
+33) 1) "COPY ERR"
+    2) (integer) 0
+```
+
+
+
+**Complexity**: The complexity is constant.
+
+## REDISQL.COPY
+
+#### REDISQL.COPY[.NOW] db_key_source db_key_destination 
+
+The command copies the source database into the destination database.
+
+The content of the destination databases is completely ignored and lost.
+
+It is not important if the databases are stored in memory or backed by disk, the `COPY` command will work nevertheless.
+
+This command is useful to:
+
+1. Create backups of databases
+2. Load data from a slow, disk based, databases into a fast in-memory one
+3. To persist data from a in-memory database into a disk based database
+4. Initialize a database with a predefined status
+
+Usually the destination database is an empty database just created, while the source one is a databases where we have been working for a while.
+
+This command use the [backup API][backup_api] of sqlite.
+
+**Complexity**: The complexity is linear on the number of page (dimension) of the source database, beware it can be "slow" if the source database is big, during the copy the `source` database is busy and it cannot serve other queries. 
+
+**See also**:
+
+1. [Backup API][backup_api]
+
+
+
 # Virtual Tables
 
 What follows is not a RediSQL command but an SQLite virtual table introduced by the module.
