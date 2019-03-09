@@ -9,7 +9,7 @@
         
         <link rel="shortcut icon" href="../../img/favicon.ico">
 
-	<title>Release 0.5.0 - RediSQL</title>
+	<title>Release 0.9.0 - RediSQL</title>
 
         <link href="../../css/bootstrap-custom.min.css" rel="stylesheet">
         <link href="../../css/font-awesome-4.0.3.css" rel="stylesheet">
@@ -107,8 +107,8 @@
                         <ul class="dropdown-menu">
                         
                             
-<li >
-    <a href="../release_0.9.0/">Release 0.9.0</a>
+<li class="active">
+    <a href="./">Release 0.9.0</a>
 </li>
 
                         
@@ -131,8 +131,8 @@
 
                         
                             
-<li class="active">
-    <a href="./">Release 0.5.0</a>
+<li >
+    <a href="../release_0.5.0/">Release 0.5.0</a>
 </li>
 
                         
@@ -181,12 +181,12 @@
                 </li>
                 
                     <li >
-                        <a rel="next" href="../release_0.6.0/">
+                        <a rel="next" href="../../pro_motivations/">
                             <i class="fa fa-arrow-left"></i> Previous
                         </a>
                     </li>
                     <li >
-                        <a rel="prev" href="../analytics/">
+                        <a rel="prev" href="../release_0.8.0/">
                             Next <i class="fa fa-arrow-right"></i>
                         </a>
                     </li>
@@ -211,57 +211,125 @@
                 <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
     <ul class="nav bs-sidenav">
     
-        <li class="main active"><a href="#release-050-of-redisql-sql-steroids-for-redis">Release 0.5.0 of RediSQL, SQL steroids for Redis</a></li>
+        <li class="main active"><a href="#release-090-of-redisql-sql-steroids-for-redis">Release 0.9.0 of RediSQL, SQL steroids for Redis</a></li>
         
             <li><a href="#redisql-redis-on-sql-steroids">RediSQL, Redis on SQL steroids.</a></li>
         
-            <li><a href="#performance-improvement-20">Performance Improvement ~20%</a></li>
+            <li><a href="#motivation">Motivation</a></li>
         
-            <li><a href="#releases">Releases</a></li>
+            <li><a href="#how-to-use">How to use</a></li>
         
-            <li><a href="#trial">Trial</a></li>
-        
-            <li><a href="#end">End</a></li>
+            <li><a href="#implementation">Implementation</a></li>
         
     
     </ul>
 </div></div>
                 <div class="col-md-9" role="main">
 
-<h1 id="release-050-of-redisql-sql-steroids-for-redis">Release 0.5.0 of RediSQL, SQL steroids for Redis</h1>
+<h1 id="release-090-of-redisql-sql-steroids-for-redis">Release 0.9.0 of RediSQL, SQL steroids for Redis</h1>
 <h4 id="redisql-redis-on-sql-steroids">RediSQL, Redis on SQL steroids.</h4>
 <p>RediSQL is a Redis module that provides full SQL capabilities to Redis, it is the simplest and fastest way to get an SQL database up and running, without incurring in difficult operational issues and it can scale quite well with your business.</p>
 <p>The fastest introduction to RediSQL is <a href="https://redisql.com">our homepage</a></p>
-<p><strong>tl;dr;</strong> This release does not introduce any new features but it does improve the performances significantly. 
-Moreover, we are releasing for multiple platforms, notably for ARMv7 (Rasberry PI), for CentOS7 (Linux AMI on AWS) and of course for Linux generic. 
-Finally, we introduce also the TRIAL executable which can be freely downloaded and used, it provides all the functionality of the PRO version but it is limited for evaluation purposes, after ~2 hours it will shut down itself.</p>
-<h2 id="performance-improvement-20">Performance Improvement ~20%</h2>
-<p>We are registering an improvement in performance of roughly 20% with a similar load.</p>
-<p>Of course, performance inside an SQL database varies a lot depending on the query you are executing.</p>
-<p>In our evaluation, we are focusing on a simple query that inserts or updates values in the database.</p>
-<p>We decided to focus on <code>insert</code>s because is the simplest write operation, hence it cannot be distributed to different instances, and the performance of the single instance will limit the performance of the overall system.</p>
-<p>However, <code>insert</code> operations, need to allocate new memory, the allocator used by SQLite is very efficient but we still wanted to see what would happen without the need of allocation, hence we tested also <code>update</code>s</p>
-<p>We are seeing an improvement of roughly the 20% in <code>insert</code>/<code>upsert</code> throughput.</p>
-<p>The increase in throughput is driven by the switch to a zero-copy architecture.</p>
-<p>In Rust, the language in which RediSQL is written is usual to start dealing with lifetime issues simply by copying memory, this, of course, comes with a penalty in performances.</p>
-<p>However, as long as this performance penalty is not an issue is better to just leave as it is and work on the more important parts of the project.
-For one of our user it was a problem and so we decide to fix it by bringing performance improvements to all. <a href="../performances/">More about this story here.</a></p>
-<h2 id="releases">Releases</h2>
-<p>Rust produce in general static linked objects, so everything you need is already inside your object and you do not depends on any external library that must be installed in your host system.</p>
-<p>This has several advantages, as long as the architecture of your host is the correct one your executable will most likely run.</p>
-<p>There is an exception to that, <code>libc</code> given its ubiquity and size is compiled dynamically, so your object will need it to be present in your host machine. Which usually is not an issue.</p>
-<p>Unfortunately is some machine <code>libc</code> is present in an older version that the one we are expecting, so the module will not be able to run.</p>
-<p>Very old systems have this issues as well as CentOS 7 and the Linux AMI on AWS.</p>
-<p>Unfortunately, cross-compile for a different version of glibc is not as simple as it may seem, but we finally manage :)</p>
-<h2 id="trial">Trial</h2>
-<p>Finally, we decide to provide open access to the PRO version for evaluation purposes.</p>
-<p>Hence we created a third release that is called TRIAL.</p>
-<p>The releases are exactly the same as the PRO one, except that it shuts itself down after ~2 hours.</p>
-<p>It is supposed to let you test the PRO version before to commit to buy it, still, you have 14 days of money back guarantee if you don't like the product.</p>
-<p>Clearly, the TRIAL version is not supposed to be used in production.</p>
-<h2 id="end">End</h2>
-<p>As always you can find all the public releases on the <a href="https://github.com/RedBeardLab/rediSQL/releases/tag/v0.5.0">github page</a>, you can openly access the same public release on the <a href="https://plasso.com/s/epp4GbsJdp-redisql/">open page of our shop</a> or you can buy the complete PRO package <a href="https://plasso.com/s/epp4GbsJdp-redisql/signup/">signing up in the shop</a>.</p>
-<p>Remember that signing up for the PRO product also provide you free support from us, the creator of the project, so that we can point you to the right direction and suggest the best use cases for our product.</p></div>
+<p><strong>tl;dr</strong> This release introduce one simple new command <code>REDISQL.STATISTICS</code>.
+The new command returns the amount of time each command is been called and how many of those calls were successfully and how many returned errors.
+The command does not introduce noticeable slowdowns.</p>
+<p>This release is the smallest, however it provide the foundation for the next major releases.</p>
+<h2 id="motivation">Motivation</h2>
+<p>The infrastucture behind the <code>REDISQL.STATISTICS</code> commands is needed for the next major release of RediSQL.</p>
+<p>Moreover it provides an useful tool for the administrator of the instance allowing them to spot inefficiencies.</p>
+<h2 id="how-to-use">How to use</h2>
+<p>Just invoke the command without any arguments to get an array of all the counters, extra arguments are ignored for the moment.</p>
+<p>After using RediSQL for few commands, the output of <code>REDISQL.STATISTICS</code> could be the following.</p>
+<pre><code>127.0.0.1:6379&gt; REDISQL.STATISTICS
+ 1) 1) &quot;CREATE_DB&quot;
+    2) (integer) 1
+ 2) 1) &quot;CREATE_DB OK&quot;
+    2) (integer) 1
+ 3) 1) &quot;CREATE_DB ERR&quot;
+    2) (integer) 0
+ 4) 1) &quot;EXEC&quot;
+    2) (integer) 4
+ 5) 1) &quot;EXEC OK&quot;
+    2) (integer) 4
+ 6) 1) &quot;EXEC ERR&quot;
+    2) (integer) 0
+ 7) 1) &quot;QUERY&quot;
+    2) (integer) 0
+ 8) 1) &quot;QUERY OK&quot;
+    2) (integer) 0
+ 9) 1) &quot;QUERY ERR&quot;
+    2) (integer) 0
+10) 1) &quot;QUERY.INTO&quot;
+    2) (integer) 0
+11) 1) &quot;QUERY.INTO OK&quot;
+    2) (integer) 0
+12) 1) &quot;QUERY.INTO ERR&quot;
+    2) (integer) 0
+13) 1) &quot;CREATE_STATEMENT&quot;
+    2) (integer) 3
+14) 1) &quot;CREATE_STATEMENT OK&quot;
+    2) (integer) 1
+15) 1) &quot;CREATE_STATEMENT ERR&quot;
+    2) (integer) 2
+16) 1) &quot;EXEC_STATEMENT&quot;
+    2) (integer) 2
+17) 1) &quot;EXEC_STATEMENT OK&quot;
+    2) (integer) 2
+18) 1) &quot;EXEC_STATEMENT ERR&quot;
+    2) (integer) 0
+19) 1) &quot;UPDATE_STATEMENT&quot;
+    2) (integer) 2
+20) 1) &quot;UPDATE_STATEMENT OK&quot;
+    2) (integer) 1
+21) 1) &quot;UPDATE_STATEMENT ERR&quot;
+    2) (integer) 1
+22) 1) &quot;DELETE_STATEMENT&quot;
+    2) (integer) 0
+23) 1) &quot;DELETE_STATEMENT OK&quot;
+    2) (integer) 0
+24) 1) &quot;DELETE_STATEMENT ERR&quot;
+    2) (integer) 0
+25) 1) &quot;QUERY_STATEMENT&quot;
+    2) (integer) 0
+26) 1) &quot;QUERY_STATEMENT OK&quot;
+    2) (integer) 0
+27) 1) &quot;QUERY_STATEMENT ERR&quot;
+    2) (integer) 0
+28) 1) &quot;QUERY_STATEMENT.INTO&quot;
+    2) (integer) 0
+29) 1) &quot;QUERY_STATEMENT.INTO OK&quot;
+    2) (integer) 0
+30) 1) &quot;QUERY_STATEMENT.INTO ERR&quot;
+    2) (integer) 0
+31) 1) &quot;COPY&quot;
+    2) (integer) 0
+32) 1) &quot;COPY OK&quot;
+    2) (integer) 0
+33) 1) &quot;COPY ERR&quot;
+    2) (integer) 0
+</code></pre>
+
+<p>The <code>CERATE_DB</code> line means that the <code>REDISQL.CREATE_DB</code> command is been invoked once. The <code>CREATE_DB OK</code> lines means that the command succeeded once.</p>
+<p>Let's analyze the <code>CREATE_STATEMENT</code> lines as well.</p>
+<pre><code>13) 1) &quot;CREATE_STATEMENT&quot;
+    2) (integer) 3
+</code></pre>
+
+<p>This line says that the command is been invoked 3 times.</p>
+<pre><code>14) 1) &quot;CREATE_STATEMENT OK&quot;
+    2) (integer) 1
+</code></pre>
+
+<p>The next line specify that the commands completed successfully 1 time out of 3.</p>
+<pre><code>15) 1) &quot;CREATE_STATEMENT ERR&quot;
+    2) (integer) 2
+</code></pre>
+
+<p>The last line confirms that out of the 3 times we invoked the command, 2 of them failed for some reason.</p>
+<p>Of course the math need to check out and the sum of successful and erroneous runs should match with the number of invocation.</p>
+<h2 id="implementation">Implementation</h2>
+<p>This command is implemented with atomic counters, they are fast and provide a simple and easy way to manage concurrent access.</p>
+<p>We careful tested the performance to make sure that the slowdown introduces by the counter is not noticeable.</p></div>
             
         </div>
 
