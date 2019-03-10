@@ -1,7 +1,7 @@
 
-# Using RediSQL with Go(lang)
+# Using RediSQL with Node.js
 
-This tutorial will help you to get start to use RediSQL with Go(lang).
+This tutorial will help you to get start to use RediSQL with Node.js
 
 In this tutorial we will scrape the content of Hacker News using their [API documented here][hn-api].
 
