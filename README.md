@@ -87,6 +87,16 @@ At this point you have your standard redis instance working as you would expect 
 
 All the commands are documented in [the references.][api]
 
+## Docker image
+
+Moreover, also a Docker image is provide. Is sufficient to run the image `siscia/redisql`.
+
+```
+docker run -it --net host siscia/redisql
+```
+
+This will start a RediSQL instance and allow you to work directly with RediSQL.
+
 ## Tutorials and walkthrought
 
 We create a few tutorial to guide you on using RediSQL with Node.js, Go(lang) and Python:
