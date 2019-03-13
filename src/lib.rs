@@ -1,6 +1,7 @@
 #![warn(unused_extern_crates)]
 
 mod commands;
+mod telemetrics;
 
 extern crate env_logger;
 
@@ -37,6 +38,8 @@ use commands::{
     GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
     QueryStatementInto, UpdateStatement,
 };
+
+//use telemetrics;
 
 unsafe extern "C" fn rdb_save(
     rdb: *mut r::rm::ffi::RedisModuleIO,

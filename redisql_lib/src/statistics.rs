@@ -1,5 +1,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use serde::Serialize;
+
+#[derive(Serialize)]
 pub struct Statistics {
     create_db: AtomicUsize,
     create_db_ok: AtomicUsize,
