@@ -588,6 +588,24 @@ class TestCopy(TestRediSQLWithExec):
         self.assertEquals(done, "OK")
 
         done = self.exec_naked("REDISQL.COPY", "DB1", "DB2")
+        self.assertEquals(done, "OK")
+        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
+        self.assertEquals(result, [[1L]])
+
+    def test_double_copy(self):
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        self.assertEquals(done, "OK")
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        self.assertEquals(done, "OK")
+        done = self.exec_naked("REDISQL.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
+        self.assertEquals(done, "OK")
+
+        first_copy = self.exec_naked("REDISQL.COPY", "DB1", "DB2")
+        self.assertEquals(first_copy, "OK")
+
+        second_copy = self.exec_naked("REDISQL.COPY", "DB1", "DB2")
+        self.assertEquals(second_copy, "OK")
+
         result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
         self.assertEquals(result, [[1L]])
 
