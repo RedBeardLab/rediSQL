@@ -2,7 +2,7 @@ FROM redis:latest
 
 # RUN apk update; apk add libgcc_s.so.1
 
-COPY /target/release/libredis_sql.so /usr/local/lib
+COPY releases/0.9.1/redisql_v0.9.1_x86_64.so /usr/local/lib
 
 EXPOSE 6379
 
