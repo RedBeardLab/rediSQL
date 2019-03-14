@@ -101,9 +101,9 @@ This will start a RediSQL instance and allow you to work directly with RediSQL.
 
 We create a few tutorial to guide you on using RediSQL with Node.js, Go(lang) and Python:
 
-- [Using RediSQL with Python](http://redbeardlab.tech/rediSQL/blog/python/using-redisql-with-python/)
-- [Using RediSQL with Golang](http://redbeardlab.tech/rediSQL/blog/golang/using-redisql-with-golang/)
-- [Using RediSQL with Node.js](http://redbeardlab.tech/rediSQL/blog/node/using-redisql-with-node/)
+- [Using RediSQL with Python](http://redisql.redbeardlab.com/rediSQL/blog/python/using-redisql-with-python/)
+- [Using RediSQL with Golang](http://redisql.redbeardlab.com/rediSQL/blog/golang/using-redisql-with-golang/)
+- [Using RediSQL with Node.js](http://redisql.redbeardlab.com/rediSQL/blog/node/using-redisql-with-node/)
 
 Please open an issue and request a tutorial for any other language you are intereted in.
 
@@ -170,5 +170,5 @@ This software is licensed under the AGPL-v3, it is possible to purchase more per
 <RediSQL, SQL steroids for Redis.>
 Copyright (C) 2019  Simone Mosciatti
 
-[api]: http://redbeardlab.tech/rediSQL/references/
+[api]: http://redisql.redbeardlab.com/rediSQL/references/
 [redis-download]: https://redis.io/download
