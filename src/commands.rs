@@ -894,81 +894,88 @@ pub extern "C" fn MakeCopy(
     STATISTICS.copy();
     let (context, argvector) = r::create_argument(ctx, argv, argc);
 
-    if argvector.len() != 3 {
-        let error = CString::new(
-            "Wrong number of arguments, it accepts exactly 3",
-        )
-        .unwrap();
-        STATISTICS.copy_err();
-        return unsafe {
-            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                context.as_ptr(),
-                error.as_ptr(),
-            )
-        };
-    }
+    match argvector.len() {
+        3 => with_ch_and_loopdata(
+            context.as_ptr(),
+            argvector[1],
+            |ch_loopdata| match ch_loopdata {
+                Err(key_type) => {
+                    STATISTICS.copy_err();
 
-    let source_db =
-        get_dbkey_from_name(context.as_ptr(), argvector[1]);
-    if source_db.is_err() {
-        let error =
-            CString::new("Error in opening the SOURCE database")
-                .unwrap();
-        STATISTICS.copy_err();
-        return unsafe {
-            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                context.as_ptr(),
-                error.as_ptr(),
-            )
-        };
-    }
-    let source_db = source_db.unwrap();
-
-    let dest_db = get_dbkey_from_name(context.as_ptr(), argvector[2]);
-    if dest_db.is_err() {
-        let error =
+                    reply_with_error_from_key_type(
+                        context.as_ptr(),
+                        key_type,
+                    )
+                }
+                Ok((ch, _loopdata)) => {
+                    let dest_db = get_dbkey_from_name(
+                        context.as_ptr(),
+                        argvector[2],
+                    );
+                    if dest_db.is_err() {
+                        let error =
             CString::new("Error in opening the DESTINATION database")
                 .unwrap();
-        STATISTICS.copy_err();
-        return unsafe {
-            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                context.as_ptr(),
-                error.as_ptr(),
+                        STATISTICS.copy_err();
+                        return unsafe {
+                            r::rm::ffi::RedisModule_ReplyWithError
+                                .unwrap()(
+                                context.as_ptr(),
+                                error.as_ptr(),
+                            )
+                        };
+                    }
+                    let dest_db = dest_db.unwrap();
+
+                    let blocked_client = r::rm::BlockedClient {
+                        client: unsafe {
+                            r::rm::ffi::RedisModule_BlockClient
+                                .unwrap()(
+                                context.as_ptr(),
+                                Some(reply_create_statement),
+                                Some(timeout),
+                                Some(free_privdata),
+                                10000,
+                            )
+                        },
+                    };
+
+                    let cmd = r::Command::MakeCopy {
+                        destination: dest_db,
+                        client: blocked_client,
+                    };
+
+                    match ch.send(cmd) {
+                        Ok(()) => {
+                            debug!("MakeCopy | Successfully send command");
+                            unsafe {
+                                Replicate(
+                                    &context,
+                                    "REDISQL.COPY.NOW",
+                                    argv,
+                                    argc,
+                                );
+                            }
+                            r::rm::ffi::REDISMODULE_OK
+                        }
+                        Err(_) => r::rm::ffi::REDISMODULE_OK,
+                    }
+                }
+            },
+        ),
+        _ => {
+            let error = CString::new(
+                "Wrong number of arguments, it accepts exactly 3",
             )
-        };
-    }
-    let dest_db = dest_db.unwrap();
-
-    let blocked_client = r::rm::BlockedClient {
-        client: unsafe {
-            r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                context.as_ptr(),
-                Some(reply_create_statement),
-                Some(timeout),
-                Some(free_privdata),
-                10000,
-            )
-        },
-    };
-
-    let ch = &source_db.tx.clone();
-
-    let cmd = r::Command::MakeCopy {
-        source: source_db,
-        destination: dest_db,
-        client: blocked_client,
-    };
-
-    debug!("MakeCopy | End");
-    match ch.send(cmd) {
-        Ok(()) => {
-            debug!("MakeCopy | Successfully send command");
-            unsafe {
-                Replicate(&context, "REDISQL.COPY.NOW", argv, argc);
-            }
-            r::rm::ffi::REDISMODULE_OK
+            .unwrap();
+            STATISTICS.copy_err();
+            return unsafe {
+                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                    context.as_ptr(),
+                    error.as_ptr(),
+                )
+            };
         }
-        Err(_) => r::rm::ffi::REDISMODULE_OK,
     }
 }
 
