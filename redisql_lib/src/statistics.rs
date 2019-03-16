@@ -3,6 +3,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::Serialize;
 
 #[derive(Serialize)]
+pub struct StatsSerialized {
+    pub data: Vec<(&'static str, usize)>,
+}
+
 pub struct Statistics {
     create_db: AtomicUsize,
     create_db_ok: AtomicUsize,
@@ -199,7 +203,7 @@ impl Statistics {
     pub fn copy_err(&self) {
         STATISTICS.copy_err.fetch_add(1, Ordering::Relaxed);
     }
-    pub fn values(&self) -> Vec<(&'static str, usize)> {
+    pub fn values(&self) -> StatsSerialized {
         let mut stats: Vec<(&'static str, usize)> = Vec::new();
         stats.push((
             "CREATE_DB",
@@ -326,6 +330,11 @@ impl Statistics {
             self.copy_err.load(Ordering::Relaxed),
         ));
 
-        return stats;
+        StatsSerialized { data: stats }
+    }
+
+    pub fn serialize(&self) -> Result<String, serde_json::Error> {
+        let stats = self.values();
+        serde_json::to_string(&stats)
     }
 }
