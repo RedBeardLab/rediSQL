@@ -4,6 +4,7 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 pub struct StatsSerialized {
+    pub version: u64,
     pub data: Vec<(&'static str, usize)>,
 }
 
@@ -330,7 +331,7 @@ impl Statistics {
             self.copy_err.load(Ordering::Relaxed),
         ));
 
-        StatsSerialized { data: stats }
+        StatsSerialized { version: 0, data: stats }
     }
 
     pub fn serialize(&self) -> Result<String, serde_json::Error> {

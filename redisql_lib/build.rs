@@ -29,6 +29,7 @@ fn main() {
         .define("SQLITE_ENABLE_FTS4", Some("1"))
         .define("SQLITE_ENABLE_FTS5", Some("1"))
         .define("SQLITE_ENABLE_RTREE", Some("1"))
+        .flag_if_supported("-w")
         .compile("libsqlite3.a");
 
     #[derive(Debug)]
