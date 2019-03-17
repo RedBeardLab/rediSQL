@@ -979,7 +979,7 @@ pub extern "C" fn GetStatistics(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     let (context, _argvector) = r::create_argument(ctx, argv, argc);
-    let data = STATISTICS.values();
+    let data = STATISTICS.values().data;
 
     let len = data.len() as c_long;
     unsafe {

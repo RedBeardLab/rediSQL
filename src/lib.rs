@@ -1,6 +1,7 @@
 #![warn(unused_extern_crates)]
 
 mod commands;
+mod telemetrics;
 
 extern crate env_logger;
 
@@ -163,6 +164,8 @@ pub extern "C" fn RedisModule_OnLoad(
         .filter_level(log::LevelFilter::Debug)
         .target(logTarget::Stdout)
         .init();
+
+    thread::spawn(|| telemetrics::start_telemetrics());
 
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();

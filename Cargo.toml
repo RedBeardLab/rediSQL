@@ -11,6 +11,8 @@ crate-type = ["cdylib"]
 uuid = { version = "0.7", features = ["v4"] }
 log = {version = "0.4", features = ["release_max_level_warn"]}
 env_logger = "0.6"
+reqwest = "0.9"
+
 redisql_lib = {path = "./redisql_lib"}
 # engine_pro = {path = "./engine_pro", optional = true}
 
