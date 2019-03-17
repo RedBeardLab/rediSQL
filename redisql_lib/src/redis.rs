@@ -245,6 +245,12 @@ pub struct Loop {
     redis_context: ProtectedRedisContext,
 }
 
+impl Drop for Loop {
+    fn drop(&mut self) {
+        debug!("### Dropping Loop ###")
+    }
+}
+
 unsafe impl Send for Loop {}
 
 pub trait LoopData {
@@ -498,7 +504,6 @@ pub enum Command {
         client: BlockedClient,
     },
     MakeCopy {
-        source: DBKey,
         destination: DBKey,
         client: BlockedClient,
     },
@@ -560,26 +565,26 @@ pub fn do_query(
 
 /// implements the copy of the source database into the destination one
 /// it also leak the two DBKeys
-pub fn do_copy(
-    source: DBKey,
-    destination: DBKey,
+pub fn do_copy<L: LoopData>(
+    source_db: &Arc<Mutex<sql::RawConnection>>,
+    destination_loopdata: &L,
 ) -> Result<QueryResult, err::RediSQLError> {
-    let source_connection = source.loop_data.get_db();
-    let destination_connection = destination.loop_data.get_db();
+    debug!("DoCopy | Start");
 
     let backup_result = {
-        let source_db = source_connection.lock().unwrap();
-        let destination_db = destination_connection.lock().unwrap();
+        let destination_db = destination_loopdata.get_db();
+        let destination_db = destination_db.lock().unwrap();
+        let source_db = source_db.lock().unwrap();
         match make_backup(&source_db, &destination_db) {
             Err(e) => Err(RediSQLError::from(e)),
             Ok(_) => Ok(QueryResult::OK {}),
         }
     };
 
-    restore_previous_statements(&destination.loop_data);
-
-    std::mem::forget(source);
-    std::mem::forget(destination);
+    if backup_result.is_ok() {
+        restore_previous_statements(destination_loopdata);
+    }
+    debug!("DoCopy | End");
 
     backup_result
 }
@@ -973,20 +978,37 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 );
             }
             Ok(Command::MakeCopy {
-                source,
                 destination,
                 client,
             }) => {
-                // The DBKeys MUST be leaked, they are leaked by do_copy
-                let result = do_copy(source, destination);
-                return_value(&client, result);
+                loopdata.with_contex_set(
+                    Context::thread_safe(&client),
+                    |_| {
+                        debug!("MakeCopy | Doing do_copy");
+                        let destination_loopdata =
+                            &destination.loop_data;
+                        let result = do_copy(
+                            &loopdata.get_db(),
+                            destination_loopdata,
+                        );
+                        match result {
+                            Ok(_) => STATISTICS.copy_ok(),
+                            Err(_) => STATISTICS.copy_err(),
+                        };
+                        return_value(&client, result);
+                    },
+                );
+                std::mem::forget(destination);
             }
             Ok(Command::Stop) => {
                 debug!("Stop, exiting from work loop");
                 return;
             }
             Err(RecvError) => {
-                debug!("RecvError, exiting from work loop");
+                debug!(
+                    "RecvError {}, exiting from work loop",
+                    RecvError
+                );
                 return;
             }
         }
