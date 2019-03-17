@@ -1,7 +1,6 @@
 #![warn(unused_extern_crates)]
 
 mod commands;
-mod telemetrics;
 
 extern crate env_logger;
 
@@ -38,6 +37,9 @@ use commands::{
     GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
     QueryStatementInto, UpdateStatement,
 };
+
+#[cfg(not(feature = "pro"))]
+extern crate telemetrics;
 
 unsafe extern "C" fn rdb_save(
     rdb: *mut r::rm::ffi::RedisModuleIO,
@@ -165,7 +167,8 @@ pub extern "C" fn RedisModule_OnLoad(
         .target(logTarget::Stdout)
         .init();
 
-    thread::spawn(|| telemetrics::start_telemetrics());
+    #[cfg(not(feature = "pro"))]
+    thread::spawn(telemetrics::start_telemetrics);
 
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();

@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 use std::cmp::{max, min};
 use std::thread;
 use std::time;
@@ -7,9 +10,9 @@ use redisql_lib::statistics::STATISTICS;
 static PRIMARY_TELEMETRICS_URL: &str =
     "https://telemetrics.redisql.com/v0/statistics";
 static SECONDARY_TELEMETRICS_URL: &str =
-    "https://telemetrics.redisql.com/v0/statistics";
+    "https://telemetrics.redisql.redbeardlab.com/v0/statistics";
 static TERTIARY_TELEMETRICS_URL: &str =
-    "http://telemetrics.redisql.com/v0/statistics";
+    "http://telemetrics.redisql.redbeardlab.com/v0/statistics";
 
 // use of a leaky-bucket like algo.
 // first connect to the endpoint and make bucket expires in 5 hours
@@ -53,12 +56,12 @@ impl Bucket {
         }
     }
 
-    fn add(&mut self, n: i32) {
-        self.tokens = min(self.capacity, self.tokens + n as i64)
+    fn add(&mut self, n: i64) {
+        self.tokens = min(self.capacity, self.tokens + n)
     }
 
-    fn remove(&mut self, n: i32) {
-        self.tokens = max(0, self.tokens - n as i64);
+    fn remove(&mut self, n: i64) {
+        self.tokens = max(0, self.tokens - n);
     }
 
     fn is_empty(&self) -> bool {
@@ -89,11 +92,14 @@ fn send_telemetrics() -> Result<(), ()> {
                     *url, e
                 );
             }
-            Ok(res) => match res.status().is_success() {
-                true => return Ok(()),
-                false => warn!("Return error code from {}", *url),
-            },
+            Ok(res) => {
+                if res.status().is_success() {
+                    return Ok(());
+                } else {
+                    warn!("Return error code from {}", *url);
+                }
+            }
         }
     }
-    return Err(());
+    Err(())
 }
