@@ -87,15 +87,21 @@ At this point you have your standard redis instance working as you would expect 
 
 All the commands are documented in [the references.][api]
 
+To explore RediSQL you can use the official client `redis-cli` which it will connect to the running server.
+
 ## Docker image
 
-Moreover, also a Docker image is provide. Is sufficient to run the image `siscia/redisql`.
+Moreover, also a Docker image is provide. Is sufficient to run the image `siscia/redisql` to start the Redis server with RediSQL loaded.
 
 ```
-docker run -it --net host siscia/redisql
+$ docker run -it --net host siscia/redisql
 ```
 
-This will start a RediSQL instance and allow you to work directly with RediSQL.
+The `siscia/redisql` image provides also the `redis-cli` client:
+
+```
+$ docker run -it --net host siscia/redisql redis-cli
+```
 
 ## Tutorials and walkthrought
 
