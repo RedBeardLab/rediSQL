@@ -91,8 +91,13 @@ All the commands are documented in [the references.][api]
 
 Moreover, also a Docker image is provide. Is sufficient to run the image `siscia/redisql`.
 
+Note - keep running both
+
 ```
-docker run -it --net host siscia/redisql
+$docker run -it --net host siscia/redisql //Server
+
+$docker run -it --net host siscia/redisql redis-cli //Client
+
 ```
 
 This will start a RediSQL instance and allow you to work directly with RediSQL.
