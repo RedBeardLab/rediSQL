@@ -12,8 +12,8 @@ extern crate uuid;
 use env_logger::{Builder as logBuilder, Target as logTarget};
 use redisql_lib::redis as r;
 use redisql_lib::redis::{
-    register_function, register_function_with_keys,
-    register_write_function, LoopData,
+    get_path_from_db, is_redisql_database, register_function,
+    register_function_with_keys, register_write_function, LoopData,
 };
 use redisql_lib::redis_type::Context;
 use redisql_lib::sqlite as sql;
@@ -48,7 +48,7 @@ unsafe extern "C" fn rdb_save(
     let db: *mut r::DBKey =
         Box::into_raw(Box::from_raw(value as *mut r::DBKey));
 
-    let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
+    let path = format!("rediSQL_rdb_write_{}.sqlite", Uuid::new_v4());
 
     let db = (*db).loop_data.get_db();
     let conn = &db.lock().unwrap();
@@ -74,11 +74,24 @@ unsafe extern "C" fn rdb_save(
     }
 }
 
+// in the RDB file we store a serialized database, nothing else.
+// the first step of loading is to write the content of the RDB into a random file
+// then we open a connection to the random file, called on_disk
+// then we read what should be the path of the database to read.
+// It could be either:
+// 1) :memory:
+// 2) A file that does not exists
+// 3) A file that already exists
+// Hence, in case of
+// 1) we create a new in-memory database and we backup the on_disk database into the new in-memory database
+// 2) Similarly we just creare a new database and we backup the content over there
+// 3) We try to open the database, if we fail we just exit (like in all other cases) then, we assume that the DB just loaded is more up to date than the one in the RDB thus we don't do any data movement.
+// Finally we start the whole threads and bell and whistles!
 unsafe extern "C" fn rdb_load(
     rdb: *mut r::rm::ffi::RedisModuleIO,
     _encoding_version: i32,
 ) -> *mut std::os::raw::c_void {
-    let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
+    let path = format!("rediSQL_rdb_read_{}.sqlite", Uuid::new_v4());
 
     let mut file = match File::create(path.clone()) {
         Err(_) => {
@@ -93,15 +106,6 @@ unsafe extern "C" fn rdb_load(
         return ptr::null_mut();
     }
 
-    let in_mem = match sql::RawConnection::open_connection(":memory:")
-    {
-        Err(_) => {
-            println!("Was impossible to open the in memory db!");
-            return ptr::null_mut();
-        }
-        Ok(in_mem) => in_mem,
-    };
-
     let on_disk = match sql::RawConnection::open_connection(&path) {
         Err(_) => {
             println!("Error in opening the rdb database");
@@ -110,36 +114,59 @@ unsafe extern "C" fn rdb_load(
         Ok(on_disk) => on_disk,
     };
 
-    match r::make_backup(&on_disk, &in_mem) {
+    let on_disk = Arc::new(Mutex::new(on_disk));
+    let previous_path = match get_path_from_db(on_disk.clone()) {
+        Ok(path) => path.clone(),
         Err(e) => {
-            println!("{}", e);
-            ptr::null_mut()
+            println!("Warning trying to load from RDB: {}", e);
+            ":memory:".to_string()
         }
-        Ok(_) => {
-            let (tx, rx) = channel();
-            let conn = Arc::new(Mutex::new(in_mem));
-            let redis_context = match vtab::register_modules(&conn) {
-                Err(e) => {
-                    println!("{}", e);
+    };
+
+    let db = match sql::RawConnection::open_connection(&previous_path)
+    {
+        Err(_) => {
+            println!("WARN: Was impossible to open the database {}, using an in-memory database!", previous_path);
+            match sql::RawConnection::open_connection(":memory:") {
+                Err(_) => {
+                    println!("ERROR: Was impossible to open also an in-memory database, fail!");
                     return ptr::null_mut();
                 }
-                Ok(redis_context) => redis_context,
-            };
-            let db =
-                r::DBKey::new_from_arc(tx, conn, true, redis_context);
-            let mut loop_data = db.loop_data.clone();
+                Ok(in_mem) => in_mem,
+            }
+        }
+        Ok(db) => db,
+    };
 
-            thread::spawn(move || {
-                r::listen_and_execute(&mut loop_data, &rx)
-            });
-
-            match remove_file(path) {
-                _ => (),
-            };
-
-            Box::into_raw(Box::new(db)) as *mut std::os::raw::c_void
+    let conn = Arc::new(Mutex::new(db));
+    if !is_redisql_database(conn.clone()) {
+        if let Err(e) = r::make_backup(
+            &on_disk.lock().unwrap(),
+            &conn.lock().unwrap(),
+        ) {
+            println!("ERROR: Was impossible to copy the content of the RDB file into a database {}", e);
+            return ptr::null_mut();
         }
     }
+
+    let (tx, rx) = channel();
+    let redis_context = match vtab::register_modules(&conn) {
+        Err(e) => {
+            println!("{}", e);
+            return ptr::null_mut();
+        }
+        Ok(redis_context) => redis_context,
+    };
+    let db = r::DBKey::new_from_arc(tx, conn, true, redis_context);
+    let mut loop_data = db.loop_data.clone();
+
+    thread::spawn(move || r::listen_and_execute(&mut loop_data, &rx));
+
+    match remove_file(path) {
+        _ => (),
+    };
+
+    Box::into_raw(Box::new(db)) as *mut std::os::raw::c_void
 }
 
 unsafe extern "C" fn free_db(db_ptr: *mut ::std::os::raw::c_void) {

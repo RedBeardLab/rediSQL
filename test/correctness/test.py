@@ -4,6 +4,7 @@
 import unittest
 import os
 import tempfile
+import shutil
 
 import redis
 from rmtest import ModuleTestCase
@@ -794,15 +795,49 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
                 self.assertEquals(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i-1)])
 
 
-class TestPersistency(TestRediSQLWithExec):
-  def test_rdb_file(self):
+class TestFilePersistency(TestRediSQLWithExec):
+  def test_creation_rdb_file(self):
     path = tempfile.mkdtemp()
-    print path
     ok = self.exec_naked("REDISQL.CREATE_DB", "A", path + "/foo.sqlite")
     self.assertEquals(ok, "OK")
     for _ in self.retry_with_reload():
       pass
-          
+    shutil.rmtree(path)
+    self.assertTrue(True)
+
+  def test_storage_of_data(self):
+    path = tempfile.mkdtemp()
+    ok = self.exec_naked("REDISQL.CREATE_DB", "B", path + "/foo.sqlite")
+    self.assertEquals(ok, "OK")
+    done = self.exec_naked("REDISQL.EXEC", "B", "CREATE TABLE bar(a,b);")
+    self.assertEquals(done, ["DONE", 0L])
+    done = self.exec_naked("REDISQL.EXEC", "B", "INSERT INTO bar VALUES(1,2);")
+    self.assertEquals(done, ["DONE", 1L])
+    for _ in self.retry_with_reload():
+      pass
+    result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM bar;")
+    self.assertEquals(result, [[1, 2]])
+    shutil.rmtree(path)
+    self.assertTrue(True)
+
+  def test_without_file(self):
+    path = tempfile.mkdtemp()
+    ok = self.exec_naked("REDISQL.CREATE_DB", "B", path + "/foo.sqlite")
+    self.assertEquals(ok, "OK")
+    done = self.exec_naked("REDISQL.EXEC", "B", "CREATE TABLE bar(a,b);")
+    self.assertEquals(done, ["DONE", 0L])
+    done = self.exec_naked("REDISQL.EXEC", "B", "INSERT INTO bar VALUES(1,2);")
+    self.assertEquals(done, ["DONE", 1L])
+    os.remove(path + "/foo.sqlite")
+    self.assertFalse(os.path.isfile(path + "/foo.sqlite"))
+    for _ in self.retry_with_reload():
+      pass
+    result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM bar;")
+    self.assertEquals(result, [[1, 2]])
+    self.assertTrue(os.path.isfile(path + "/foo.sqlite"))
+    shutil.rmtree(path)
+    self.assertTrue(True)
+
 
 
 if __name__ == '__main__':

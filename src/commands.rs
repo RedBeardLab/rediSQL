@@ -770,6 +770,12 @@ pub extern "C" fn CreateDB(
                                     r::enable_foreign_key(rc.clone())
                                 })
                                 .and_then(|_| {
+                                    r::insert_path_metadata(
+                                        rc.clone(),
+                                        path,
+                                    )
+                                })
+                                .and_then(|_| {
                                     vtab::register_modules(&rc)
                                 }) {
                                 Err(e) => e.reply(&context),

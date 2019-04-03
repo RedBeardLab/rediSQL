@@ -571,8 +571,14 @@ pub fn do_copy<L: LoopData>(
 ) -> Result<QueryResult, err::RediSQLError> {
     debug!("DoCopy | Start");
 
+    let destination_path = {
+        let db = destination_loopdata.get_db();
+        get_path_from_db(db)
+    }?;
+
     let backup_result = {
         let destination_db = destination_loopdata.get_db();
+
         let destination_db = destination_db.lock().unwrap();
         let source_db = source_db.lock().unwrap();
         match make_backup(&source_db, &destination_db) {
@@ -583,6 +589,10 @@ pub fn do_copy<L: LoopData>(
 
     if backup_result.is_ok() {
         restore_previous_statements(destination_loopdata);
+        update_path_metadata(
+            destination_loopdata.get_db(),
+            &destination_path,
+        )?;
     }
     debug!("DoCopy | End");
 
@@ -1154,6 +1164,87 @@ fn get_statement_metadata(
     let stmt = MultiStatement::new(db, statement)?;
     let cursor = stmt.execute()?;
     Ok(QueryResult::from(cursor))
+}
+
+fn get_path_metadata(
+    db: Arc<Mutex<sql::RawConnection>>,
+) -> Result<QueryResult, sql::SQLite3Error> {
+    let statement = "SELECT value FROM RediSQLMetadata WHERE data_type = 'path' AND key = 'path';";
+
+    let stmt = MultiStatement::new(db, statement)?;
+    let cursor = stmt.execute()?;
+    Ok(QueryResult::from(cursor))
+}
+
+pub fn is_redisql_database(
+    db: Arc<Mutex<sql::RawConnection>>,
+) -> bool {
+    let query = "SELECT name FROM sqlite_master WHERE type='table' AND name='RediSQLMetadata;";
+
+    let query = MultiStatement::new(db, query);
+    if query.is_err() {
+        return false;
+    };
+
+    let query = query.unwrap();
+    let cursor = query.execute();
+    if cursor.is_err() {
+        return false;
+    };
+
+    match QueryResult::from(cursor.unwrap()) {
+        QueryResult::Array { .. } => true,
+        _ => false,
+    }
+}
+
+pub fn get_path_from_db(
+    db: Arc<Mutex<sql::RawConnection>>,
+) -> Result<String, RediSQLError> {
+    match get_path_metadata(db) {
+        Err(e) => Err(e.into()),
+        Ok(QueryResult::Array { array, .. }) => match array[0][0] {
+            sql::Entity::Text { ref text } => match text {
+                t if t.is_empty() => {
+                    let err = RediSQLError::new(
+                        "Found empty path".to_string(),
+                        "The field of the path of the database is empty in the metadata table.".to_string());
+                    Err(err)
+                }
+                t => Ok(t.to_string()),
+            },
+
+            _ => {
+                let err = RediSQLError::new(
+                    "Not found path as text of the database in metadata".to_string(),
+                    "While looking into the metadata of the database we found information about the path of the database itself, but the path was expected to be of TEXT type while it is not".to_string());
+                Err(err)
+            }
+        },
+        _ => Err(RediSQLError::new(
+                "Path not found".to_string(),
+                "Couldn't find the path of the database in the metadata table".to_string())),
+    }
+}
+
+pub fn insert_path_metadata(
+    db: Arc<Mutex<sql::RawConnection>>,
+    path: &str,
+) -> Result<(), sql::SQLite3Error> {
+    insert_metadata(db, "path", "path", path)
+}
+
+fn update_path_metadata(
+    db: Arc<Mutex<sql::RawConnection>>,
+    value: &str,
+) -> Result<(), sql::SQLite3Error> {
+    let statement =
+        "UPDATE RediSQLMetadata SET value = ?1 WHERE data_type = 'path' AND key = 'path'";
+
+    let stmt = MultiStatement::new(db, statement)?;
+    stmt.bind_index(1, value)?;
+    stmt.execute()?;
+    Ok(())
 }
 
 pub fn make_backup(
