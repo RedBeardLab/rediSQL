@@ -133,6 +133,10 @@ unsafe extern "C" fn rdb_load(
                 r::listen_and_execute(&mut loop_data, &rx)
             });
 
+            match remove_file(path) {
+                _ => (),
+            };
+
             Box::into_raw(Box::new(db)) as *mut std::os::raw::c_void
         }
     }
