@@ -3,12 +3,13 @@
 
 import unittest
 import os
+import tempfile
 
 import redis
 from rmtest import ModuleTestCase
 
 if "REDIS_MODULE_PATH" not in os.environ:
-    os.environ["REDIS_MODULE_PATH"] = "/home/simo/rediSQL/target/release/libredis_sql.so"
+    os.environ["REDIS_MODULE_PATH"] = "../../target/release/libredis_sql.so"
 
 os.environ["RUST_BACKTRACE"] = "full"
 
@@ -257,7 +258,7 @@ class TestStatements(TestRediSQLWithExec):
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [10005]])
 
-  def test_rds_persistency(self):
+  def test_rdb_persistency(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
         ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
@@ -272,7 +273,7 @@ class TestStatements(TestRediSQLWithExec):
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4]])
 
-  def test_rds_persistency_no_statements(self):
+  def test_rdb_persistency_no_statements(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
 
@@ -287,7 +288,7 @@ class TestStatements(TestRediSQLWithExec):
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[5], [6]])
 
-  def test_rds_persistency_multiple_statements(self):
+  def test_rdb_persistency_multiple_statements(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
         ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
@@ -399,7 +400,7 @@ class TestBruteHash(TestRediSQLWithExec):
       result = self.exec_naked("REDISQL.EXEC", "A", "SELECT * FROM cats")
       self.assertEquals(catty, len(result))
 
-  def test_rds_persistency(self):
+  def test_rdb_persistency(self):
     with DB(self, "A"):
       done = self.exec_naked("REDISQL.EXEC", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
 
@@ -502,7 +503,7 @@ class TestBruteHashSyncronous(TestRediSQLWithExec):
       result = self.exec_naked("REDISQL.EXEC.NOW", "A", "SELECT * FROM cats")
       self.assertEquals(catty, len(result))
 
-  def test_rds_persistency(self):
+  def test_rdb_persistency(self):
     with DB(self, "A"):
       done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
 
@@ -791,6 +792,17 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
 
             for i, row in enumerate(result):
                 self.assertEquals(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i-1)])
+
+
+class TestPersistency(TestRediSQLWithExec):
+  def test_rdb_file(self):
+    path = tempfile.mkdtemp()
+    print path
+    ok = self.exec_naked("REDISQL.CREATE_DB", "A", path + "/foo.sqlite")
+    self.assertEquals(ok, "OK")
+    for _ in self.retry_with_reload():
+      pass
+          
 
 
 if __name__ == '__main__':
