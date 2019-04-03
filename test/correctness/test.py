@@ -838,8 +838,6 @@ class TestFilePersistency(TestRediSQLWithExec):
     shutil.rmtree(path)
     self.assertTrue(True)
 
-
-
 if __name__ == '__main__':
    unittest.main()
 
