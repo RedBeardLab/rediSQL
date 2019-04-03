@@ -1278,11 +1278,15 @@ pub unsafe fn write_file_to_rdb(
     f: File,
     rdb: *mut rm::ffi::RedisModuleIO,
 ) -> Result<(), std::io::Error> {
-    let block_size = 1024 * 4 as i64;
+    let block_size = 1024 * 4 as u64;
     let lenght = f.metadata().unwrap().len();
-    let blocks = lenght / block_size as u64;
+    let blocks = lenght / block_size;
+    let blocks = match lenght % block_size {
+        0 => blocks,
+        _n => blocks + 1,
+    };
 
-    rm::SaveSigned(rdb, blocks as i64);
+    rm::SaveSigned(rdb, blocks as i128);
 
     let to_write: Vec<u8> = vec![0; block_size as usize];
     let mut buffer = BufReader::with_capacity(block_size as usize, f);
