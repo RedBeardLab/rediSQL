@@ -48,33 +48,29 @@ unsafe extern "C" fn rdb_save(
     let db: *mut r::DBKey =
         Box::into_raw(Box::from_raw(value as *mut r::DBKey));
 
-    if (*db).in_memory {
-        let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
+    let path = format!("rediSQL_rdb_{}.sqlite", Uuid::new_v4());
 
-        let db = (*db).loop_data.get_db();
-        let conn = &db.lock().unwrap();
-        match r::create_backup(conn, &path) {
-            Err(e) => println!("{}", e),
-            Ok(not_done)
-                if !sql::backup_complete_with_done(not_done) =>
-            {
-                println!("Return NOT DONE: {}", not_done)
-            }
-            Ok(_) => match File::open(path.clone()) {
-                Err(e) => println!("{}", e),
-                Ok(f) => match r::write_file_to_rdb(f, rdb) {
-                    Ok(()) => match remove_file(path) {
-                        _ => (),
-                    },
-                    Err(_) => {
-                        println!(
-                            "Impossible to write the file \
-                             in the rdb file"
-                        );
-                    }
-                },
-            },
+    let db = (*db).loop_data.get_db();
+    let conn = &db.lock().unwrap();
+    match r::create_backup(conn, &path) {
+        Err(e) => println!("{}", e),
+        Ok(not_done) if !sql::backup_complete_with_done(not_done) => {
+            println!("Return NOT DONE: {}", not_done)
         }
+        Ok(_) => match File::open(path.clone()) {
+            Err(e) => println!("{}", e),
+            Ok(f) => match r::write_file_to_rdb(f, rdb) {
+                Ok(()) => match remove_file(path) {
+                    _ => (),
+                },
+                Err(_) => {
+                    println!(
+                        "Impossible to write the file \
+                         in the rdb file"
+                    );
+                }
+            },
+        },
     }
 }
 
