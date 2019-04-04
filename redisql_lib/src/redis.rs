@@ -571,8 +571,14 @@ pub fn do_copy<L: LoopData>(
 ) -> Result<QueryResult, err::RediSQLError> {
     debug!("DoCopy | Start");
 
+    let destination_path = {
+        let db = destination_loopdata.get_db();
+        get_path_from_db(db)
+    }?;
+
     let backup_result = {
         let destination_db = destination_loopdata.get_db();
+
         let destination_db = destination_db.lock().unwrap();
         let source_db = source_db.lock().unwrap();
         match make_backup(&source_db, &destination_db) {
@@ -583,6 +589,10 @@ pub fn do_copy<L: LoopData>(
 
     if backup_result.is_ok() {
         restore_previous_statements(destination_loopdata);
+        update_path_metadata(
+            destination_loopdata.get_db(),
+            &destination_path,
+        )?;
     }
     debug!("DoCopy | End");
 
@@ -1156,6 +1166,87 @@ fn get_statement_metadata(
     Ok(QueryResult::from(cursor))
 }
 
+fn get_path_metadata(
+    db: Arc<Mutex<sql::RawConnection>>,
+) -> Result<QueryResult, sql::SQLite3Error> {
+    let statement = "SELECT value FROM RediSQLMetadata WHERE data_type = 'path' AND key = 'path';";
+
+    let stmt = MultiStatement::new(db, statement)?;
+    let cursor = stmt.execute()?;
+    Ok(QueryResult::from(cursor))
+}
+
+pub fn is_redisql_database(
+    db: Arc<Mutex<sql::RawConnection>>,
+) -> bool {
+    let query = "SELECT name FROM sqlite_master WHERE type='table' AND name='RediSQLMetadata;";
+
+    let query = MultiStatement::new(db, query);
+    if query.is_err() {
+        return false;
+    };
+
+    let query = query.unwrap();
+    let cursor = query.execute();
+    if cursor.is_err() {
+        return false;
+    };
+
+    match QueryResult::from(cursor.unwrap()) {
+        QueryResult::Array { .. } => true,
+        _ => false,
+    }
+}
+
+pub fn get_path_from_db(
+    db: Arc<Mutex<sql::RawConnection>>,
+) -> Result<String, RediSQLError> {
+    match get_path_metadata(db) {
+        Err(e) => Err(e.into()),
+        Ok(QueryResult::Array { array, .. }) => match array[0][0] {
+            sql::Entity::Text { ref text } => match text {
+                t if t.is_empty() => {
+                    let err = RediSQLError::new(
+                        "Found empty path".to_string(),
+                        "The field of the path of the database is empty in the metadata table.".to_string());
+                    Err(err)
+                }
+                t => Ok(t.to_string()),
+            },
+
+            _ => {
+                let err = RediSQLError::new(
+                    "Not found path as text of the database in metadata".to_string(),
+                    "While looking into the metadata of the database we found information about the path of the database itself, but the path was expected to be of TEXT type while it is not".to_string());
+                Err(err)
+            }
+        },
+        _ => Err(RediSQLError::new(
+                "Path not found".to_string(),
+                "Couldn't find the path of the database in the metadata table".to_string())),
+    }
+}
+
+pub fn insert_path_metadata(
+    db: Arc<Mutex<sql::RawConnection>>,
+    path: &str,
+) -> Result<(), sql::SQLite3Error> {
+    insert_metadata(db, "path", "path", path)
+}
+
+fn update_path_metadata(
+    db: Arc<Mutex<sql::RawConnection>>,
+    value: &str,
+) -> Result<(), sql::SQLite3Error> {
+    let statement =
+        "UPDATE RediSQLMetadata SET value = ?1 WHERE data_type = 'path' AND key = 'path'";
+
+    let stmt = MultiStatement::new(db, statement)?;
+    stmt.bind_index(1, value)?;
+    stmt.execute()?;
+    Ok(())
+}
+
 pub fn make_backup(
     conn1: &sql::RawConnection,
     conn2: &sql::RawConnection,
@@ -1187,11 +1278,19 @@ pub unsafe fn write_file_to_rdb(
     f: File,
     rdb: *mut rm::ffi::RedisModuleIO,
 ) -> Result<(), std::io::Error> {
-    let block_size = 1024 * 4 as i64;
+    let block_size = 1024 * 4 * 10;
     let lenght = f.metadata().unwrap().len();
-    let blocks = lenght / block_size as u64;
+    let blocks = lenght / block_size;
+    let blocks = match lenght % block_size {
+        0 => blocks,
+        _n => blocks + 1,
+    };
 
     rm::SaveSigned(rdb, blocks as i64);
+    debug!(
+        "Saved {} blocks from a file of len {} and block of size {}",
+        blocks, lenght, block_size
+    );
 
     let to_write: Vec<u8> = vec![0; block_size as usize];
     let mut buffer = BufReader::with_capacity(block_size as usize, f);
@@ -1199,7 +1298,7 @@ pub unsafe fn write_file_to_rdb(
         let mut tw = to_write.clone();
         match buffer.read(tw.as_mut_slice()) {
             Ok(0) => return Ok(()),
-            Ok(_n) => rm::SaveStringBuffer(rdb, tw.as_slice()),
+            Ok(n) => rm::SaveStringBuffer(rdb, tw.as_slice(), n),
             Err(e) => return Err(e),
         }
     }
@@ -1225,6 +1324,7 @@ pub unsafe fn write_rdb_to_file(
 ) -> Result<(), std::io::Error> {
     let blocks = rm::LoadSigned(rdb);
     for _ in 0..blocks {
+        debug!("Loop reading");
         let mut dimension: usize = 0;
         let c_str_ptr = SafeRedisModuleString {
             ptr: rm::ffi::RedisModule_LoadStringBuffer.unwrap()(
@@ -1232,6 +1332,7 @@ pub unsafe fn write_rdb_to_file(
                 &mut dimension,
             ),
         };
+        debug!("Read {} bytes!", dimension);
         if dimension == 0 {
             break;
         }
@@ -1241,6 +1342,7 @@ pub unsafe fn write_rdb_to_file(
         );
         let y = f.write_all(slice);
         if let Err(e) = y {
+            debug!("Error in writing to file: {}", e);
             return Err(e);
         }
     }

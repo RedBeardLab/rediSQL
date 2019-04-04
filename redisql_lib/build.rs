@@ -51,16 +51,16 @@ fn main() {
         }
     }
 
-    // let engine_pro = "-DENGINE_PRO=1";
+    //let engine_pro = "-DENGINE_PRO=1";
     let engine_pro = "-DENGINE_PRO=0";
 
     let bindings = bindgen::Builder::default()
-            .parse_callbacks(Box::new(SqliteTypeChooser))
-            // .rustfmt_bindings(false)
-            .header("sqlite_dependencies.h")
-            .clang_arg(engine_pro)
-            .generate()
-            .expect("Unable to generate bindings for SQLite");
+        .parse_callbacks(Box::new(SqliteTypeChooser))
+        // .rustfmt_bindings(false)
+        .header("sqlite_dependencies.h")
+        .clang_arg(engine_pro)
+        .generate()
+        .expect("Unable to generate bindings for SQLite");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
@@ -68,11 +68,11 @@ fn main() {
         .expect("Couldn't write bindings for SQLite!");
 
     let bindings = bindgen::Builder::default()
-            .parse_callbacks(Box::new(SqliteTypeChooser))
-            // .rustfmt_bindings(false) // see https://github.com/rust-lang-nursery/rust-bindgen/issues/1306#event-1597477817
-            .header("redis_dependencies.h")
-            .generate()
-            .expect("Unable to generate bindings for Redis");
+        .parse_callbacks(Box::new(SqliteTypeChooser))
+        // .rustfmt_bindings(false) // see https://github.com/rust-lang-nursery/rust-bindgen/issues/1306#event-1597477817
+        .header("redis_dependencies.h")
+        .generate()
+        .expect("Unable to generate bindings for Redis");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings

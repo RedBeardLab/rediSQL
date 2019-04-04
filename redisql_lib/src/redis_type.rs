@@ -311,9 +311,9 @@ pub unsafe fn SaveSigned(rdb: *mut ffi::RedisModuleIO, to_save: i64) {
 pub unsafe fn SaveStringBuffer(
     rdb: *mut ffi::RedisModuleIO,
     buffer: &[u8],
+    len: usize,
 ) {
     let ptr = buffer.as_ptr() as *const c_char;
-    let len = buffer.len();
     ffi::RedisModule_SaveStringBuffer.unwrap()(rdb, ptr, len)
 }
 
