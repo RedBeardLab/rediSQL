@@ -314,7 +314,6 @@ pub unsafe fn SaveStringBuffer(
     len: usize,
 ) {
     let ptr = buffer.as_ptr() as *const c_char;
-    let len = buffer.len();
     ffi::RedisModule_SaveStringBuffer.unwrap()(rdb, ptr, len)
 }
 
