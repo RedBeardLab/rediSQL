@@ -5,6 +5,7 @@ import unittest
 import os
 import tempfile
 import shutil
+import time
 
 import redis
 from rmtest import ModuleTestCase
@@ -266,9 +267,10 @@ class TestStatements(TestRediSQLWithExec):
         self.assertEquals(ok, "OK")
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 1L])
-        #self.restart_and_reload()
         for _ in self.retry_with_reload():
           pass
+        time.sleep(0.5)
+
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
         self.assertEquals(done, ["DONE", 1L])
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
@@ -283,6 +285,8 @@ class TestStatements(TestRediSQLWithExec):
 
         for _ in self.retry_with_reload():
           pass
+        time.sleep(0.5)
+
         done = self.exec_cmd("A", "INSERT INTO t1 VALUES(6)")
         self.assertEquals(done, ["DONE", 1L])
 
@@ -304,6 +308,8 @@ class TestStatements(TestRediSQLWithExec):
 
         for _ in self.retry_with_reload():
           pass
+        time.sleep(0.5)
+
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
         self.assertEquals(done, ["DONE", 1L])
         done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert più cento", "4")
@@ -410,6 +416,7 @@ class TestBruteHash(TestRediSQLWithExec):
 
       for _ in self.retry_with_reload():
         pass
+      time.sleep(0.5)
 
       result = self.exec_naked("REDISQL.EXEC", "A", "SELECT rowid, cat, meow FROM cats")
       self.assertEquals(5, len(result))
@@ -451,6 +458,7 @@ class TestBruteHash(TestRediSQLWithExec):
 
       for _ in self.retry_with_reload():
         pass
+      time.sleep(0.5)
 
       result = self.exec_naked("REDISQL.EXEC_STATEMENT", "E", "select_all")
       self.assertEquals(5, len(result))
@@ -513,6 +521,7 @@ class TestBruteHashSyncronous(TestRediSQLWithExec):
 
       for _ in self.retry_with_reload():
         pass
+      time.sleep(0.5)
 
       result = self.exec_naked("REDISQL.EXEC.NOW", "A", "SELECT rowid, cat, meow FROM cats")
       self.assertEquals(5, len(result))
@@ -554,6 +563,7 @@ class TestBruteHashSyncronous(TestRediSQLWithExec):
 
       for _ in self.retry_with_reload():
         pass
+      time.sleep(0.5)
 
       result = self.exec_naked("REDISQL.EXEC_STATEMENT.NOW", "E", "select_all")
       self.assertEquals(5, len(result))
@@ -568,7 +578,7 @@ class TestCopy(TestRediSQLWithExec):
     def test_copy_mem_from_mem(self):
         done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB2A")
         self.assertEquals(done, "OK")
         done = self.exec_naked("REDISQL.EXEC", "DB1", "CREATE TABLE foo(a INT);")
         self.assertEquals(done, ["DONE", 0L])
@@ -577,50 +587,50 @@ class TestCopy(TestRediSQLWithExec):
             done = self.exec_naked("REDISQL.EXEC", "DB1", "INSERT INTO foo VALUES({})".format(i))
             self.assertEquals(done, ["DONE", 1L])
 
-        done = self.exec_naked("REDISQL.COPY", "DB1", "DB2")
+        done = self.exec_naked("REDISQL.COPY", "DB1", "DB2A")
 
         result = self.exec_naked("REDISQL.QUERY", "DB1", "SELECT a FROM foo ORDER BY a")
         self.assertEquals(result, [[0L], [1L], [2L], [3L], [4L], [5L], [6L], [7L], [8L], [9L]])
 
-        result = self.exec_naked("REDISQL.QUERY", "DB2", "SELECT a FROM foo ORDER BY a")
+        result = self.exec_naked("REDISQL.QUERY", "DB2A", "SELECT a FROM foo ORDER BY a")
         self.assertEquals(result, [[0L], [1L], [2L], [3L], [4L], [5L], [6L], [7L], [8L], [9L]])
 
     def test_statements_copy_mem_from_mem(self):
         done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB2B")
         self.assertEquals(done, "OK")
         done = self.exec_naked("REDISQL.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
         self.assertEquals(done, "OK")
 
-        done = self.exec_naked("REDISQL.COPY", "DB1", "DB2")
+        done = self.exec_naked("REDISQL.COPY", "DB1", "DB2B")
         self.assertEquals(done, "OK")
 
         result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1L]])
 
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
+        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2B", "select1")
         self.assertEquals(result, [[1L]])
 
     def test_double_copy(self):
         done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        done = self.exec_naked("REDISQL.CREATE_DB", "DB2C")
         self.assertEquals(done, "OK")
         done = self.exec_naked("REDISQL.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
         self.assertEquals(done, "OK")
 
-        first_copy = self.exec_naked("REDISQL.COPY", "DB1", "DB2")
+        first_copy = self.exec_naked("REDISQL.COPY", "DB1", "DB2C")
         self.assertEquals(first_copy, "OK")
         result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1L]])
 
-        second_copy = self.exec_naked("REDISQL.COPY", "DB1", "DB2")
+        second_copy = self.exec_naked("REDISQL.COPY", "DB1", "DB2C")
         self.assertEquals(second_copy, "OK")
         result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1L]])
 
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
+        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2C", "select1")
         self.assertEquals(result, [[1L]])
 
 class TestCopySyncronous(TestRediSQLWithExec):
@@ -802,6 +812,8 @@ class TestFilePersistency(TestRediSQLWithExec):
     self.assertEquals(ok, "OK")
     for _ in self.retry_with_reload():
       pass
+    time.sleep(0.5)
+
     shutil.rmtree(path)
     self.assertTrue(True)
 
@@ -815,6 +827,8 @@ class TestFilePersistency(TestRediSQLWithExec):
     self.assertEquals(done, ["DONE", 1L])
     for _ in self.retry_with_reload():
       pass
+    time.sleep(0.5)
+
     result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM bar;")
     self.assertEquals(result, [[1, 2]])
     shutil.rmtree(path)
@@ -832,6 +846,8 @@ class TestFilePersistency(TestRediSQLWithExec):
     self.assertFalse(os.path.isfile(path + "/foo.sqlite"))
     for _ in self.retry_with_reload():
       pass
+    time.sleep(0.5)
+
     result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM bar;")
     self.assertEquals(result, [[1, 2]])
     self.assertTrue(os.path.isfile(path + "/foo.sqlite"))
