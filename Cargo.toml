@@ -14,10 +14,10 @@ env_logger = "0.6"
 
 redisql_lib = {path = "./redisql_lib"}
 telemetrics = {path = "./telemetrics"}
-# engine_pro = {path = "./engine_pro", optional = true}
+engine_pro = {path = "./engine_pro", optional = true}
 
 [features]
 default = []
-# pro = ["engine_pro"]
+pro = ["engine_pro"]
 # trial = ["engine_pro/trial"]
 
