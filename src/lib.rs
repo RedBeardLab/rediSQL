@@ -26,11 +26,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use uuid::Uuid;
 
-#[cfg(feature = "pro")]
-extern crate engine_pro;
-
-#[cfg(feature = "pro")]
-use engine_pro::{register, WriteAOF};
+extern crate sync_engine;
+use sync_engine::{register, WriteAOF};
 
 use commands::{
     CreateDB, CreateStatement, DeleteStatement, Exec, ExecStatement,
@@ -200,23 +197,11 @@ pub extern "C" fn RedisModule_OnLoad(
     let c_data_type_name = CString::new("rediSQLDB").unwrap();
     let ptr_data_type_name = c_data_type_name.as_ptr();
 
-    #[cfg(feature = "pro")]
     let mut types = r::rm::ffi::RedisModuleTypeMethods {
         version: 1,
         rdb_load: Some(rdb_load),
         rdb_save: Some(rdb_save),
         aof_rewrite: Some(WriteAOF),
-        mem_usage: None,
-        digest: None,
-        free: Some(free_db),
-    };
-
-    #[cfg(not(feature = "pro"))]
-    let mut types = r::rm::ffi::RedisModuleTypeMethods {
-        version: 1,
-        rdb_load: Some(rdb_load),
-        rdb_save: Some(rdb_save),
-        aof_rewrite: None,
         mem_usage: None,
         digest: None,
         free: Some(free_db),
@@ -354,7 +339,6 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
-    #[cfg(feature = "pro")]
     match register(ctx) {
         Ok(()) => (),
         Err(e) => return e,
