@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/types.h>
 
 #include "../../../redisql_lib/src/CDeps/SQLite/include/sqlite3.h"
 
