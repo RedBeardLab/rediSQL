@@ -8,21 +8,20 @@
         
         
         <link rel="shortcut icon" href="../../img/favicon.ico">
-
-	<title>Double performances of RediSQL going zero copy - RediSQL</title>
-
+        <title>Double performances of RediSQL going zero copy - RediSQL</title>
         <link href="../../css/bootstrap-custom.min.css" rel="stylesheet">
-        <link href="../../css/font-awesome-4.0.3.css" rel="stylesheet">
+        <link href="../../css/font-awesome-4.5.0.css" rel="stylesheet">
         <link href="../../css/base.css" rel="stylesheet">
         <link rel="stylesheet" href="../../css/highlight.css">
-
         <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
         <!--[if lt IE 9]>
             <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
             <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
         <![endif]-->
-
-        
+	
+	<script src="../../js/jquery-1.10.2.min.js"></script>
+        <script src="../../js/bootstrap-3.0.3.min.js"></script>
+        <script src="../../js/highlight.pack.js"></script>
         <script>
             (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
             (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -31,8 +30,7 @@
 
             ga('create', 'UA-116709819-1', 'auto');
             ga('send', 'pageview');
-        </script>
-        
+        </script> 
     </head>
 
     <body>
@@ -42,7 +40,6 @@
 
         <!-- Collapsed navigation -->
         <div class="navbar-header">
-            
             <!-- Expander button -->
             <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
                 <span class="sr-only">Toggle navigation</span>
@@ -50,134 +47,75 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            
-
-            <!-- Main title -->
             <a class="navbar-brand" href="../..">RediSQL</a>
         </div>
 
         <!-- Expanded navigation -->
         <div class="navbar-collapse collapse">
-            
                 <!-- Main navigation -->
                 <ul class="nav navbar-nav">
-                
-                
                     <li >
                         <a href="../..">Overview</a>
                     </li>
-                
-                
-                
                     <li >
                         <a href="../../references/">References</a>
                     </li>
-                
-                
-                
                     <li >
                         <a href="../../pro/">Pro</a>
                     </li>
-                
-                
-                
-                    <li class="dropdown">
-                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Motivations <b class="caret"></b></a>
-                        <ul class="dropdown-menu">
-                        
-                            
-<li >
-    <a href="../../motivations/">Motivations</a>
-</li>
-
-                        
-                            
-<li >
-    <a href="../../pro_motivations/">PRO Motivations</a>
-</li>
-
-                        
-                        </ul>
+                    <li >
+                        <a href="../../motivations/">Motivations</a>
                     </li>
-                
-                
-                
                     <li class="dropdown active">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Blog <b class="caret"></b></a>
                         <ul class="dropdown-menu">
-                        
                             
 <li >
     <a href="../release_0.9.0/">Release 0.9.0</a>
 </li>
-
-                        
                             
 <li >
     <a href="../release_0.8.0/">Release 0.8.0</a>
 </li>
-
-                        
                             
 <li >
     <a href="../release_0.7.0/">Release 0.7.0</a>
 </li>
-
-                        
                             
 <li >
     <a href="../release_0.6.0/">Release 0.6.0</a>
 </li>
-
-                        
                             
 <li >
     <a href="../release_0.5.0/">Release 0.5.0</a>
 </li>
-
-                        
                             
 <li >
     <a href="../analytics/">Analytics</a>
 </li>
-
-                        
                             
 <li >
     <a href="../JaaS/">JSON on Redis using RediSQL, SQL steroids for Redis</a>
 </li>
-
-                        
                             
 <li class="active">
     <a href="./">Double performances of RediSQL going zero copy</a>
 </li>
-
-                        
                             
 <li >
     <a href="../python/using-redisql-with-python/">Using RediSQL with Python</a>
 </li>
-
-                        
                             
 <li >
     <a href="../golang/using-redisql-with-golang/">Using RediSQL with Go(lang)</a>
 </li>
-
-                        
                             
 <li >
     <a href="../node/using-redisql-with-node/">Using RediSQL with Node.js</a>
 </li>
-
-                        
                         </ul>
                     </li>
-                
-                
                 </ul>
-            
 
             <ul class="nav navbar-nav navbar-right">
                 <li>
@@ -185,7 +123,6 @@
                         <i class="fa fa-search"></i> Search
                     </a>
                 </li>
-                
                     <li >
                         <a rel="next" href="../JaaS/">
                             <i class="fa fa-arrow-left"></i> Previous
@@ -196,48 +133,29 @@
                             Next <i class="fa fa-arrow-right"></i>
                         </a>
                     </li>
-                
-                
                     <li>
                         <a href="https://github.com/RedBeardLab/rediSQL">
-                            
-                                <i class="fa fa-github"></i>
-                            
-                            GitHub
+                                <i class="fa fa-github"></i>GitHub
                         </a>
                     </li>
-                
             </ul>
         </div>
     </div>
 </div>
 
         <div class="container">
-            
                 <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
     <ul class="nav bs-sidenav">
-    
         <li class="main active"><a href="#doubling-the-performances-of-redisql-sql-steroids-for-redis">Doubling the performances of RediSQL, SQL steroids for Redis.</a></li>
-        
             <li><a href="#redisql-provides-sql-steroids-for-redis">RediSQL provides SQL steroids for Redis</a></li>
-        
             <li><a href="#background">Background</a></li>
-        
             <li><a href="#the-complains">The complains</a></li>
-        
             <li><a href="#looking-for-the-causes">Looking for the causes</a></li>
-        
             <li><a href="#the-problem">The problem</a></li>
-        
             <li><a href="#need-for-speed">Need for Speed</a></li>
-        
             <li><a href="#result">Result</a></li>
-        
             <li><a href="#wrapping-up">Wrapping up</a></li>
-        
             <li><a href="#looking-for-beta-tester">Looking for beta tester</a></li>
-        
-    
     </ul>
 </div></div>
                 <div class="col-md-9" role="main">
@@ -289,108 +207,39 @@ It was necessary to use <code>unsafe</code> code that in normal Rust you can avo
 <h2 id="looking-for-beta-tester">Looking for beta tester</h2>
 <p>We are looking also for tester for the PRO version of RediSQL, if you would like to test the PRO module without paying anything this is your occasion.
 You can either open an issues on github or write me (siscia) directly (email on github).</p></div>
-            
         </div>
 
         <footer class="col-md-12">
             <hr>
-            
             <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a>.</p>
         </footer>
-
-        <script src="../../js/jquery-1.10.2.min.js"></script>
-        <script src="../../js/bootstrap-3.0.3.min.js"></script>
-        <script src="../../js/highlight.pack.js"></script>
         <script>var base_url = '../..';</script>
         <script data-main="../../mkdocs/js/search.js" src="../../mkdocs/js/require.js"></script>
         <script src="../../js/base.js"></script>
-        <script src="../../blog/node/hn.js"></script>
-        <script src="../../blog/node/node_modules/redis/index.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/command.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/commands.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/createClient.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/customErrors.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/debug.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/extendedApi.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/individualCommands.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/multi.js"></script>
-        <script src="../../blog/node/node_modules/redis/lib/utils.js"></script>
-        <script src="../../blog/node/node_modules/ms/index.js"></script>
-        <script src="../../blog/node/node_modules/double-ended-queue/Gruntfile.js"></script>
-        <script src="../../blog/node/node_modules/double-ended-queue/js/deque.js"></script>
-        <script src="../../blog/node/node_modules/redis-commands/index.js"></script>
-        <script src="../../blog/node/node_modules/redis-commands/tools/build.js"></script>
-        <script src="../../blog/node/node_modules/redis-parser/index.js"></script>
-        <script src="../../blog/node/node_modules/redis-parser/lib/hiredis.js"></script>
-        <script src="../../blog/node/node_modules/redis-parser/lib/parser.js"></script>
-        <script src="../../blog/node/node_modules/redis-parser/lib/parserError.js"></script>
-        <script src="../../blog/node/node_modules/redis-parser/lib/redisError.js"></script>
-        <script src="../../blog/node/node_modules/redis-parser/lib/replyError.js"></script>
-        <script src="../../blog/node/node_modules/axios/index.js"></script>
-        <script src="../../blog/node/node_modules/axios/dist/axios.js"></script>
-        <script src="../../blog/node/node_modules/axios/dist/axios.min.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/axios.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/defaults.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/utils.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/bind.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/btoa.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/buildURL.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/combineURLs.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/cookies.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/deprecatedMethod.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/isAbsoluteURL.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/isURLSameOrigin.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/normalizeHeaderName.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/parseHeaders.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/helpers/spread.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/adapters/http.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/adapters/xhr.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/core/Axios.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/core/InterceptorManager.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/core/createError.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/core/dispatchRequest.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/core/enhanceError.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/core/settle.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/core/transformData.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/cancel/Cancel.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/cancel/CancelToken.js"></script>
-        <script src="../../blog/node/node_modules/axios/lib/cancel/isCancel.js"></script>
-        <script src="../../blog/node/node_modules/is-buffer/index.js"></script>
-        <script src="../../blog/node/node_modules/is-buffer/test/basic.js"></script>
-        <script src="../../blog/node/node_modules/follow-redirects/http.js"></script>
-        <script src="../../blog/node/node_modules/follow-redirects/https.js"></script>
-        <script src="../../blog/node/node_modules/follow-redirects/index.js"></script>
-        <script src="../../blog/node/node_modules/debug/node.js"></script>
-        <script src="../../blog/node/node_modules/debug/dist/debug.js"></script>
-        <script src="../../blog/node/node_modules/debug/src/browser.js"></script>
-        <script src="../../blog/node/node_modules/debug/src/common.js"></script>
-        <script src="../../blog/node/node_modules/debug/src/index.js"></script>
-        <script src="../../blog/node/node_modules/debug/src/node.js"></script>
-
-        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="Search Modal" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
-                        <h4 class="modal-title" id="exampleModalLabel">Search</h4>
+        <script src="../../blog/node/hn.js"></script><div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="Search Modal" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                <h4 class="modal-title" id="exampleModalLabel">Search</h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    From here you can search these documents. Enter
+                    your search terms below.
+                </p>
+                <form role="form">
+                    <div class="form-group">
+                        <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query">
                     </div>
-                    <div class="modal-body">
-                        <p>
-                            From here you can search these documents. Enter
-                            your search terms below.
-                        </p>
-                        <form role="form">
-                            <div class="form-group">
-                                <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query">
-                            </div>
-                        </form>
-                        <div id="mkdocs-search-results"></div>
-                    </div>
-                    <div class="modal-footer">
-                    </div>
-                </div>
+                </form>
+                <div id="mkdocs-search-results"></div>
+            </div>
+            <div class="modal-footer">
             </div>
         </div>
+    </div>
+</div>
 
     </body>
 </html>
