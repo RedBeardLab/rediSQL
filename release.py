@@ -32,8 +32,6 @@ for target in [arm, intel]:
         suffix = "_v{}".format(version)
         if feature == pro:
             suffix += "_PRO"
-        if feature == trial:
-            suffix += "_TRIAL"
         if target == arm:
             suffix += "_ARMv7"
         if target == intel:
