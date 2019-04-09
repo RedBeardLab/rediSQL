@@ -13,9 +13,7 @@ pages:
   -
     Pro: pro.md
   -
-    Motivations:
-      - "Motivations": motivations.md
-      - "PRO Motivations": pro_motivations.md
+    Motivations: motivations.md
   -
     Blog:
       - 'Release 0.9.0': 'blog/release_0.9.0.md'

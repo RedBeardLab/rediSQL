@@ -71,7 +71,7 @@ You will be able to manage and search for data.
 
 RediSQL is a Redis module, hence you will need a modern version of [Redis (> 5.0)][redis-download] and the RediSQL .so file.
 
-You can obtain RediSQL directly [from our store.](https://payhip.com/RediSQL)
+You can obtain RediSQL directly [from our store.][store]
 
 Alternative you can download the module from [github release.](https://github.com/RedBeardLab/rediSQL/releases)
 
@@ -88,6 +88,8 @@ At this point you have your standard redis instance working as you would expect 
 All the commands are documented in [the references.][api]
 
 To explore RediSQL you can use the official client `redis-cli` which it will connect to the running server.
+
+The free version requires connection to our servers, make sure to set up your firewall appropriately.
 
 ## Docker image
 
@@ -161,6 +163,27 @@ OK
    4) "ccc"
 127.0.0.1:6379> 
 ```
+
+## Telemetrics and commercial product
+
+From version 1.0.0 we move away from an open-core model where some features where not released as open source to a different model that force not-paying user to send telemetrics data to our servers.
+This allow us to release all the features of RediSQL as open source while retaining our possibilities to fund the project.
+[The full announcement on our blog][release-1.0.0].
+
+Of course the telemetrics data are not sensible (it is the result of the `REDISQL.STATISTICS` command) and we took all the precaution to allow smooth operation of the telementrics, [more details in the technical blog post.][redisql-telemetrics]
+
+The main idea behind forced telemetrics is that small users won’t be bothered by them too much. Moreover they usually have the resource, knowledge and will to set up their own firewall and invest time instead of money.
+
+All the other users can instead use the PRO version, the PRO version does not requires any connectivity to our servers, all the telemetrics part is simply not compiled into the code.
+
+We hope to have strike a good balance with this new policy.
+
+For a company is a bargain to just paid to don’t have one more thing to keep track of.
+
+For small users we allow them to use all the PRO features of RediSQL while just requiring a little more time and attention, of course small users can purchase the PRO version as well.
+
+The PRO version -- no telemetrics required -- version of RediSQL [can be purchased on our store][store].
+
 ## Documentation
 
 The complete API are explained in the official documentation that you can access here: [API References][api]
@@ -169,12 +192,19 @@ The complete API are explained in the official documentation that you can access
 
 I am going to accept pull request here on github.
 
-## License
+## License and commercial product
 
-This software is licensed under the AGPL-v3, it is possible to purchase more permissive licenses.
+This software is released under a custom license inspired by the MIT License.
+
+The "RediSQL License" add one clause to the MIT license that simply requires that you leave the telemetrics alone.
+
+It is possible to purchase more permissive licenses.
 
 <RediSQL, SQL steroids for Redis.>
 Copyright (C) 2019  Simone Mosciatti
 
+[store]: https://payhip.com/RediSQL
 [api]: http://redisql.redbeardlab.com/rediSQL/references/
 [redis-download]: https://redis.io/download
+[release-1.0.0]: http://redbeardlab.com/2019/04/09/redisql-release-1-0-0-change-in-strategy-and-business-model/
+[redisql-telemetrics]: http://redbeardlab.com/2019/04/09/telemetrics-for-redisql/
