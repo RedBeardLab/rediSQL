@@ -22,10 +22,9 @@ arm = "armv7-unknown-linux-gnueabihf"
 intel = "x86_64-unknown-linux-gnu"
 
 pro = "--features=pro" 
-trial = "--features=trial"
 
 for target in [arm, intel]:
-    for feature in ["", pro, trial]:
+    for feature in ["", pro]:
         cmd = "CARGO_TARGET_DIR={} cargo build --release --target {} {}".format(scratch_space, target, feature)
         print("Executing:", cmd)
         os.system(cmd)
@@ -33,8 +32,6 @@ for target in [arm, intel]:
         suffix = "_v{}".format(version)
         if feature == pro:
             suffix += "_PRO"
-        if feature == trial:
-            suffix += "_TRIAL"
         if target == arm:
             suffix += "_ARMv7"
         if target == intel:

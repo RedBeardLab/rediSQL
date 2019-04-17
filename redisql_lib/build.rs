@@ -51,14 +51,9 @@ fn main() {
         }
     }
 
-    // let engine_pro = "-DENGINE_PRO=1";
-    let engine_pro = "-DENGINE_PRO=0";
-
     let bindings = bindgen::Builder::default()
         .parse_callbacks(Box::new(SqliteTypeChooser))
-        // .rustfmt_bindings(false)
         .header("sqlite_dependencies.h")
-        .clang_arg(engine_pro)
         .generate()
         .expect("Unable to generate bindings for SQLite");
 

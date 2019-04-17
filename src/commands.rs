@@ -13,10 +13,7 @@ use redisql_lib::virtual_tables as vtab;
 
 use redisql_lib::redis as r;
 
-#[cfg(feature = "pro")]
-use engine_pro::Replicate;
-#[cfg(not(feature = "pro"))]
-use redisql_lib::redis::Replicate;
+use sync_engine::Replicate;
 
 use redisql_lib::statistics::STATISTICS;
 
