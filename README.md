@@ -1,5 +1,7 @@
 # RediSQL: Fast, in memory, SQL. With Batteries included.
 
+![RediSQL Logo](website/hatchful_logs/logo_big.png?raw=true "RediSQL")
+
 RediSQL is the Fast, in-memory, SQL engine with batteries included.
 
 It provides several benefits for your application.
