@@ -854,6 +854,12 @@ class TestFilePersistency(TestRediSQLWithExec):
     shutil.rmtree(path)
     self.assertTrue(True)
 
+class TestNullTerminatedStrings(TestRediSQLWithExec):
+  def test_null_terminated(self):
+      with DB(self, "NULL"):
+          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1" + b'\x00')
+          self.assertEquals(one, [[1]])
+
 if __name__ == '__main__':
    unittest.main()
 
