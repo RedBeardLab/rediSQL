@@ -1,6 +1,10 @@
 # RediSQL: Fast, in memory, SQL. With Batteries included.
 
-[![Join the chat at https://gitter.im/rediSQL/community](https://badges.gitter.im/rediSQL/community.svg)](https://gitter.im/rediSQL/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql.svg?color=%2346BC99&style=for-the-badge)](https://gitter.im/rediSQL/community)
+
+![GitHub All Releases](https://img.shields.io/github/downloads/redbeardlab/redisql/total.svg?style=for-the-badge)
+
+![Docker Pulls](https://img.shields.io/docker/pulls/siscia/redisql.svg?style=for-the-badge)
 
 ![RediSQL Logo](website/hatchful_logs/logo_markdown.png?raw=true "RediSQL")
 
