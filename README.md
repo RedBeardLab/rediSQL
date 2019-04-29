@@ -1,9 +1,7 @@
 # RediSQL: Fast, in memory, SQL. With Batteries included.
 
 [![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql.svg?color=%2346BC99&style=for-the-badge)](https://gitter.im/rediSQL/community)
-
 ![GitHub All Releases](https://img.shields.io/github/downloads/redbeardlab/redisql/total.svg?style=for-the-badge)
-
 ![Docker Pulls](https://img.shields.io/docker/pulls/siscia/redisql.svg?style=for-the-badge)
 
 ![RediSQL Logo](website/hatchful_logs/logo_markdown.png?raw=true "RediSQL")
@@ -196,9 +194,17 @@ The PRO version -- no telemetrics required -- version of RediSQL [can be purchas
 
 The complete API are explained in the official documentation that you can access here: [API References][api]
 
-## Contributing
+## Community and contribution
 
-I am going to accept pull request here on github.
+This project is very open about accepting pull request and answer to issues.
+
+Moreover we encourage users to report any kind of issue, problem or possible ergonomic improvements.
+
+We encorage user feedback and contribution with a free copy of RediSQL PRO.
+
+Chat on gitter: ![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql.svg?color=%2346BC99&style=for-the-badge)
+
+For any other information feel free to write me directly: [simone@redbeardlab.com](mailto:simone@redbeardlab.com)
 
 ## License and commercial product
 
