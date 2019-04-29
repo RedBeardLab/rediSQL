@@ -446,7 +446,7 @@ pub unsafe fn string_ptr_len(
         rm::ffi::RedisModule_StringPtrLen.unwrap()(str, &mut len)
             as *mut u8;
     let slice = slice::from_raw_parts(base, len);
-    str::from_utf8_unchecked(slice)
+    str::from_utf8_unchecked(slice).trim_end_matches(char::from(0))
 }
 
 #[repr(C)]
