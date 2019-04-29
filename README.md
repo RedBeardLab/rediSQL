@@ -1,5 +1,7 @@
 # RediSQL: Fast, in memory, SQL. With Batteries included.
 
+[![Join the chat at https://gitter.im/rediSQL/community](https://badges.gitter.im/rediSQL/community.svg)](https://gitter.im/rediSQL/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 ![RediSQL Logo](website/hatchful_logs/logo_markdown.png?raw=true "RediSQL")
 
 RediSQL is the Fast, in-memory, SQL engine with batteries included.
