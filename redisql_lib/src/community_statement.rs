@@ -40,6 +40,7 @@ impl<'a> fmt::Display for MultiStatement {
 
 pub struct Statement {
     stmt: *mut ffi::sqlite3_stmt,
+    //stmt: ptr::NonNull<ffi::sqlite3_stmt>,
 }
 
 unsafe impl Send for Statement {}
@@ -78,6 +79,9 @@ pub fn generate_statements(
         let mut stmt: *mut ffi::sqlite3_stmt =
             unsafe { mem::uninitialized() };
 
+        let query = unsafe { CStr::from_ptr(next_query) };
+        println!("Compiling query: {:?}", query);
+
         let r = unsafe {
             ffi::sqlite3_prepare_v2(
                 conn.get_db(),
@@ -87,10 +91,13 @@ pub fn generate_statements(
                 &mut next_query,
             )
         };
+
         match r {
             ffi::SQLITE_OK => {
-                let stmt = Statement { stmt };
-                stmts.push(stmt);
+                if !stmt.is_null() {
+                    let stmt = Statement { stmt };
+                    stmts.push(stmt);
+                }
                 if unsafe { *next_query } == 0 {
                     let (num_parameters, parameters) =
                         count_parameters(&stmts)?;
@@ -100,7 +107,7 @@ pub fn generate_statements(
                         number_parameters: num_parameters,
                         _parameters: parameters,
                     });
-                }
+                };
             }
             _ => return Err(conn.get_last_error()),
         }
