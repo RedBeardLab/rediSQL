@@ -860,6 +860,32 @@ class TestNullTerminatedStrings(TestRediSQLWithExec):
           one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1" + b'\x00')
           self.assertEquals(one, [[1]])
 
+class TestBlankAfterSemicolon(TestRediSQLWithExec):
+  def test_whitespace_after_semicolon(self):
+      with DB(self, "NULL"):
+          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;  ")
+          self.assertEquals(one, [[1]])
+
+  def test_newline_after_semicolon(self):
+      with DB(self, "NULL"):
+          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;\n")
+          self.assertEquals(one, [[1]])
+
+  def test_mix_after_semicolon(self):
+      with DB(self, "NULL"):
+          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;  \n  ")
+          self.assertEquals(one, [[1]])
+  
+  def test_whitespace_after_semicolon_then_query(self):
+      with DB(self, "NULL"):
+          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;    SELECT 2;")
+          self.assertEquals(one, [[2]])
+
+  def test_newline_after_semicolon_then_query(self):
+      with DB(self, "NULL"):
+          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;\nSELECT 2;")
+          self.assertEquals(one, [[2]])
+
 if __name__ == '__main__':
    unittest.main()
 

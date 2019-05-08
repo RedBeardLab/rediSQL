@@ -168,7 +168,6 @@ pub trait StatementTrait<'a>: Sized {
         index: i32,
         value: &str,
     ) -> Result<SQLiteOK, SQLite3Error>;
-    fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt;
     fn is_read_only(&self) -> bool {
         false
     }
@@ -198,23 +197,23 @@ pub enum Entity {
 
 impl Entity {
     fn new(stmt: &Statement, i: i32) -> Entity {
-        match get_entity_type(stmt.get_raw_stmt(), i) {
+        match get_entity_type(stmt.as_ptr(), i) {
             EntityType::Integer => {
                 let int = unsafe {
-                    ffi::sqlite3_column_int64(stmt.get_raw_stmt(), i)
+                    ffi::sqlite3_column_int64(stmt.as_ptr(), i)
                 };
                 Entity::Integer { int }
             }
             EntityType::Float => {
                 let value = unsafe {
-                    ffi::sqlite3_column_double(stmt.get_raw_stmt(), i)
+                    ffi::sqlite3_column_double(stmt.as_ptr(), i)
                 };
                 Entity::Float { float: value }
             }
             EntityType::Text => {
                 let value = unsafe {
                     CStr::from_ptr(ffi::sqlite3_column_text(
-                        stmt.get_raw_stmt(),
+                        stmt.as_ptr(),
                         i,
                     )
                         as *const c_char)
@@ -227,7 +226,7 @@ impl Entity {
             EntityType::Blob => {
                 let value = unsafe {
                     CStr::from_ptr(ffi::sqlite3_column_blob(
-                        stmt.get_raw_stmt(),
+                        stmt.as_ptr(),
                         i,
                     )
                         as *const c_char)
@@ -323,7 +322,7 @@ impl<'a> From<Cursor<'a>> for QueryResult {
                 for i in 0..num_columns {
                     let name = unsafe {
                         CStr::from_ptr(ffi::sqlite3_column_name(
-                            stmt.get_raw_stmt(),
+                            stmt.as_ptr(),
                             i,
                         ))
                         .to_string_lossy()
@@ -340,7 +339,7 @@ impl<'a> From<Cursor<'a>> for QueryResult {
                     }
                     unsafe {
                         *previous_status =
-                            ffi::sqlite3_step(stmt.get_raw_stmt());
+                            ffi::sqlite3_step(stmt.as_ptr());
                     };
 
                     result.push(row);
