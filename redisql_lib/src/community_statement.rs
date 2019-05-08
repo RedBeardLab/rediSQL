@@ -39,8 +39,7 @@ impl<'a> fmt::Display for MultiStatement {
 }
 
 pub struct Statement {
-    stmt: *mut ffi::sqlite3_stmt,
-    //stmt: ptr::NonNull<ffi::sqlite3_stmt>,
+    stmt: ptr::NonNull<ffi::sqlite3_stmt>,
 }
 
 unsafe impl Send for Statement {}
@@ -49,7 +48,7 @@ unsafe impl Sync for Statement {}
 impl<'a> fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let sql = unsafe {
-            CStr::from_ptr(ffi::sqlite3_sql(self.stmt))
+            CStr::from_ptr(ffi::sqlite3_sql(self.as_ptr()))
                 .to_string_lossy()
                 .into_owned()
         };
@@ -60,7 +59,7 @@ impl<'a> fmt::Display for Statement {
 impl<'a> Drop for Statement {
     fn drop(&mut self) {
         unsafe {
-            ffi::sqlite3_finalize(self.stmt);
+            ffi::sqlite3_finalize(self.as_ptr());
         };
     }
 }
@@ -92,7 +91,7 @@ pub fn generate_statements(
         match r {
             ffi::SQLITE_OK => {
                 if !stmt.is_null() {
-                    let stmt = Statement { stmt };
+                    let stmt = Statement::from_ptr(stmt);
                     stmts.push(stmt);
                 }
                 if unsafe { *next_query } == 0 {
@@ -112,11 +111,16 @@ pub fn generate_statements(
 }
 
 impl Statement {
+    fn from_ptr(stmt: *mut ffi::sqlite3_stmt) -> Self {
+        Statement {
+            stmt: ptr::NonNull::new(stmt).unwrap(),
+        }
+    }
     fn execute(
         &self,
         db: &RawConnection,
     ) -> Result<Cursor, SQLite3Error> {
-        match unsafe { ffi::sqlite3_step(self.stmt) } {
+        match unsafe { ffi::sqlite3_step(self.as_ptr()) } {
             ffi::SQLITE_OK => Ok(Cursor::OKCursor {}),
             ffi::SQLITE_DONE => {
                 let modified_rows =
@@ -124,9 +128,9 @@ impl Statement {
                 Ok(Cursor::DONECursor { modified_rows })
             }
             ffi::SQLITE_ROW => {
-                let num_columns =
-                    unsafe { ffi::sqlite3_column_count(self.stmt) }
-                        as i32;
+                let num_columns = unsafe {
+                    ffi::sqlite3_column_count(self.as_ptr())
+                } as i32;
                 Ok(Cursor::RowsCursor {
                     stmt: self,
                     num_columns,
@@ -138,9 +142,12 @@ impl Statement {
         }
     }
     fn get_last_error(&self) -> SQLite3Error {
-        let db = unsafe { ffi::sqlite3_db_handle(self.stmt) };
+        let db = unsafe { ffi::sqlite3_db_handle(self.as_ptr()) };
         let rc = RawConnection::from_db_handler(db);
         rc.get_last_error()
+    }
+    pub fn as_ptr(&self) -> *mut ffi::sqlite3_stmt {
+        self.stmt.as_ptr()
     }
 }
 
@@ -169,15 +176,15 @@ impl<'a> StatementTrait<'a> for Statement {
             )
         };
         match r {
-            ffi::SQLITE_OK => Ok(Statement { stmt }),
+            ffi::SQLITE_OK => Ok(Statement::from_ptr(stmt)),
             _ => Err(conn.get_last_error()),
         }
     }
 
     fn reset(&self) {
         unsafe {
-            ffi::sqlite3_reset(self.stmt);
-            ffi::sqlite3_clear_bindings(self.stmt);
+            ffi::sqlite3_reset(self.as_ptr());
+            ffi::sqlite3_clear_bindings(self.as_ptr());
         }
     }
 
@@ -206,7 +213,7 @@ impl<'a> StatementTrait<'a> for Statement {
         }
         match unsafe {
             ffi::sqlite3_bind_text(
-                self.stmt,
+                self.as_ptr(),
                 index,
                 value.as_ptr() as *const c_char,
                 value.len() as i32,
@@ -218,12 +225,8 @@ impl<'a> StatementTrait<'a> for Statement {
         }
     }
 
-    fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt {
-        self.stmt
-    }
-
     fn is_read_only(&self) -> bool {
-        let v = unsafe { ffi::sqlite3_stmt_readonly(self.stmt) };
+        let v = unsafe { ffi::sqlite3_stmt_readonly(self.as_ptr()) };
         v != 0
     }
 }
@@ -317,9 +320,6 @@ impl<'a> StatementTrait<'a> for MultiStatement {
     ) -> Result<Self, SQLite3Error> {
         generate_statements(conn, query)
     }
-    fn get_raw_stmt(&self) -> *mut ffi::sqlite3_stmt {
-        self.stmts[0].stmt
-    }
 
     fn is_read_only(&self) -> bool {
         for stmt in &self.stmts {
@@ -396,11 +396,12 @@ fn get_parameter_name(
     stmt: &Statement,
     index: i32,
 ) -> Result<Option<Parameters>, SQLite3Error> {
-    let parameter_name_ptr =
-        unsafe { ffi::sqlite3_bind_parameter_name(stmt.stmt, index) };
+    let parameter_name_ptr = unsafe {
+        ffi::sqlite3_bind_parameter_name(stmt.as_ptr(), index)
+    };
     let index_parameter = unsafe {
         ffi::sqlite3_bind_parameter_index(
-            stmt.stmt,
+            stmt.as_ptr(),
             parameter_name_ptr,
         )
     };
@@ -414,7 +415,7 @@ fn get_parameters(
     stmt: &Statement,
 ) -> Result<Vec<Parameters>, SQLite3Error> {
     let total_paramenters =
-        unsafe { ffi::sqlite3_bind_parameter_count(stmt.stmt) }
+        unsafe { ffi::sqlite3_bind_parameter_count(stmt.as_ptr()) }
             as usize;
     if total_paramenters == 0 {
         return Ok(vec![]);
