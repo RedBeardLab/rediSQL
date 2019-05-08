@@ -972,12 +972,12 @@ pub extern "C" fn MakeCopy(
             )
             .unwrap();
             STATISTICS.copy_err();
-            return unsafe {
+            unsafe {
                 r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                     context.as_ptr(),
                     error.as_ptr(),
                 )
-            };
+            }
         }
     }
 }
