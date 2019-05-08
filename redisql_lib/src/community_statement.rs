@@ -233,7 +233,7 @@ impl<'a> StatementTrait<'a> for Statement {
 
 impl<'a> StatementTrait<'a> for MultiStatement {
     fn reset(&self) {
-        self.stmts.iter().map(|stmt| stmt.reset()).count();
+        self.stmts.iter().map(StatementTrait::reset).count();
     }
     fn execute(&self) -> Result<Cursor, SQLite3Error> {
         let db = self.db.clone();
