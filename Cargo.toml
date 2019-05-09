@@ -1,6 +1,6 @@
 [package]
 name = "rediSQL"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Simone Mosciatti <simone@redbeardlab.tech>"]
 
 [lib]
