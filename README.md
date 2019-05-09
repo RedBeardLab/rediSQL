@@ -206,6 +206,33 @@ Chat on gitter: ![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql
 
 For any other information feel free to write me directly: [simone@redbeardlab.com](mailto:simone@redbeardlab.com)
 
+For any comment, idea or solution on any of the issues with label "PRO version if contribution", you will receive a free copy of the latest RediSQL version released.
+
+## Troubleshooting
+
+This section will explain how to overcome the most common problem when running RediSQL.
+
+If you find and report other problem, you will be rewarded with a copy of the PRO version of RediSQL.
+
+### Impossible to send telemetrics
+
+RediSQL doesn't start and show this lines:
+
+```
+[2019-05-06T21:29:00Z WARN  telemetrics] Warning, impossible to send the telemetrics.
+[2019-05-06T21:29:00Z ERROR telemetrics] Telemetrics not reachables, exit!
+```
+
+This error means that you are using the free edition of RediSQL which need to [comunicate with the telemetric servers][redisql-telemetrics].
+In this case was not possible for RediSQL to establish a connection to the server, hence RediSQL refuse to start.
+
+If you are running RediSQL inside docker, likely you forgot to pass the flag: `--net=host` that in this case is necessary.
+Another culprint could be the fiewall of your host, make sure that you are able to do HTTPS request from your server.
+
+A simple test in this case is to use `curl` to get the main page from Google: `curl google.com`.
+If `curl` does return an error is a good clue that you may not have outbound HTTP connectivity.
+
+
 ## License and commercial product
 
 This software is released under a custom license inspired by the MIT License.
