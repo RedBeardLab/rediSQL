@@ -2,8 +2,8 @@ FROM redis:latest
 
 # RUN apk update; apk add libgcc_s.so.1
 
-COPY releases/0.9.1/redisql_v0.9.1_x86_64.so /usr/local/lib
+COPY releases/1.0.1/redisql_v1.0.1_x86_64.so /usr/local/lib/redisql.so
 
 EXPOSE 6379
 
-CMD ["redis-server", "--loadmodule", "/usr/local/lib/libredis_sql.so"]
+CMD ["redis-server", "--loadmodule", "/usr/local/lib/redisql.so"]
