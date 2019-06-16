@@ -246,6 +246,36 @@ class TestStatements(TestRediSQLWithExec):
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4]])
 
+  def test_multi_statement_single_bind(self):
+    with DB(self, "A"):
+      with Table(self, "t1", "(A INTEGER)", key = "A"):
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t1 values(?1 + 1);")
+        self.assertEquals(ok, "OK")
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        self.assertEquals(done, ["DONE", 2L])
+        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "5")
+        self.assertEquals(done, ["DONE", 2L])
+        result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
+        self.assertEquals(result, [[3], [4], [5], [6]])
+
+  def test_multi_statement_multi_table_single_bind(self):
+    with DB(self, "A"):
+      with Table(self, "t1", "(A INTEGER)", key = "A"):
+        with Table(self, "t2", "(A INTEGER)", key = "A"):
+          ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t2 values(?1 - 1);")
+          self.assertEquals(ok, "OK")
+          done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+          self.assertEquals(done, ["DONE", 2L])
+          done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "5")
+          self.assertEquals(done, ["DONE", 2L])
+
+          result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
+          self.assertEquals(result, [[3], [5]])
+
+          result = self.exec_cmd("A", "SELECT * FROM t2 ORDER BY A;")
+          self.assertEquals(result, [[2], [4]])
+
+
   def test_update_statement(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
