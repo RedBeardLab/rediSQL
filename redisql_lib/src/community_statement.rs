@@ -221,6 +221,10 @@ impl<'a> StatementTrait<'a> for Statement {
             )
         } {
             ffi::SQLITE_OK => Ok(SQLiteOK::OK),
+
+            // it means that a statement requires less than $index paramenter, it is fine to just
+            // shortcut it to Ok.
+            ffi::SQLITE_RANGE => Ok(SQLiteOK::OK),
             _ => Err(self.get_last_error()),
         }
     }

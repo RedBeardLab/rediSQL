@@ -275,6 +275,14 @@ class TestStatements(TestRediSQLWithExec):
           result = self.exec_cmd("A", "SELECT * FROM t2 ORDER BY A;")
           self.assertEquals(result, [[2], [4]])
 
+  def test_multi_statement_different_bindings(self):
+    with DB(self, "A"):
+      with Table(self, "t1", "(A INTEGER)", key = "A"):
+        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t1 values(?2 + 1); select * from t1;")
+        self.assertEquals(ok, "OK")
+        result = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3", "8")
+        self.assertEquals(result, [[3], [9]])
+
 
   def test_update_statement(self):
     with DB(self, "A"):
@@ -434,12 +442,13 @@ class TestBruteHash(TestRediSQLWithExec):
       self.assertEquals(done, ["DONE", 0L])
       for i in xrange(catty):
         self.exec_naked("HSET", "cat:" + str(i), "meow", i)
+      time.sleep(0.5)
       result = self.exec_naked("REDISQL.EXEC", "A", "SELECT * FROM cats")
       self.assertEquals(catty, len(result))
 
   def test_rdb_persistency(self):
-    with DB(self, "A"):
-      done = self.exec_naked("REDISQL.EXEC", "A", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
+    with DB(self, "Y"):
+      done = self.exec_naked("REDISQL.EXEC", "Y", "CREATE VIRTUAL TABLE cats USING REDISQL_TABLES_BRUTE_HASH(cat, meow)")
 
       for i in xrange(5):
         self.exec_naked("HSET", "cat:" + str(i), "meow", i)
@@ -448,7 +457,7 @@ class TestBruteHash(TestRediSQLWithExec):
         pass
       time.sleep(0.5)
 
-      result = self.exec_naked("REDISQL.EXEC", "A", "SELECT rowid, cat, meow FROM cats")
+      result = self.exec_naked("REDISQL.EXEC", "Y", "SELECT rowid, cat, meow FROM cats")
       self.assertEquals(5, len(result))
       self.assertTrue([0L, "cat:0", "0"] in result)
       self.assertTrue([1L, "cat:1", "1"] in result)
