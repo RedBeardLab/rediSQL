@@ -210,6 +210,7 @@ impl<'a> StatementTrait<'a> for Statement {
             )
         } {
             ffi::SQLITE_OK => Ok(SQLiteOK::OK),
+            ffi::SQLITE_RANGE => Ok(SQLiteOK::OK),
             _ => Err(self.get_last_error()),
         }
     }
