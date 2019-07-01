@@ -1,6 +1,6 @@
 [package]
 name = "sync_engine"
-version = "0.5.0"
+version = "0.5.1-rc01"
 authors = ["Simone Mosciatti <mweb.sim@gmail.com>"]
 
 [build-dependencies]

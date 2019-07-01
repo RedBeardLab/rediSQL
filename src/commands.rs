@@ -91,7 +91,15 @@ pub extern "C" fn ExecStatement(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.exec_statement();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.exec_statement_err();
+            return error.reply(&context);
+        }
+    };
 
     match argvector.len() {
         0...2 => {
@@ -166,7 +174,14 @@ pub extern "C" fn QueryStatement(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.query_statement();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.query_statement_err();
+            return error.reply(&context);
+        }
+    };
 
     match argvector.len() {
         0...2 => {
@@ -233,7 +248,14 @@ pub extern "C" fn QueryStatementInto(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.query_statement_into();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.query_statement_into_err();
+            return error.reply(&context);
+        }
+    };
 
     match argvector.len() {
         0...3 => {
@@ -307,7 +329,15 @@ pub extern "C" fn Exec(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.exec();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.exec_err();
+            return error.reply(&context);
+        }
+    };
+
     match argvector.len() {
         3 => with_ch_and_loopdata(
             context.as_ptr(),
@@ -384,7 +414,15 @@ pub extern "C" fn Query(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.query();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.query_err();
+            return error.reply(&context);
+        }
+    };
+
     match argvector.len() {
         3 => with_ch_and_loopdata(
             context.as_ptr(),
@@ -449,7 +487,15 @@ pub extern "C" fn QueryInto(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.query_into();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.query_into_err();
+            return error.reply(&context);
+        }
+    };
+
     match argvector.len() {
         4 => {
             let stream_name = argvector[1];
@@ -521,7 +567,15 @@ pub extern "C" fn CreateStatement(
 ) -> i32 {
     STATISTICS.create_statement();
 
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.create_statement_err();
+            return error.reply(&context);
+        }
+    };
+
     match argvector.len() {
         4 => {
             with_ch_and_loopdata(
@@ -592,7 +646,15 @@ pub extern "C" fn UpdateStatement(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.update_statement();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.update_statement_err();
+            return error.reply(&context);
+        }
+    };
+
     match argvector.len() {
         4 => {
             with_ch_and_loopdata(
@@ -665,7 +727,16 @@ pub extern "C" fn DeleteStatement(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.delete_statement();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.delete_statement_err();
+            return error.reply(&context);
+        }
+    };
+
     match argvector.len() {
         3 => with_ch_and_loopdata(
             context.as_ptr(),
@@ -737,7 +808,14 @@ pub extern "C" fn CreateDB(
     argc: ::std::os::raw::c_int,
 ) -> i32 {
     STATISTICS.create_db();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.create_db_err();
+            return error.reply(&context);
+        }
+    };
 
     match argvector.len() {
         2 | 3 => {
@@ -895,7 +973,14 @@ pub extern "C" fn MakeCopy(
 ) -> i32 {
     debug!("MakeCopy | Start");
     STATISTICS.copy();
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            STATISTICS.copy_err();
+            return error.reply(&context);
+        }
+    };
 
     match argvector.len() {
         3 => with_ch_and_loopdata(
@@ -985,10 +1070,10 @@ pub extern "C" fn MakeCopy(
 #[allow(non_snake_case)]
 pub extern "C" fn GetStatistics(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
-    argv: *mut *mut r::rm::ffi::RedisModuleString,
-    argc: ::std::os::raw::c_int,
+    _argv: *mut *mut r::rm::ffi::RedisModuleString,
+    _argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, _argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
     let data = STATISTICS.values().data;
 
     let len = data.len() as c_long;

@@ -13,7 +13,6 @@ use std::io::{BufReader, Read, Write};
 use std::os::raw::{c_char, c_long};
 use std::slice;
 use std::str;
-use std::string;
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
@@ -415,24 +414,30 @@ fn reply_with_error(
 }
 
 pub fn create_argument(
-    ctx: *mut rm::ffi::RedisModuleCtx,
     argv: *mut *mut rm::ffi::RedisModuleString,
     argc: i32,
-) -> (rm::Context, Vec<&'static str>) {
-    let context = rm::Context::new(ctx);
-    let argvector = parse_args(argv, argc).unwrap();
-    (context, argvector)
+) -> Result<Vec<&'static str>, RediSQLError> {
+    match parse_args(argv, argc) {
+        Err(e) => Err(RediSQLError::new(
+            format!(
+                "String valid up to byte number {}",
+                e.valid_up_to()
+            ),
+            "Got a non-valid UTF8 string as input".to_string(),
+        )),
+        Ok(argvector) => Ok(argvector),
+    }
 }
 
 fn parse_args(
     argv: *mut *mut rm::ffi::RedisModuleString,
     argc: i32,
-) -> Result<Vec<&'static str>, string::FromUtf8Error> {
+) -> Result<Vec<&'static str>, std::str::Utf8Error> {
     let mut args: Vec<&'static str> =
         Vec::with_capacity(argc as usize);
     for i in 0..argc {
         let redis_str = unsafe { *argv.offset(i as isize) };
-        let arg = unsafe { string_ptr_len(redis_str) };
+        let arg = unsafe { string_ptr_len(redis_str)? };
         args.push(arg);
     }
     Ok(args)
@@ -440,13 +445,14 @@ fn parse_args(
 
 pub unsafe fn string_ptr_len(
     str: *mut rm::ffi::RedisModuleString,
-) -> &'static str {
+) -> Result<&'static str, std::str::Utf8Error> {
     let mut len = 0;
     let base =
         rm::ffi::RedisModule_StringPtrLen.unwrap()(str, &mut len)
             as *mut u8;
     let slice = slice::from_raw_parts(base, len);
-    str::from_utf8_unchecked(slice).trim_end_matches(char::from(0))
+    let s = str::from_utf8(slice)?;
+    Ok(s.trim_end_matches(char::from(0)))
 }
 
 #[repr(C)]

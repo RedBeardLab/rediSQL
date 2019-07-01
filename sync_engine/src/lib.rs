@@ -152,7 +152,14 @@ pub extern "C" fn ExecNow(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     let return_code = check_args(argvector, 3)
         .or_else(|e| {
             Err(unsafe {
@@ -197,7 +204,14 @@ pub extern "C" fn QueryNow(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     let return_code = check_args(argvector, 3)
         .or_else(|e| {
             Err(unsafe {
@@ -239,7 +253,14 @@ pub extern "C" fn QueryNowInto(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     let return_code = check_args(argvector, 4)
         .or_else(|e| {
             Err(unsafe {
@@ -301,7 +322,14 @@ pub extern "C" fn ExecStatementNow(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     match argvector.len() {
         0...2 => {
             let str_error = format!("Wrong number of arguments, it needs at least more than 2, you provide only {}",
@@ -349,7 +377,14 @@ pub extern "C" fn CreateStatementNow(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     let return_code = check_args(argvector, 4)
         .or_else(|e| {
             Err(unsafe {
@@ -390,7 +425,14 @@ pub extern "C" fn UpdateStatementNow(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     let return_code = check_args(argvector, 4)
         .or_else(|e| {
             Err(unsafe {
@@ -431,7 +473,14 @@ pub extern "C" fn DeleteStatementNow(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     let return_code = check_args(argvector, 3)
         .or_else(|e| {
             Err(unsafe {
@@ -472,7 +521,14 @@ pub extern "C" fn QueryStatementNow(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     match argvector.len() {
         0...2 => {
             let str_error = format!("Wrong number of arguments, it needs at least more than 2, you provide only {}",
@@ -520,7 +576,14 @@ pub extern "C" fn QueryStatementNowInto(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     let return_code = check_args(argvector, 4)
         .or_else(|e| {
             Err(unsafe {
@@ -584,7 +647,14 @@ pub extern "C" fn MakeCopyNow(
     argv: *mut *mut r::rm::ffi::RedisModuleString,
     argc: ::std::os::raw::c_int,
 ) -> i32 {
-    let (context, argvector) = r::create_argument(ctx, argv, argc);
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(error) => {
+            return error.reply(&context);
+        }
+    };
+
     let return_code = check_args(argvector, 3)
         .or_else(|e| {
             Err(unsafe {
