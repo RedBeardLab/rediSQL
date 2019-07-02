@@ -437,20 +437,21 @@ fn parse_args(
         Vec::with_capacity(argc as usize);
     for i in 0..argc {
         let redis_str = unsafe { *argv.offset(i as isize) };
-        let arg = unsafe { string_ptr_len(redis_str)? };
+        let arg = string_ptr_len(redis_str)?;
         args.push(arg);
     }
     Ok(args)
 }
 
-pub unsafe fn string_ptr_len(
+pub fn string_ptr_len(
     str: *mut rm::ffi::RedisModuleString,
 ) -> Result<&'static str, std::str::Utf8Error> {
     let mut len = 0;
-    let base =
+    let base = unsafe {
         rm::ffi::RedisModule_StringPtrLen.unwrap()(str, &mut len)
-            as *mut u8;
-    let slice = slice::from_raw_parts(base, len);
+            as *mut u8
+    };
+    let slice = unsafe { slice::from_raw_parts(base, len) };
     let s = str::from_utf8(slice)?;
     Ok(s.trim_end_matches(char::from(0)))
 }

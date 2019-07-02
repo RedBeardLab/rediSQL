@@ -925,6 +925,13 @@ class TestBlankAfterSemicolon(TestRediSQLWithExec):
           one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;\nSELECT 2;")
           self.assertEquals(one, [[2]])
 
+class TestWithNullChars(TestRediSQLWithExec):
+    def test_with_null_at_the_end(self):
+        with DB(self, 'A'):
+            self.assertRaises(redis.ResponseError, self.exec_naked, "REDISQL.EXEC", "A", "SELECT \0 1;")
+        with DB(self, 'B'):
+            self.assertRaises(redis.ResponseError, self.exec_naked, "REDISQL.EXEC", "A", "SELECT 1;\0")
+
 if __name__ == '__main__':
    unittest.main()
 

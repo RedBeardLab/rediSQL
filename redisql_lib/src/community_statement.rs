@@ -68,7 +68,14 @@ pub fn generate_statements(
     db: Arc<Mutex<RawConnection>>,
     query: &str,
 ) -> Result<MultiStatement, SQLite3Error> {
-    let raw_query = CString::new(query.to_string()).unwrap();
+    let raw_query = match CString::new(query.to_string()) {
+        Ok(r) => r,
+        Err(e) => return Err(SQLite3Error{
+            code: 999,
+            error_message: "Trying to create a statement with a NULL byte.".to_string(),
+            error_string: format!("Find NULL byte in position {} while trying to create a statement", e.nul_position()),
+        }),
+    };
     let mut next_query = raw_query.as_ptr();
     let mut stmts = Vec::new();
 
