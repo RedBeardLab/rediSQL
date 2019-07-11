@@ -2,7 +2,7 @@
 name = "redisql_lib"
 version = "0.5.5-rc02"
 authors = ["Simone Mosciatti <mweb.sim@gmail.com>"]
-edition = "2015"
+edition = "2018"
 
 [build-dependencies]
 bindgen = "0.47.1"

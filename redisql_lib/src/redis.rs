@@ -1,6 +1,4 @@
-extern crate fnv;
-
-use self::fnv::FnvHashMap;
+use fnv::FnvHashMap;
 use std;
 use std::cell::RefCell;
 use std::clone::Clone;
@@ -16,19 +14,21 @@ use std::str;
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
-pub use redis_type as rm;
-use redis_type::{BlockedClient, Context, OpenKey, ReplyWithError};
+pub use crate::redis_type as rm;
+use crate::redis_type::{
+    BlockedClient, Context, OpenKey, ReplyWithError,
+};
 
-use redisql_error as err;
-use redisql_error::RediSQLError;
+use crate::redisql_error as err;
+use crate::redisql_error::RediSQLError;
 
-use sqlite::StatementTrait;
+use crate::sqlite::StatementTrait;
 
-use community_statement::MultiStatement;
+use crate::community_statement::MultiStatement;
 
-use sqlite as sql;
+use crate::sqlite as sql;
 
-use statistics::STATISTICS;
+use crate::statistics::STATISTICS;
 
 #[derive(Clone)]
 pub struct ReplicationBook {
@@ -37,8 +37,8 @@ pub struct ReplicationBook {
 }
 
 pub trait StatementCache<'a> {
-    fn new(&Arc<Mutex<sql::RawConnection>>) -> Self;
-    fn is_statement_present(&self, &str) -> bool;
+    fn new(db: &Arc<Mutex<sql::RawConnection>>) -> Self;
+    fn is_statement_present(&self, identifier: &str) -> bool;
     fn insert_new_statement(
         &mut self,
         identifier: &str,
@@ -46,7 +46,7 @@ pub trait StatementCache<'a> {
     ) -> Result<QueryResult, RediSQLError>;
     fn delete_statement(
         &mut self,
-        &str,
+        identifier: &str,
     ) -> Result<QueryResult, RediSQLError>;
     fn update_statement(
         &mut self,
@@ -55,13 +55,13 @@ pub trait StatementCache<'a> {
     ) -> Result<QueryResult, RediSQLError>;
     fn exec_statement(
         &self,
-        &str,
-        &[&str],
+        identifier: &str,
+        args: &[&str],
     ) -> Result<QueryResult, RediSQLError>;
     fn query_statement(
         &self,
-        &str,
-        &[&str],
+        identifier: &str,
+        args: &[&str],
     ) -> Result<QueryResult, RediSQLError>;
 }
 

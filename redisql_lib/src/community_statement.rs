@@ -1,7 +1,7 @@
-use sqlite::ffi;
-use sqlite::SQLiteConnection;
-use sqlite::StatementTrait;
-use sqlite::{Cursor, RawConnection, SQLite3Error, SQLiteOK};
+use crate::sqlite::ffi;
+use crate::sqlite::SQLiteConnection;
+use crate::sqlite::StatementTrait;
+use crate::sqlite::{Cursor, RawConnection, SQLite3Error, SQLiteOK};
 
 use std::ffi::{CStr, CString};
 use std::fmt;

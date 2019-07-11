@@ -2,8 +2,8 @@ use std::error;
 use std::error::Error;
 use std::fmt;
 
-use redis;
-use sqlite as sql;
+use crate::redis;
+use crate::sqlite as sql;
 
 pub trait RediSQLErrorTrait: fmt::Display + error::Error {}
 
