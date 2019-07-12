@@ -2,12 +2,8 @@
 
 mod commands;
 
-extern crate env_logger;
-
 #[macro_use]
 extern crate log;
-extern crate redisql_lib;
-extern crate uuid;
 
 use env_logger::{Builder as logBuilder, Target as logTarget};
 use redisql_lib::redis as r;
@@ -26,13 +22,12 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use uuid::Uuid;
 
-extern crate sync_engine;
 use sync_engine::{register, WriteAOF};
 
 use commands::{
     CreateDB, CreateStatement, DeleteStatement, Exec, ExecStatement,
     GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
-    QueryStatementInto, UpdateStatement,
+    QueryStatementInto, RediSQLVersion, UpdateStatement,
 };
 
 #[cfg(not(feature = "pro"))]
@@ -334,6 +329,16 @@ pub extern "C" fn RedisModule_OnLoad(
         "REDISQL.STATISTICS",
         "readonly",
         GetStatistics,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_function(
+        &ctx,
+        "REDISQL.VERSION",
+        "readonly",
+        RediSQLVersion,
     ) {
         Ok(()) => (),
         Err(e) => return e,

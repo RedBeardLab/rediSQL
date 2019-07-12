@@ -2,6 +2,7 @@
 name = "sync_engine"
 version = "0.5.1-rc01"
 authors = ["Simone Mosciatti <mweb.sim@gmail.com>"]
+edition = "2018"
 
 [build-dependencies]
 cc = {version = "1.0.3", features = ["parallel"]}

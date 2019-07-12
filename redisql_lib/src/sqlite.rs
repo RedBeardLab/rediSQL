@@ -7,11 +7,11 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
-use redis::QueryResult;
+use crate::redis::QueryResult;
 
-use redisql_error as err;
+use crate::redisql_error as err;
 
-use community_statement::Statement;
+use crate::community_statement::Statement;
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]

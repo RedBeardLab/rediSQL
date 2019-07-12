@@ -1,7 +1,10 @@
-use redis_type::ffi as rffi;
-use redis_type::{CallReply, Context};
-use sqlite::ffi;
-use sqlite::{SQLite3Error, SQLiteConnection, SQLITE_TRANSIENT};
+use crate::redis_type::ffi as rffi;
+use crate::redis_type::{CallReply, Context};
+use crate::sqlite::ffi;
+use crate::sqlite::{
+    SQLite3Error, SQLiteConnection, SQLITE_TRANSIENT,
+};
+
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::ffi::{CStr, CString};

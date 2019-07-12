@@ -2,6 +2,7 @@
 name = "rediSQL"
 version = "1.0.3-rc02"
 authors = ["Simone Mosciatti <simone@redbeardlab.tech>"]
+edition = "2018"
 
 [lib]
 name = "redis_sql"

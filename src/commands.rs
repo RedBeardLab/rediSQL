@@ -17,6 +17,9 @@ use sync_engine::Replicate;
 
 use redisql_lib::statistics::STATISTICS;
 
+const REDISQL_VERSION: Option<&'static str> =
+    option_env!("CARGO_PKG_VERSION");
+
 extern "C" fn reply_exec(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
     _argv: *mut *mut r::rm::ffi::RedisModuleString,
@@ -854,7 +857,7 @@ pub extern "C" fn CreateDB(
                                     vtab::register_modules(&rc)
                                 }) {
                                 Err(e) => e.reply(&context),
-                                Ok(mut vtab_context) => {
+                                Ok(vtab_context) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(
                                         tx,
@@ -1093,6 +1096,19 @@ pub extern "C" fn GetStatistics(
         r::rm::ReplyWithStringBuffer(&context, statics.0.as_bytes());
         r::rm::ReplyWithLongLong(&context, statics.1 as i64);
     }
+
+    r::rm::ffi::REDISMODULE_OK
+}
+
+#[allow(non_snake_case)]
+pub extern "C" fn RediSQLVersion(
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    _argv: *mut *mut r::rm::ffi::RedisModuleString,
+    _argc: ::std::os::raw::c_int,
+) -> i32 {
+    let context = r::rm::Context::new(ctx);
+    let version = REDISQL_VERSION.unwrap_or("unknown");
+    r::rm::ReplyWithStringBuffer(&context, version.as_bytes());
 
     r::rm::ffi::REDISMODULE_OK
 }
