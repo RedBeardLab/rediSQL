@@ -196,7 +196,7 @@ pub enum Entity {
 }
 
 impl Entity {
-    fn new(stmt: &Statement, i: i32) -> Entity {
+    pub fn new(stmt: &Statement, i: i32) -> Entity {
         match get_entity_type(stmt.as_ptr(), i) {
             EntityType::Integer => {
                 let int = unsafe {

@@ -15,7 +15,8 @@ use redisql_lib::redis::{
     do_execute, do_query, get_dbkey_from_name, register_function,
     register_function_with_keys, register_write_function,
     reply_with_error_from_key_type, stream_query_result_array,
-    LoopData, RedisReply, StatementCache,
+    LoopData, RedisReply, Replier, ReturnMethod, Returner,
+    StatementCache,
 };
 use redisql_lib::redis_type::ffi::{
     RedisModuleIO, RedisModuleString,
@@ -176,22 +177,30 @@ pub extern "C" fn ExecNow(
                     key_type,
                 )),
                 Ok(dbkey) => {
-                    let (result, context) = {
+                    let (mut result, context) = {
                         let db = dbkey.loop_data.get_db();
                         let redis_context =
                             dbkey.loop_data.set_rc(context);
                         let result = do_execute(&db, args[2]);
                         let context = redis_context.release();
+                        let result = match result {
+                            Ok(r) => {
+                                ReplicateVerbatim(&context);
+                                r.create_data_to_return(
+                                    &context,
+                                    &ReturnMethod::Reply,
+                                )
+                            }
+                            Err(r) => r.create_data_to_return(
+                                &context,
+                                &ReturnMethod::Reply,
+                            ),
+                        };
+
                         (result, context)
                     };
                     mem::forget(dbkey);
-                    match result {
-                        Ok(result) => {
-                            ReplicateVerbatim(&context);
-                            Ok(result.reply(&context))
-                        }
-                        Err(e) => Err(e.reply(&context)),
-                    }
+                    Ok(result.reply(&context))
                 }
             }
         });
@@ -229,18 +238,26 @@ pub extern "C" fn QueryNow(
                 )),
                 Ok(dbkey) => {
                     let db = dbkey.loop_data.get_db();
-                    let (result, context) = {
+                    let (mut result, context) = {
                         let redis_context =
                             dbkey.loop_data.set_rc(context);
                         let result = do_query(&db, args[2]);
                         let context = redis_context.release();
+                        let result = match result {
+                            Ok(r) => r.create_data_to_return(
+                                &context,
+                                &ReturnMethod::Reply,
+                            ),
+                            Err(r) => r.create_data_to_return(
+                                &context,
+                                &ReturnMethod::Reply,
+                            ),
+                        };
+
                         (result, context)
                     };
                     mem::forget(dbkey);
-                    match result {
-                        Ok(res) => Ok(res.reply(&context)),
-                        Err(e) => Err(e.reply(&context)),
-                    }
+                    Ok(result.reply(&context))
                 }
             }
         });
@@ -278,19 +295,33 @@ pub extern "C" fn QueryNowInto(
                 )),
                 Ok(dbkey) => {
                     let db = dbkey.loop_data.get_db();
-                    let (result, context) = {
+                    let (mut result, context) = {
                         let redis_context =
                             dbkey.loop_data.set_rc(context);
                         let result = do_query(&db, args[3]);
                         let context = redis_context.release();
+                        let return_method =
+                            ReturnMethod::Stream { name: args[1] };
+                        let result = match result {
+                            Ok(r) => r.create_data_to_return(
+                                &context,
+                                &return_method,
+                            ),
+                            Err(r) => r.create_data_to_return(
+                                &context,
+                                &return_method,
+                            ),
+                        };
                         (result, context)
                     };
                     mem::forget(dbkey);
+                    Ok(result.reply(&context))
+                    /*
                     match result {
-                        Ok(res @ r::QueryResult::OK {}) => {
+                        Ok(mut res @ r::QueryResult::OK {}) => {
                             Ok(res.reply(&context))
                         }
-                        Ok(res @ r::QueryResult::DONE { .. }) => {
+                        Ok(mut res @ r::QueryResult::DONE { .. }) => {
                             Ok(res.reply(&context))
                         }
 
@@ -299,17 +330,18 @@ pub extern "C" fn QueryNowInto(
                             names,
                         }) => {
                             let result = stream_query_result_array(
-                                &context, args[1], &names, rows,
+                                &context, args[1], &names, &rows,
                             );
                             match result {
-                                Ok(result) => {
-                                    Ok(result.reply(&context))
+                                Ok(mut res) => {
+                                    Ok(res.reply(&context))
                                 }
                                 Err(e) => Err(e.reply(&context)),
                             }
                         }
                         Err(e) => Err(e.reply(&context)),
                     }
+                    */
                 }
             }
         });
@@ -359,7 +391,7 @@ pub extern "C" fn ExecStatementNow(
                     };
                     mem::forget(dbkey);
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
                             res.reply(&context)
                         }
@@ -407,7 +439,7 @@ pub extern "C" fn CreateStatementNow(
                         .insert_new_statement(args[2], args[3]);
                     mem::forget(dbkey);
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
                             Ok(res.reply(&context))
                         }
@@ -455,7 +487,7 @@ pub extern "C" fn UpdateStatementNow(
                         .update_statement(args[2], args[3]);
                     mem::forget(dbkey);
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
                             Ok(res.reply(&context))
                         }
@@ -503,7 +535,7 @@ pub extern "C" fn DeleteStatementNow(
                         .delete_statement(args[2]);
                     mem::forget(dbkey);
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
                             Ok(res.reply(&context))
                         }
@@ -558,7 +590,7 @@ pub extern "C" fn QueryStatementNow(
                     };
                     mem::forget(dbkey);
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
                             res.reply(&context)
                         }
@@ -612,10 +644,10 @@ pub extern "C" fn QueryStatementNowInto(
                     };
                     mem::forget(dbkey);
                     match result {
-                        Ok(res @ r::QueryResult::OK {}) => {
+                        Ok(mut res @ r::QueryResult::OK {}) => {
                             Ok(res.reply(&context))
                         }
-                        Ok(res @ r::QueryResult::DONE { .. }) => {
+                        Ok(mut res @ r::QueryResult::DONE { .. }) => {
                             Ok(res.reply(&context))
                         }
 
@@ -624,10 +656,10 @@ pub extern "C" fn QueryStatementNowInto(
                             names,
                         }) => {
                             let result = stream_query_result_array(
-                                &context, args[1], &names, rows,
+                                &context, args[1], &names, &rows,
                             );
                             match result {
-                                Ok(result) => {
+                                Ok(mut result) => {
                                     Ok(result.reply(&context))
                                 }
                                 Err(e) => Err(e.reply(&context)),
@@ -698,20 +730,38 @@ pub extern "C" fn MakeCopyNow(
 
             let dest_db = dest_db.unwrap();
 
-            let result = {
+            let mut result = {
                 let dest_loopdata = &dest_db.loop_data;
                 let source_loopdata = &source_db.loop_data;
-                r::do_copy(&source_loopdata.get_db(), dest_loopdata)
+                match r::do_copy(
+                    &source_loopdata.get_db(),
+                    dest_loopdata,
+                ) {
+                    Ok(r) => {
+                        ReplicateVerbatim(&context);
+                        r.create_data_to_return(
+                            &context,
+                            &ReturnMethod::Reply,
+                        )
+                    }
+                    Err(r) => r.create_data_to_return(
+                        &context,
+                        &ReturnMethod::Reply,
+                    ),
+                }
             };
             mem::forget(source_db);
             mem::forget(dest_db);
+            /*
             match result {
-                Ok(res) => {
+                Ok(mut res) => {
                     ReplicateVerbatim(&context);
                     Ok(res.reply(&context))
                 }
                 Err(e) => Err(e.reply(&context)),
             }
+            */
+            Ok(result.reply(&context))
         });
 
     unwrap_return_code(return_code)

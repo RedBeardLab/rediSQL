@@ -516,6 +516,32 @@ pub enum Command {
     },
 }
 
+struct SQLiteResultIterator<'s> {
+    num_columns: i32,
+    previous_status: i32,
+    stmt: &'s crate::community_statement::Statement,
+}
+
+impl<'s> Iterator for SQLiteResultIterator<'s> {
+    type Item = Vec<sql::Entity>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.previous_status != sql::ffi::SQLITE_ROW {
+            return None;
+        }
+        let mut row = Vec::with_capacity(self.num_columns as usize);
+        for i in 0..self.num_columns {
+            let entity_value = sql::Entity::new(self.stmt, i);
+            row.push(entity_value);
+        }
+        unsafe {
+            self.previous_status =
+                sql::ffi::sqlite3_step(self.stmt.as_ptr());
+        };
+
+        Some(row)
+    }
+}
+
 pub enum QueryResult {
     OK {},
     DONE {
@@ -527,27 +553,88 @@ pub enum QueryResult {
     },
 }
 
-impl QueryResult {
-    pub fn reply(self, ctx: &rm::Context) -> i32 {
-        debug!("Start replying!");
+pub trait Returner {
+    fn create_data_to_return(
+        self,
+        ctx: &Context,
+        return_method: &ReturnMethod,
+    ) -> Box<dyn Replier>;
+}
+
+impl Returner for QueryResult {
+    fn create_data_to_return(
+        mut self,
+        ctx: &Context,
+        return_method: &ReturnMethod,
+    ) -> Box<dyn Replier> {
+        match self {
+            QueryResult::Array {
+                ref array,
+                names: ref columns_names,
+            } => match return_method {
+                ReturnMethod::Stream { name: stream_name } => {
+                    match stream_query_result_array(
+                        ctx,
+                        stream_name,
+                        columns_names,
+                        array,
+                    ) {
+                        Ok(res) => Box::new(res),
+                        Err(e) => Box::new(e),
+                    }
+                }
+                _ => Box::new(self),
+            },
+            _ => Box::new(self),
+        }
+    }
+}
+
+impl Returner for RediSQLError {
+    fn create_data_to_return(
+        mut self,
+        _ctx: &Context,
+        _return_method: &ReturnMethod,
+    ) -> Box<dyn Replier> {
+        Box::new(self)
+    }
+}
+
+pub trait Replier {
+    fn reply(&mut self, ctx: &rm::Context) -> i32;
+}
+
+impl Replier for QueryResult {
+    fn reply(&mut self, ctx: &rm::Context) -> i32 {
         match self {
             QueryResult::OK { .. } => reply_with_ok(ctx.as_ptr()),
             QueryResult::DONE { modified_rows, .. } => {
-                debug!("QueryResult::DONE");
-                reply_with_done(ctx.as_ptr(), modified_rows)
+                reply_with_done(ctx.as_ptr(), *modified_rows)
             }
             QueryResult::Array { array, .. } => {
                 debug!("QueryResult::Array");
-                reply_with_array(ctx, array)
+                reply_with_array(ctx, array.to_vec())
             }
         }
+    }
+}
+
+impl Replier for RedisReply {
+    fn reply(&mut self, ctx: &rm::Context) -> i32 {
+        self.reply(ctx)
+    }
+}
+
+impl Replier for RediSQLError {
+    fn reply(&mut self, ctx: &rm::Context) -> i32 {
+        self.reply(ctx)
     }
 }
 
 pub fn do_execute(
     db: &Arc<Mutex<sql::RawConnection>>,
     query: &str,
-) -> Result<QueryResult, err::RediSQLError> {
+) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
     debug!("do_execute | created statement");
     let cursor = stmt.execute()?;
@@ -558,7 +645,7 @@ pub fn do_execute(
 pub fn do_query(
     db: &Arc<Mutex<sql::RawConnection>>,
     query: &str,
-) -> Result<QueryResult, err::RediSQLError> {
+) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
     if stmt.is_read_only() {
         let cursor = stmt.execute()?;
@@ -575,7 +662,7 @@ pub fn do_query(
 pub fn do_copy<L: LoopData>(
     source_db: &Arc<Mutex<sql::RawConnection>>,
     destination_loopdata: &L,
-) -> Result<QueryResult, err::RediSQLError> {
+) -> Result<impl Returner, err::RediSQLError> {
     debug!("DoCopy | Start");
 
     let destination_path = {
@@ -672,44 +759,19 @@ fn restore_previous_statements<'a, L: 'a + LoopData>(loopdata: &L) {
 
 fn return_value(
     client: &BlockedClient,
-    result: Result<QueryResult, err::RediSQLError>,
+    return_method: &ReturnMethod,
+    result: Result<impl Returner, err::RediSQLError>,
 ) {
+    let ctx = Context::thread_safe(client);
+    let result = match result {
+        Ok(mut res) => res.create_data_to_return(&ctx, return_method),
+        Err(mut e) => e.create_data_to_return(&ctx, return_method),
+    };
     unsafe {
         rm::ffi::RedisModule_UnblockClient.unwrap()(
             client.client,
-            Box::into_raw(Box::new(result))
-                as *mut std::os::raw::c_void,
+            Box::into_raw(result) as *mut std::os::raw::c_void,
         );
-    }
-}
-
-fn return_value_v2(
-    client: &BlockedClient,
-    return_method: &ReturnMethod,
-    result: Result<QueryResult, err::RediSQLError>,
-) {
-    match return_method {
-        ReturnMethod::Reply => return_value(client, result),
-        ReturnMethod::Stream { name: stream_name } => match result {
-            Err(_) => return_value(client, result),
-            Ok(QueryResult::OK {}) => return_value(client, result),
-            Ok(QueryResult::DONE { .. }) => {
-                return_value(client, result)
-            }
-            Ok(QueryResult::Array {
-                array: rows,
-                names: columns_names,
-            }) => {
-                let context = Context::thread_safe(client);
-                let result = stream_query_result_array(
-                    &context,
-                    stream_name,
-                    columns_names.as_slice(),
-                    rows,
-                );
-                return_value(client, result)
-            }
-        },
     }
 }
 
@@ -717,7 +779,7 @@ pub fn stream_query_result_array(
     context: &Context,
     stream_name: &str,
     columns_names: &[String],
-    array: Vec<sql::Row>,
+    array: &Vec<sql::Row>,
 ) -> Result<QueryResult, err::RediSQLError> {
     let row_last_index = array.len() - 1;
 
@@ -845,7 +907,11 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                             Ok(_) => STATISTICS.exec_ok(),
                             Err(_) => STATISTICS.exec_err(),
                         }
-                        return_value(&client, result);
+                        return_value(
+                            &client,
+                            &ReturnMethod::Reply,
+                            result,
+                        );
                     },
                 );
                 debug!("Exec | DONE, returning result");
@@ -875,11 +941,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                                 STATISTICS.query_into_err()
                             }
                         };
-                        return_value_v2(
-                            &client,
-                            &return_method,
-                            result,
-                        );
+                        return_value(&client, &return_method, result);
                     },
                 );
             }
@@ -899,7 +961,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     Ok(_) => STATISTICS.update_statement_ok(),
                     Err(_) => STATISTICS.update_statement_err(),
                 };
-                return_value(&client, result)
+                return_value(&client, &ReturnMethod::Reply, result)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
                 debug!(
@@ -913,7 +975,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     Ok(_) => STATISTICS.delete_statement_ok(),
                     Err(_) => STATISTICS.delete_statement_err(),
                 }
-                return_value(&client, result);
+                return_value(&client, &ReturnMethod::Reply, result);
             }
             Ok(Command::CompileStatement {
                 identifier,
@@ -931,7 +993,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     Ok(_) => STATISTICS.create_statement_ok(),
                     Err(_) => STATISTICS.create_statement_err(),
                 }
-                return_value(&client, result);
+                return_value(&client, &ReturnMethod::Reply, result);
             }
 
             Ok(Command::ExecStatement {
@@ -953,7 +1015,11 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                             Ok(_) => STATISTICS.exec_statement_ok(),
                             Err(_) => STATISTICS.exec_statement_err(),
                         }
-                        return_value(&client, result);
+                        return_value(
+                            &client,
+                            &ReturnMethod::Reply,
+                            result,
+                        );
                     },
                 );
             }
@@ -986,11 +1052,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                                 STATISTICS.query_statement_into_err()
                             }
                         };
-                        return_value_v2(
-                            &client,
-                            &return_method,
-                            result,
-                        );
+                        return_value(&client, &return_method, result);
                     },
                 );
             }
@@ -1012,7 +1074,11 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                             Ok(_) => STATISTICS.copy_ok(),
                             Err(_) => STATISTICS.copy_err(),
                         };
-                        return_value(&client, result);
+                        return_value(
+                            &client,
+                            &ReturnMethod::Reply,
+                            result,
+                        );
                     },
                 );
                 std::mem::forget(destination);

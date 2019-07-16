@@ -5,7 +5,7 @@ use std::thread;
 
 use redisql_lib::redis::{
     get_dbkey_from_name, reply_with_error_from_key_type,
-    with_ch_and_loopdata, RedisReply,
+    with_ch_and_loopdata, RedisReply, Replier, Returner,
 };
 use redisql_lib::redis_type::ReplicateVerbatim;
 use redisql_lib::sqlite::{get_arc_connection, SQLite3Error};
@@ -29,9 +29,9 @@ extern "C" fn reply_exec(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut Result<r::QueryResult, SQLite3Error>
+        ) as *mut Result<&mut r::Replier, SQLite3Error>
     };
-    let result: Box<Result<r::QueryResult, SQLite3Error>> =
+    let result: Box<Result<&mut r::Replier, SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
         Ok(query_result) => query_result.reply(&context),
@@ -48,9 +48,9 @@ extern "C" fn reply_exec_statement(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut Result<r::QueryResult, SQLite3Error>
+        ) as *mut Result<&mut r::Replier, SQLite3Error>
     };
-    let result: Box<Result<r::QueryResult, SQLite3Error>> =
+    let result: Box<Result<&mut r::Replier, SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
         Ok(query_result) => query_result.reply(&context),
@@ -67,9 +67,9 @@ extern "C" fn reply_create_statement(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut Result<r::QueryResult, SQLite3Error>
+        ) as *mut Result<&mut r::Replier, SQLite3Error>
     };
-    let result: Box<Result<r::QueryResult, SQLite3Error>> =
+    let result: Box<Result<&mut r::Replier, SQLite3Error>> =
         unsafe { Box::from_raw(result) };
     match *result {
         Ok(query_result) => query_result.reply(&context),
@@ -885,7 +885,7 @@ pub extern "C" fn CreateDB(
 
                                     match type_set {
                                     r::rm::ffi::REDISMODULE_OK => {
-                                        let ok =
+                                        let mut ok =
                                             r::QueryResult::OK {};
                                         STATISTICS.create_db_ok();
                                         ReplicateVerbatim(&context);
