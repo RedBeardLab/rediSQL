@@ -558,7 +558,7 @@ pub trait Returner {
         self,
         ctx: &Context,
         return_method: &ReturnMethod,
-    ) -> Box<dyn Replier>;
+    ) -> Box<Box<dyn Replier>>;
 }
 
 impl Returner for QueryResult {
@@ -566,7 +566,7 @@ impl Returner for QueryResult {
         mut self,
         ctx: &Context,
         return_method: &ReturnMethod,
-    ) -> Box<dyn Replier> {
+    ) -> Box<Box<dyn Replier>> {
         match self {
             QueryResult::Array {
                 ref array,
@@ -579,13 +579,13 @@ impl Returner for QueryResult {
                         columns_names,
                         array,
                     ) {
-                        Ok(res) => Box::new(res),
-                        Err(e) => Box::new(e),
+                        Ok(res) => Box::new(Box::new(res)),
+                        Err(e) => Box::new(Box::new(e)),
                     }
                 }
-                _ => Box::new(self),
+                _ => Box::new(Box::new(self)),
             },
-            _ => Box::new(self),
+            _ => Box::new(Box::new(self)),
         }
     }
 }
@@ -595,8 +595,8 @@ impl Returner for RediSQLError {
         mut self,
         _ctx: &Context,
         _return_method: &ReturnMethod,
-    ) -> Box<dyn Replier> {
-        Box::new(self)
+    ) -> Box<Box<dyn Replier>> {
+        Box::new(Box::new(self))
     }
 }
 
@@ -627,7 +627,7 @@ impl Replier for RedisReply {
 
 impl Replier for RediSQLError {
     fn reply(&mut self, ctx: &rm::Context) -> i32 {
-        self.reply(ctx)
+        reply_with_error(ctx.as_ptr(), self.to_string())
     }
 }
 
@@ -899,7 +899,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             Ok(Command::Exec { query, client }) => {
                 debug!("Exec | Query = {:?}", query);
                 loopdata.with_contex_set(
-                    Context::thread_safe(&client),
+                    Context::no_client(),
                     |_| {
                         let result =
                             do_execute(&loopdata.get_db(), query);

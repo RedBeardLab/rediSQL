@@ -29,14 +29,11 @@ extern "C" fn reply_exec(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut Result<&mut r::Replier, SQLite3Error>
+        ) as *mut *mut Replier
     };
-    let result: Box<Result<&mut r::Replier, SQLite3Error>> =
-        unsafe { Box::from_raw(result) };
-    match *result {
-        Ok(query_result) => query_result.reply(&context),
-        Err(error) => error.reply(&context),
-    }
+    let mut result: Box<r::Replier> =
+        unsafe { Box::from_raw(*result) };
+    result.reply(&context)
 }
 
 extern "C" fn reply_exec_statement(
@@ -48,14 +45,11 @@ extern "C" fn reply_exec_statement(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut Result<&mut r::Replier, SQLite3Error>
+        ) as *mut *mut Replier
     };
-    let result: Box<Result<&mut r::Replier, SQLite3Error>> =
-        unsafe { Box::from_raw(result) };
-    match *result {
-        Ok(query_result) => query_result.reply(&context),
-        Err(error) => error.reply(&context),
-    }
+    let mut result: Box<r::Replier> =
+        unsafe { Box::from_raw(*result) };
+    result.reply(&context)
 }
 
 extern "C" fn reply_create_statement(
@@ -67,14 +61,11 @@ extern "C" fn reply_create_statement(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut Result<&mut r::Replier, SQLite3Error>
+        ) as *mut *mut Replier
     };
-    let result: Box<Result<&mut r::Replier, SQLite3Error>> =
-        unsafe { Box::from_raw(result) };
-    match *result {
-        Ok(query_result) => query_result.reply(&context),
-        Err(error) => error.reply(&context),
-    }
+    let mut result: Box<r::Replier> =
+        unsafe { Box::from_raw(*result) };
+    result.reply(&context)
 }
 
 extern "C" fn timeout(

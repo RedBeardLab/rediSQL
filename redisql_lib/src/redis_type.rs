@@ -28,6 +28,17 @@ impl Context {
             thread_safe: false,
         }
     }
+    pub fn no_client() -> Self {
+        let ctx = unsafe {
+            ffi::RedisModule_GetThreadSafeContext.unwrap()(
+                std::ptr::null_mut(),
+            )
+        };
+        Context {
+            ctx,
+            thread_safe: false,
+        }
+    }
     pub fn as_ptr(&self) -> *mut ffi::RedisModuleCtx {
         self.ctx
     }
