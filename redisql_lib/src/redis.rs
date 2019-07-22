@@ -666,26 +666,6 @@ impl RedisReply for QueryResult {
     }
 }
 
-/*
-pub trait Replier {
-    fn reply(&mut self, ctx: &rm::Context) -> i32;
-}
-
-
-
-impl Replier for RedisReply {
-    fn reply(&mut self, ctx: &rm::Context) -> i32 {
-        self.reply(ctx)
-    }
-}
-
-
-impl Replier for RediSQLError {
-    fn reply(&mut self, ctx: &rm::Context) -> i32 {
-        reply_with_error(ctx.as_ptr(), self.to_string())
-    }
-}
-*/
 pub fn do_execute(
     db: &Arc<Mutex<sql::RawConnection>>,
     query: &str,
