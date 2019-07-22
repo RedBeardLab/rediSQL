@@ -592,24 +592,26 @@ impl Returner for QueryResult {
         ctx: &Context,
         return_method: &ReturnMethod,
     ) -> Box<Box<dyn RedisReply>> {
-        match self {
-            QueryResult::Array {
-                ref array,
-                names: ref columns_names,
-            } => match return_method {
-                ReturnMethod::Stream { name: stream_name } => {
-                    match stream_query_result_array(
-                        ctx,
-                        stream_name,
-                        columns_names,
+        match return_method {
+            ReturnMethod::Stream { name: stream_name } => {
+                match self {
+                    QueryResult::Array {
                         array,
-                    ) {
-                        Ok(res) => Box::new(Box::new(res)),
-                        Err(e) => Box::new(Box::new(e)),
+                        names: columns_names,
+                    } => {
+                        match stream_query_result_array(
+                            ctx,
+                            stream_name,
+                            &columns_names,
+                            array.into_iter(),
+                        ) {
+                            Ok(res) => Box::new(Box::new(res)),
+                            Err(e) => Box::new(Box::new(e)),
+                        }
                     }
+                    _ => Box::new(Box::new(self)),
                 }
-                _ => Box::new(Box::new(self)),
-            },
+            }
             _ => Box::new(Box::new(self)),
         }
     }
@@ -625,19 +627,37 @@ impl Returner for RediSQLError {
     }
 }
 
-impl<'s> Returner for Cursor<'s> {
+impl<'s> Returner for Cursor<'static> {
     fn create_data_to_return(
         self,
         ctx: &Context,
         return_method: &ReturnMethod,
     ) -> Box<Box<dyn RedisReply>> {
         match self {
-            Cursor::RowsCursor { stmt, .. } => match return_method {
+            Cursor::RowsCursor {
+                stmt, num_columns, ..
+            } => match return_method {
                 ReturnMethod::Stream { name: stream_name } => {
+                    let mut names =
+                        Vec::with_capacity(num_columns as usize);
+                    for i in 0..num_columns {
+                        let name = unsafe {
+                            CStr::from_ptr(
+                                sql::ffi::sqlite3_column_name(
+                                    stmt.as_ptr(),
+                                    i,
+                                ),
+                            )
+                            .to_string_lossy()
+                            .into_owned()
+                        };
+                        names.push(name);
+                    }
+
                     match stream_query_result_array(
                         ctx,
                         stream_name,
-                        &vec!["aa".to_string()],
+                        &names,
                         SQLiteResultIterator::from_stmt(stmt),
                     ) {
                         Ok(res) => Box::new(Box::new(res)),
@@ -825,21 +845,26 @@ fn return_value(
     }
 }
 
-pub fn stream_query_result_array(
+pub fn stream_query_result_array<A>(
     context: &Context,
     stream_name: &str,
     columns_names: &[String],
-    array: &Vec<sql::Row>,
-) -> Result<QueryResult, err::RediSQLError> {
-    let row_last_index = array.len() - 1;
-
+    array: A,
+) -> Result<QueryResult, err::RediSQLError>
+where
+    A: IntoIterator<Item = sql::Row>,
+{
     let mut result = Vec::with_capacity(4);
     result.push(sql::Entity::Text {
         text: stream_name.to_string(),
     });
 
+    let mut i = 0;
+    let mut first_stream_index = None;
+    let mut second_stream_index = None;
+
     let mut lock = context.lock();
-    for (i, row) in array.iter().enumerate() {
+    for row in array {
         if i % 256 == 255 {
             // avoid that a big results lock the context for too long, should help in
             // keeping the latency low.
@@ -873,13 +898,13 @@ pub fn stream_query_result_array(
                 sql::Entity::Text { text } => {
                     xadd.add_element(
                         &format!("text:{}", &columns_names[j]),
-                        text,
+                        &text,
                     );
                 }
                 sql::Entity::Blob { blob } => {
                     xadd.add_element(
                         &format!("blob:{}", &columns_names[j]),
-                        blob,
+                        &blob,
                     );
                 }
             }
@@ -889,17 +914,16 @@ pub fn stream_query_result_array(
         match xadd_result {
             rm::CallReply::RString { .. } => match i {
                 0 => {
-                    result.push(sql::Entity::Text {
+                    let stream_index = sql::Entity::Text {
                         text: xadd_result.access_string().unwrap(),
-                    });
-                }
-                n if n == row_last_index => {
-                    result.push(sql::Entity::Text {
-                        text: xadd_result.access_string().unwrap(),
-                    });
+                    };
+                    first_stream_index = Some(stream_index.clone());
+                    second_stream_index = Some(stream_index);
                 }
                 _ => {
-                    // do nothing
+                    second_stream_index = Some(sql::Entity::Text {
+                        text: xadd_result.access_string().unwrap(),
+                    });
                 }
             },
             rm::CallReply::RError { .. } => {
@@ -914,17 +938,20 @@ pub fn stream_query_result_array(
                 debug!("XADD result: {:?}", xadd_result);
                 panic!();
             }
-        }
+        };
+        i += 1;
     }
     context.release(lock);
 
-    if result.len() == 2 {
-        let start_and_end = result[1].clone();
-        result.push(start_and_end);
-    }
-    result.push(sql::Entity::Integer {
-        int: array.len() as i64,
-    });
+    result.push(
+        first_stream_index
+            .expect("Not found first index when returning a stream"),
+    );
+    result
+        .push(second_stream_index.expect(
+            "Not found second index when returning a stream",
+        ));
+    result.push(sql::Entity::Integer { int: i });
 
     Ok(QueryResult::Array {
         names: vec![

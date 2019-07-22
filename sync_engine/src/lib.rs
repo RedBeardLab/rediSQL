@@ -655,7 +655,7 @@ pub extern "C" fn QueryStatementNowInto(
                             names,
                         }) => {
                             let result = stream_query_result_array(
-                                &context, args[1], &names, &rows,
+                                &context, args[1], &names, rows,
                             );
                             match result {
                                 Ok(mut result) => {
