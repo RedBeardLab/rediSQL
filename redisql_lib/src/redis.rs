@@ -307,11 +307,11 @@ impl Loop {
 }
 
 pub trait RedisReply {
-    fn reply(&self, ctx: &rm::Context) -> i32;
+    fn reply(&mut self, ctx: &rm::Context) -> i32;
 }
 
 impl RedisReply for sql::Entity {
-    fn reply(&self, ctx: &rm::Context) -> i32 {
+    fn reply(&mut self, ctx: &rm::Context) -> i32 {
         match *self {
             sql::Entity::Integer { int } => {
                 rm::ReplyWithLongLong(ctx, int)
@@ -382,7 +382,7 @@ fn reply_with_array(ctx: &rm::Context, array: Vec<sql::Row>) -> i32 {
                 row.len() as c_long,
             );
         }
-        for entity in row {
+        for mut entity in row {
             entity.reply(&ctx);
         }
     }
@@ -390,14 +390,14 @@ fn reply_with_array(ctx: &rm::Context, array: Vec<sql::Row>) -> i32 {
 }
 
 impl RedisReply for sql::SQLite3Error {
-    fn reply(&self, ctx: &Context) -> i32 {
+    fn reply(&mut self, ctx: &Context) -> i32 {
         let error = format!("{}", self);
         reply_with_error(ctx.as_ptr(), error)
     }
 }
 
 impl RedisReply for RediSQLError {
-    fn reply(&self, ctx: &Context) -> i32 {
+    fn reply(&mut self, ctx: &Context) -> i32 {
         let error = format!("{}", self);
         reply_with_error(ctx.as_ptr(), error)
     }
@@ -542,6 +542,12 @@ impl<'s> Iterator for SQLiteResultIterator<'s> {
     }
 }
 
+impl<'s> RedisReply for SQLiteResultIterator<'s> {
+    fn reply(&mut self, cts: &rm::Context) -> i32 {
+        for row in self {}
+    }
+}
+
 pub enum QueryResult {
     OK {},
     DONE {
@@ -558,15 +564,15 @@ pub trait Returner {
         self,
         ctx: &Context,
         return_method: &ReturnMethod,
-    ) -> Box<Box<dyn Replier>>;
+    ) -> Box<Box<dyn RedisReply>>;
 }
 
 impl Returner for QueryResult {
     fn create_data_to_return(
-        mut self,
+        self,
         ctx: &Context,
         return_method: &ReturnMethod,
-    ) -> Box<Box<dyn Replier>> {
+    ) -> Box<Box<dyn RedisReply>> {
         match self {
             QueryResult::Array {
                 ref array,
@@ -592,19 +598,15 @@ impl Returner for QueryResult {
 
 impl Returner for RediSQLError {
     fn create_data_to_return(
-        mut self,
+        self,
         _ctx: &Context,
         _return_method: &ReturnMethod,
-    ) -> Box<Box<dyn Replier>> {
+    ) -> Box<Box<dyn RedisReply>> {
         Box::new(Box::new(self))
     }
 }
 
-pub trait Replier {
-    fn reply(&mut self, ctx: &rm::Context) -> i32;
-}
-
-impl Replier for QueryResult {
+impl RedisReply for QueryResult {
     fn reply(&mut self, ctx: &rm::Context) -> i32 {
         match self {
             QueryResult::OK { .. } => reply_with_ok(ctx.as_ptr()),
@@ -619,18 +621,26 @@ impl Replier for QueryResult {
     }
 }
 
+/*
+pub trait Replier {
+    fn reply(&mut self, ctx: &rm::Context) -> i32;
+}
+
+
+
 impl Replier for RedisReply {
     fn reply(&mut self, ctx: &rm::Context) -> i32 {
         self.reply(ctx)
     }
 }
 
+
 impl Replier for RediSQLError {
     fn reply(&mut self, ctx: &rm::Context) -> i32 {
         reply_with_error(ctx.as_ptr(), self.to_string())
     }
 }
-
+*/
 pub fn do_execute(
     db: &Arc<Mutex<sql::RawConnection>>,
     query: &str,
@@ -764,8 +774,8 @@ fn return_value(
 ) {
     let ctx = Context::thread_safe(client);
     let result = match result {
-        Ok(mut res) => res.create_data_to_return(&ctx, return_method),
-        Err(mut e) => e.create_data_to_return(&ctx, return_method),
+        Ok(res) => res.create_data_to_return(&ctx, return_method),
+        Err(e) => e.create_data_to_return(&ctx, return_method),
     };
     unsafe {
         rm::ffi::RedisModule_UnblockClient.unwrap()(

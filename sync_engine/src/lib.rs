@@ -15,8 +15,7 @@ use redisql_lib::redis::{
     do_execute, do_query, get_dbkey_from_name, register_function,
     register_function_with_keys, register_write_function,
     reply_with_error_from_key_type, stream_query_result_array,
-    LoopData, RedisReply, Replier, ReturnMethod, Returner,
-    StatementCache,
+    LoopData, RedisReply, ReturnMethod, Returner, StatementCache,
 };
 use redisql_lib::redis_type::ffi::{
     RedisModuleIO, RedisModuleString,
@@ -156,7 +155,7 @@ pub extern "C" fn ExecNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -216,7 +215,7 @@ pub extern "C" fn QueryNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -273,7 +272,7 @@ pub extern "C" fn QueryNowInto(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -357,7 +356,7 @@ pub extern "C" fn ExecStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -395,7 +394,7 @@ pub extern "C" fn ExecStatementNow(
                             ReplicateVerbatim(&context);
                             res.reply(&context)
                         }
-                        Err(err) => err.reply(&context),
+                        Err(mut err) => err.reply(&context),
                     }
                 }
             }
@@ -412,7 +411,7 @@ pub extern "C" fn CreateStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -443,7 +442,7 @@ pub extern "C" fn CreateStatementNow(
                             ReplicateVerbatim(&context);
                             Ok(res.reply(&context))
                         }
-                        Err(e) => Err(e.reply(&context)),
+                        Err(mut e) => Err(e.reply(&context)),
                     }
                 }
             }
@@ -460,7 +459,7 @@ pub extern "C" fn UpdateStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -491,7 +490,7 @@ pub extern "C" fn UpdateStatementNow(
                             ReplicateVerbatim(&context);
                             Ok(res.reply(&context))
                         }
-                        Err(e) => Err(e.reply(&context)),
+                        Err(mut e) => Err(e.reply(&context)),
                     }
                 }
             }
@@ -508,7 +507,7 @@ pub extern "C" fn DeleteStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -539,7 +538,7 @@ pub extern "C" fn DeleteStatementNow(
                             ReplicateVerbatim(&context);
                             Ok(res.reply(&context))
                         }
-                        Err(e) => Err(e.reply(&context)),
+                        Err(mut e) => Err(e.reply(&context)),
                     }
                 }
             }
@@ -556,7 +555,7 @@ pub extern "C" fn QueryStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -594,7 +593,7 @@ pub extern "C" fn QueryStatementNow(
                             ReplicateVerbatim(&context);
                             res.reply(&context)
                         }
-                        Err(err) => err.reply(&context),
+                        Err(mut err) => err.reply(&context),
                     }
                 }
             }
@@ -611,7 +610,7 @@ pub extern "C" fn QueryStatementNowInto(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -662,10 +661,10 @@ pub extern "C" fn QueryStatementNowInto(
                                 Ok(mut result) => {
                                     Ok(result.reply(&context))
                                 }
-                                Err(e) => Err(e.reply(&context)),
+                                Err(mut e) => Err(e.reply(&context)),
                             }
                         }
-                        Err(e) => Err(e.reply(&context)),
+                        Err(mut e) => Err(e.reply(&context)),
                     }
                 }
             }
@@ -682,7 +681,7 @@ pub extern "C" fn MakeCopyNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };

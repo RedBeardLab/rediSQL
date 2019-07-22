@@ -5,10 +5,10 @@ use std::thread;
 
 use redisql_lib::redis::{
     get_dbkey_from_name, reply_with_error_from_key_type,
-    with_ch_and_loopdata, RedisReply, Replier, Returner,
+    with_ch_and_loopdata, RedisReply,
 };
 use redisql_lib::redis_type::ReplicateVerbatim;
-use redisql_lib::sqlite::{get_arc_connection, SQLite3Error};
+use redisql_lib::sqlite::get_arc_connection;
 use redisql_lib::virtual_tables as vtab;
 
 use redisql_lib::redis as r;
@@ -29,9 +29,9 @@ extern "C" fn reply_exec(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut *mut Replier
+        ) as *mut *mut RedisReply
     };
-    let mut result: Box<r::Replier> =
+    let mut result: Box<r::RedisReply> =
         unsafe { Box::from_raw(*result) };
     result.reply(&context)
 }
@@ -45,9 +45,9 @@ extern "C" fn reply_exec_statement(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut *mut Replier
+        ) as *mut *mut RedisReply
     };
-    let mut result: Box<r::Replier> =
+    let mut result: Box<r::RedisReply> =
         unsafe { Box::from_raw(*result) };
     result.reply(&context)
 }
@@ -61,9 +61,9 @@ extern "C" fn reply_create_statement(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut *mut Replier
+        ) as *mut *mut RedisReply
     };
-    let mut result: Box<r::Replier> =
+    let mut result: Box<r::RedisReply> =
         unsafe { Box::from_raw(*result) };
     result.reply(&context)
 }
@@ -89,7 +89,7 @@ pub extern "C" fn ExecStatement(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.exec_statement_err();
             return error.reply(&context);
         }
@@ -171,7 +171,7 @@ pub extern "C" fn QueryStatement(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.query_statement_err();
             return error.reply(&context);
         }
@@ -245,7 +245,7 @@ pub extern "C" fn QueryStatementInto(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.query_statement_into_err();
             return error.reply(&context);
         }
@@ -326,7 +326,7 @@ pub extern "C" fn Exec(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.exec_err();
             return error.reply(&context);
         }
@@ -411,7 +411,7 @@ pub extern "C" fn Query(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.query_err();
             return error.reply(&context);
         }
@@ -484,7 +484,7 @@ pub extern "C" fn QueryInto(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.query_into_err();
             return error.reply(&context);
         }
@@ -564,7 +564,7 @@ pub extern "C" fn CreateStatement(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.create_statement_err();
             return error.reply(&context);
         }
@@ -643,7 +643,7 @@ pub extern "C" fn UpdateStatement(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.update_statement_err();
             return error.reply(&context);
         }
@@ -725,7 +725,7 @@ pub extern "C" fn DeleteStatement(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.delete_statement_err();
             return error.reply(&context);
         }
@@ -805,7 +805,7 @@ pub extern "C" fn CreateDB(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.create_db_err();
             return error.reply(&context);
         }
@@ -847,7 +847,7 @@ pub extern "C" fn CreateDB(
                                 .and_then(|_| {
                                     vtab::register_modules(&rc)
                                 }) {
-                                Err(e) => e.reply(&context),
+                                Err(mut e) => e.reply(&context),
                                 Ok(vtab_context) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(
@@ -970,7 +970,7 @@ pub extern "C" fn MakeCopy(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             STATISTICS.copy_err();
             return error.reply(&context);
         }
