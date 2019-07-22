@@ -367,15 +367,19 @@ fn reply_with_done(
     rm::ffi::REDISMODULE_OK
 }
 
-fn reply_with_array(ctx: &rm::Context, array: Vec<sql::Row>) -> i32 {
-    let len = array.len() as c_long;
+fn reply_with_array(
+    ctx: &rm::Context,
+    array: impl IntoIterator<Item = sql::Row>,
+) -> i32 {
     unsafe {
         rm::ffi::RedisModule_ReplyWithArray.unwrap()(
             ctx.as_ptr(),
-            len,
+            rm::ffi::REDISMODULE_POSTPONED_ARRAY_LEN.into(),
         );
     }
+    let mut i = 0;
     for row in array {
+        i += 1;
         unsafe {
             rm::ffi::RedisModule_ReplyWithArray.unwrap()(
                 ctx.as_ptr(),
@@ -385,6 +389,12 @@ fn reply_with_array(ctx: &rm::Context, array: Vec<sql::Row>) -> i32 {
         for mut entity in row {
             entity.reply(&ctx);
         }
+    }
+    unsafe {
+        rm::ffi::RedisModule_ReplySetArrayLength.unwrap()(
+            ctx.as_ptr(),
+            i,
+        );
     }
     rm::ffi::REDISMODULE_OK
 }
@@ -539,12 +549,6 @@ impl<'s> Iterator for SQLiteResultIterator<'s> {
         };
 
         Some(row)
-    }
-}
-
-impl<'s> RedisReply for SQLiteResultIterator<'s> {
-    fn reply(&mut self, cts: &rm::Context) -> i32 {
-        for row in self {}
     }
 }
 
