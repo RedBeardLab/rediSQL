@@ -22,7 +22,7 @@ use crate::redis_type::{
 use crate::redisql_error as err;
 use crate::redisql_error::RediSQLError;
 
-use crate::sqlite::StatementTrait;
+use crate::sqlite::{Cursor, StatementTrait};
 
 use crate::community_statement::MultiStatement;
 
@@ -530,6 +530,21 @@ struct SQLiteResultIterator<'s> {
     num_columns: i32,
     previous_status: i32,
     stmt: &'s crate::community_statement::Statement,
+}
+
+impl<'s> SQLiteResultIterator<'s> {
+    fn from_stmt(
+        stmt: &'s crate::community_statement::Statement,
+    ) -> Self {
+        let num_columns =
+            unsafe { sql::ffi::sqlite3_column_count(stmt.as_ptr()) };
+        let previous_status = sql::ffi::SQLITE_ROW;
+        Self {
+            num_columns,
+            previous_status,
+            stmt,
+        }
+    }
 }
 
 impl<'s> Iterator for SQLiteResultIterator<'s> {
