@@ -651,6 +651,21 @@ impl<'s> Returner for Cursor<'s> {
     }
 }
 
+impl<'s> RedisReply for Cursor<'s> {
+    fn reply(&mut self, ctx: &Context) -> i32 {
+        match self {
+            Cursor::OKCursor {} => reply_with_ok(ctx.as_ptr()),
+            Cursor::DONECursor { modified_rows } => {
+                reply_with_done(ctx.as_ptr(), *modified_rows)
+            }
+            Cursor::RowsCursor { stmt, .. } => reply_with_array(
+                ctx,
+                SQLiteResultIterator::from_stmt(stmt),
+            ),
+        }
+    }
+}
+
 impl RedisReply for QueryResult {
     fn reply(&mut self, ctx: &rm::Context) -> i32 {
         match self {
