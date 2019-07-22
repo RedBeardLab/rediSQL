@@ -625,6 +625,32 @@ impl Returner for RediSQLError {
     }
 }
 
+impl<'s> Returner for Cursor<'s> {
+    fn create_data_to_return(
+        self,
+        ctx: &Context,
+        return_method: &ReturnMethod,
+    ) -> Box<Box<dyn RedisReply>> {
+        match self {
+            Cursor::RowsCursor { stmt, .. } => match return_method {
+                ReturnMethod::Stream { name: stream_name } => {
+                    match stream_query_result_array(
+                        ctx,
+                        stream_name,
+                        &vec!["aa".to_string()],
+                        SQLiteResultIterator::from_stmt(stmt),
+                    ) {
+                        Ok(res) => Box::new(Box::new(res)),
+                        Err(e) => Box::new(Box::new(e)),
+                    }
+                }
+                _ => Box::new(Box::new(self)),
+            },
+            _ => Box::new(Box::new(self)),
+        }
+    }
+}
+
 impl RedisReply for QueryResult {
     fn reply(&mut self, ctx: &rm::Context) -> i32 {
         match self {
