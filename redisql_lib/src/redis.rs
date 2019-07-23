@@ -57,12 +57,12 @@ pub trait StatementCache<'a> {
         &self,
         identifier: &str,
         args: &[&str],
-    ) -> Result<QueryResult, RediSQLError>;
+    ) -> Result<Cursor, RediSQLError>;
     fn query_statement(
         &self,
         identifier: &str,
         args: &[&str],
-    ) -> Result<QueryResult, RediSQLError>;
+    ) -> Result<Cursor, RediSQLError>;
 }
 
 impl<'a> StatementCache<'a> for ReplicationBook {
@@ -153,7 +153,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
         &self,
         identifier: &str,
         args: &[&str],
-    ) -> Result<QueryResult, RediSQLError> {
+    ) -> Result<Cursor, RediSQLError> {
         let map = self.data.read().unwrap();
         match map.get(identifier) {
             None => {
@@ -167,7 +167,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
                 stmt.reset();
                 let stmt = bind_statement(stmt, args)?;
                 let cursor = stmt.execute()?;
-                Ok(QueryResult::from(cursor))
+                Ok(cursor)
             }
             Some(&(_, false)) => {
                 let debug = String::from("Not read only statement");
@@ -181,7 +181,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
         &self,
         identifier: &str,
         args: &[&str],
-    ) -> Result<QueryResult, RediSQLError> {
+    ) -> Result<Cursor, RediSQLError> {
         let map = self.data.read().unwrap();
         match map.get(identifier) {
             None => {
@@ -195,8 +195,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
                 stmt.reset();
                 let stmt = bind_statement(stmt, args)?;
                 let cursor = stmt.execute()?;
-                Ok(QueryResult::from(cursor))
-                //Ok(cursor_to_query_result(cursor))
+                Ok(cursor)
             }
         }
     }

@@ -643,28 +643,17 @@ pub extern "C" fn QueryStatementNowInto(
                     };
                     mem::forget(dbkey);
                     match result {
-                        Ok(mut res @ r::QueryResult::OK {}) => {
-                            Ok(res.reply(&context))
+                        Ok(mut result) => {
+                            let mut to_return = result
+                                .create_data_to_return(
+                                    &context,
+                                    &ReturnMethod::Stream {
+                                        name: args[1],
+                                    },
+                                );
+                            Ok(to_return.reply(&context))
                         }
-                        Ok(mut res @ r::QueryResult::DONE { .. }) => {
-                            Ok(res.reply(&context))
-                        }
-
-                        Ok(r::QueryResult::Array {
-                            array: rows,
-                            names,
-                        }) => {
-                            let result = stream_query_result_array(
-                                &context, args[1], &names, rows,
-                            );
-                            match result {
-                                Ok(mut result) => {
-                                    Ok(result.reply(&context))
-                                }
-                                Err(mut e) => Err(e.reply(&context)),
-                            }
-                        }
-                        Err(mut e) => Err(e.reply(&context)),
+                        Err(mut err) => Err(err.reply(&context)),
                     }
                 }
             }
