@@ -7,8 +7,7 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
-use crate::redis::{QueryResult, RedisReply};
-use crate::redis_type::Context;
+use crate::redis::QueryResult;
 
 use crate::redisql_error as err;
 
