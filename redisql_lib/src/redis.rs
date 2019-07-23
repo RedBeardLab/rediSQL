@@ -627,7 +627,7 @@ impl Returner for RediSQLError {
     }
 }
 
-impl<'s> Returner for Cursor<'static> {
+impl<'s> Returner for Cursor {
     fn create_data_to_return(
         self,
         ctx: &Context,
@@ -635,7 +635,9 @@ impl<'s> Returner for Cursor<'static> {
     ) -> Box<Box<dyn RedisReply>> {
         match self {
             Cursor::RowsCursor {
-                stmt, num_columns, ..
+                ref stmt,
+                num_columns,
+                ..
             } => match return_method {
                 ReturnMethod::Stream { name: stream_name } => {
                     let mut names =
@@ -671,7 +673,7 @@ impl<'s> Returner for Cursor<'static> {
     }
 }
 
-impl<'s> RedisReply for Cursor<'s> {
+impl<'s> RedisReply for Cursor {
     fn reply(&mut self, ctx: &Context) -> i32 {
         match self {
             Cursor::OKCursor {} => reply_with_ok(ctx.as_ptr()),
@@ -709,7 +711,7 @@ pub fn do_execute(
     debug!("do_execute | created statement");
     let cursor = stmt.execute()?;
     debug!("do_execute | statement executed");
-    Ok(QueryResult::from(cursor))
+    Ok(cursor)
 }
 
 pub fn do_query(
@@ -718,8 +720,7 @@ pub fn do_query(
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
     if stmt.is_read_only() {
-        let cursor = stmt.execute()?;
-        Ok(QueryResult::from(cursor))
+        Ok(stmt.execute()?)
     } else {
         let debug = String::from("Not read only statement");
         let description = String::from("Statement is not read only but it may modify the database, use `EXEC_STATEMENT` instead.",);
@@ -1000,7 +1001,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             }) => {
                 debug!("Query | Query = {:?}", query);
                 loopdata.with_contex_set(
-                    Context::thread_safe(&client),
+                    Context::no_client(),
                     |_| {
                         let result =
                             do_query(&loopdata.get_db(), query);
@@ -1083,7 +1084,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     identifier, arguments
                 );
                 loopdata.with_contex_set(
-                    Context::thread_safe(&client),
+                    Context::no_client(),
                     |_| {
                         let result = loopdata
                             .get_replication_book()
@@ -1107,7 +1108,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 client,
             }) => {
                 loopdata.with_contex_set(
-                    Context::thread_safe(&client),
+                    Context::no_client(),
                     |_| {
                         let result = loopdata
                             .get_replication_book()
@@ -1138,7 +1139,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 client,
             }) => {
                 loopdata.with_contex_set(
-                    Context::thread_safe(&client),
+                    Context::no_client(),
                     |_| {
                         debug!("MakeCopy | Doing do_copy");
                         let destination_loopdata =

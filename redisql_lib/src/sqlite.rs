@@ -243,7 +243,7 @@ impl Entity {
 
 pub type Row = Vec<Entity>;
 
-pub enum Cursor<'a> {
+pub enum Cursor {
     OKCursor,
     DONECursor {
         modified_rows: i32,
@@ -251,19 +251,19 @@ pub enum Cursor<'a> {
     RowsCursor {
         num_columns: i32,
         previous_status: i32,
-        stmt: &'a Statement,
+        stmt: Statement,
         modified_rows: i32,
     },
     /* ADD empty cursor, it will be the easiest (and maybe
      * cleaner?) way to manage empty return statements */
 }
 
-impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
-    fn from_iter<I: IntoIterator<Item = Cursor<'a>>>(
+impl<'a> FromIterator<Cursor> for Cursor {
+    fn from_iter<I: IntoIterator<Item = Cursor>>(
         cursors: I,
-    ) -> Cursor<'a> {
+    ) -> Cursor {
         let mut modified = 0;
-        let mut last: Option<Cursor<'a>> = None;
+        let mut last: Option<Cursor> = None;
         for cursor in cursors {
             match cursor {
                 Cursor::OKCursor {} => {
@@ -303,7 +303,7 @@ fn get_entity_type(
     }
 }
 
-impl<'a> From<Cursor<'a>> for QueryResult {
+impl<'a> From<Cursor> for QueryResult {
     fn from(mut cursor: Cursor) -> QueryResult {
         match cursor {
             Cursor::OKCursor {} => QueryResult::OK {},
@@ -312,7 +312,7 @@ impl<'a> From<Cursor<'a>> for QueryResult {
             }
 
             Cursor::RowsCursor {
-                stmt,
+                ref stmt,
                 num_columns,
                 ref mut previous_status,
                 ..

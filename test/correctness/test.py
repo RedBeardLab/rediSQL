@@ -402,6 +402,7 @@ class TestRead(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM test ORDER BY a ASC")
         self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
 
+@unittest.skip("Testing without virtual tables")
 class TestBruteHash(TestRediSQLWithExec):
   def testSimple(self):
     with DB(self, "B"):
@@ -508,6 +509,7 @@ class TestBruteHash(TestRediSQLWithExec):
       self.assertTrue([4L, "cat:4", "4"] in result)
 
 
+@unittest.skip("Testing without virtual tables")
 class TestBruteHashSyncronous(TestRediSQLWithExec):
   def testSimpleNow(self):
     with DB(self, "B"):
