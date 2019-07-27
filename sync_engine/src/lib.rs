@@ -14,8 +14,8 @@ use redisql_lib::redis as r;
 use redisql_lib::redis::{
     do_execute, do_query, get_dbkey_from_name, register_function,
     register_function_with_keys, register_write_function,
-    reply_with_error_from_key_type, stream_query_result_array,
-    LoopData, RedisReply, ReturnMethod, Returner, StatementCache,
+    reply_with_error_from_key_type, LoopData, RedisReply,
+    ReturnMethod, Returner, StatementCache,
 };
 use redisql_lib::redis_type::ffi::{
     RedisModuleIO, RedisModuleString,
@@ -643,7 +643,7 @@ pub extern "C" fn QueryStatementNowInto(
                     };
                     mem::forget(dbkey);
                     match result {
-                        Ok(mut result) => {
+                        Ok(result) => {
                             let mut to_return = result
                                 .create_data_to_return(
                                     &context,
