@@ -302,7 +302,7 @@ fn get_entity_type(
     }
 }
 
-impl<'a> From<Cursor> for QueryResult {
+impl From<Cursor> for QueryResult {
     fn from(mut cursor: Cursor) -> QueryResult {
         match cursor {
             Cursor::OKCursor {} => QueryResult::OK {},

@@ -664,7 +664,10 @@ impl<'s> Returner for Cursor {
                         Err(e) => Box::new(Box::new(e)),
                     }
                 }
-                _ => Box::new(Box::new(self)),
+                ReturnMethod::Reply => {
+                    let query_result = QueryResult::from(self);
+                    Box::new(Box::new(query_result))
+                }
             },
             _ => Box::new(Box::new(self)),
         }
