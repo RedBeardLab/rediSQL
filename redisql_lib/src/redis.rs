@@ -1597,6 +1597,10 @@ where
     f(r)
 }
 
+pub fn get_ch_from_dbkeyptr(db: *mut DBKey) -> Sender<Command> {
+    unsafe { (*db).tx.clone() }
+}
+
 pub fn get_ch_and_loopdata_from_name(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,

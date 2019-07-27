@@ -4,7 +4,8 @@ use std::sync::mpsc::channel;
 use std::thread;
 
 use redisql_lib::redis::{
-    get_dbkey_from_name, reply_with_error_from_key_type,
+    get_ch_from_dbkeyptr, get_dbkey_from_name,
+    get_dbkeyptr_from_name, reply_with_error_from_key_type,
     with_ch_and_loopdata, RedisReply,
 };
 use redisql_lib::redis_type::ReplicateVerbatim;
@@ -333,56 +334,57 @@ pub extern "C" fn Exec(
     };
 
     match argvector.len() {
-        3 => with_ch_and_loopdata(
-            context.as_ptr(),
-            argvector[1],
-            |leaky_db| match leaky_db {
-                Err(key_type) => {
+        3 => {
+            let db = match get_dbkeyptr_from_name(
+                context.as_ptr(),
+                argvector[1],
+            ) {
+                Ok(db) => db,
+                Err(e) => {
                     STATISTICS.exec_err();
-
-                    reply_with_error_from_key_type(
+                    return reply_with_error_from_key_type(
                         context.as_ptr(),
-                        key_type,
-                    )
+                        e,
+                    );
                 }
-                Ok((ch, _loopdata)) => {
-                    debug!("Exec | GotDB");
-                    let blocked_client = r::rm::BlockedClient {
-                        client: unsafe {
-                            r::rm::ffi::RedisModule_BlockClient
-                                .unwrap()(
-                                context.as_ptr(),
-                                Some(reply_exec),
-                                Some(timeout),
-                                Some(free_privdata),
-                                10000,
-                            )
-                        },
-                    };
-                    debug!("Exec | BlockedClient");
+            };
+            let ch = get_ch_from_dbkeyptr(db);
 
-                    let cmd = r::Command::Exec {
-                        query: argvector[2],
-                        client: blocked_client,
-                    };
-                    debug!("Exec | Create Command");
-                    match ch.send(cmd) {
-                        Ok(()) => {
-                            unsafe {
-                                Replicate(
-                                    &context,
-                                    "REDISQL.EXEC.NOW",
-                                    argv,
-                                    argc,
-                                );
-                            }
-                            r::rm::ffi::REDISMODULE_OK
-                        }
-                        Err(_) => r::rm::ffi::REDISMODULE_OK,
+            let blocked_client = r::rm::BlockedClient {
+                client: unsafe {
+                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
+                        context.as_ptr(),
+                        Some(reply_exec),
+                        Some(timeout),
+                        Some(free_privdata),
+                        10000,
+                    )
+                },
+            };
+
+            let cmd = r::Command::Exec {
+                query: argvector[2],
+                client: blocked_client,
+            };
+            match ch.send(cmd) {
+                Ok(()) => {
+                    unsafe {
+                        Replicate(
+                            &context,
+                            "REDISQL.EXEC.NOW",
+                            argv,
+                            argc,
+                        );
                     }
+                    STATISTICS.exec_ok();
+                    r::rm::ffi::REDISMODULE_OK
                 }
-            },
-        ),
+                Err(_) => {
+                    STATISTICS.exec_err();
+                    r::rm::ffi::REDISMODULE_OK
+                }
+            }
+        }
         n => {
             let error = CString::new(format!(
                 "Wrong number of arguments, it \
