@@ -348,10 +348,15 @@ impl TryFrom<Cursor> for QueryResult {
 
                     result.push(row);
                 }
-                Ok(QueryResult::Array {
-                    names,
-                    array: result,
-                })
+                match *previous_status {
+                     ffi::SQLITE_INTERRUPT => {
+                        Err(Self::Error::new("Query Interrupted".to_string(), "The query was interrupted, most likely because it runs out of time.".to_string()))
+                    },
+                    _ => Ok(QueryResult::Array {
+                        names,
+                        array: result,
+                    }),
+                }
             }
         }
     }
