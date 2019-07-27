@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::error;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -302,12 +303,15 @@ fn get_entity_type(
     }
 }
 
-impl From<Cursor> for QueryResult {
-    fn from(mut cursor: Cursor) -> QueryResult {
+impl TryFrom<Cursor> for QueryResult {
+    type Error = err::RediSQLError;
+    fn try_from(
+        mut cursor: Cursor,
+    ) -> Result<QueryResult, Self::Error> {
         match cursor {
-            Cursor::OKCursor {} => QueryResult::OK {},
+            Cursor::OKCursor {} => Ok(QueryResult::OK {}),
             Cursor::DONECursor { modified_rows } => {
-                QueryResult::DONE { modified_rows }
+                Ok(QueryResult::DONE { modified_rows })
             }
 
             Cursor::RowsCursor {
@@ -344,10 +348,10 @@ impl From<Cursor> for QueryResult {
 
                     result.push(row);
                 }
-                QueryResult::Array {
+                Ok(QueryResult::Array {
                     names,
                     array: result,
-                }
+                })
             }
         }
     }

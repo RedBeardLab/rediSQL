@@ -3,6 +3,7 @@ use std;
 use std::cell::RefCell;
 use std::clone::Clone;
 use std::collections::hash_map::Entry;
+use std::convert::TryFrom;
 use std::error;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -665,11 +666,20 @@ impl<'s> Returner for Cursor {
                     }
                 }
                 ReturnMethod::Reply => {
-                    let query_result = QueryResult::from(self);
+                    let query_result = QueryResult::try_from(self);
                     Box::new(Box::new(query_result))
                 }
             },
             _ => Box::new(Box::new(self)),
+        }
+    }
+}
+
+impl RedisReply for Result<QueryResult, err::RediSQLError> {
+    fn reply(&mut self, ctx: &Context) -> i32 {
+        match self {
+            Ok(ok) => ok.reply(ctx),
+            Err(e) => e.reply(ctx),
         }
     }
 }
@@ -1310,22 +1320,22 @@ fn remove_statement_metadata(
 
 fn get_statement_metadata(
     db: Arc<Mutex<sql::RawConnection>>,
-) -> Result<QueryResult, sql::SQLite3Error> {
+) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT * FROM RediSQLMetadata WHERE data_type = 'statement';";
 
     let stmt = MultiStatement::new(db, statement)?;
     let cursor = stmt.execute()?;
-    Ok(QueryResult::from(cursor))
+    QueryResult::try_from(cursor).into()
 }
 
 fn get_path_metadata(
     db: Arc<Mutex<sql::RawConnection>>,
-) -> Result<QueryResult, sql::SQLite3Error> {
+) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT value FROM RediSQLMetadata WHERE data_type = 'path' AND key = 'path';";
 
     let stmt = MultiStatement::new(db, statement)?;
     let cursor = stmt.execute()?;
-    Ok(QueryResult::from(cursor))
+    QueryResult::try_from(cursor)
 }
 
 pub fn is_redisql_database(
@@ -1344,9 +1354,10 @@ pub fn is_redisql_database(
         return false;
     };
 
-    match QueryResult::from(cursor.unwrap()) {
-        QueryResult::Array { .. } => true,
-        _ => false,
+    match QueryResult::try_from(cursor.unwrap()) {
+        Ok(QueryResult::Array { .. }) => true,
+        Ok(_) => false,
+        Err(_) => false,
     }
 }
 
