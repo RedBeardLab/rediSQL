@@ -23,7 +23,7 @@ use crate::redis_type::{
 use crate::redisql_error as err;
 use crate::redisql_error::RediSQLError;
 
-use crate::sqlite::{Cursor, StatementTrait};
+use crate::sqlite::{Cursor, SQLiteConnection, StatementTrait};
 
 use crate::community_statement::MultiStatement;
 
@@ -1228,6 +1228,7 @@ pub struct DBKey {
     pub tx: Sender<Command>,
     pub in_memory: bool,
     pub loop_data: Loop,
+    interrupt_hanlder: sql::InterruptHanlder,
 }
 
 impl DBKey {
@@ -1238,10 +1239,22 @@ impl DBKey {
         redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
     ) -> DBKey {
         let loop_data = Loop::new_from_arc(db, redis_context);
+        let sqlite_ref = loop_data.get_db();
+        let sqlite_db = sqlite_ref.lock().unwrap();
         DBKey {
             tx,
             in_memory,
             loop_data,
+            interrupt_hanlder: sql::InterruptHanlder::new(
+                sqlite_db.get_db(),
+            ),
+        }
+    }
+    pub fn get_timeout(&self) -> impl FnOnce() {
+        let ptr = self.interrupt_hanlder.ptr;
+        move || {
+            let ptr = ptr.clone();
+            unsafe { sql::ffi::sqlite3_interrupt(ptr) }
         }
     }
 }
