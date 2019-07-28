@@ -214,6 +214,47 @@ impl<'a> XADDCommand<'a> {
     }
 }
 
+pub struct RedisTransaction {}
+
+enum TransactionTypes {
+    Multi,
+    Exec,
+    Discard,
+}
+
+impl<'c> RedisTransaction {
+    pub fn MULTI(ctx: &'c Context) -> CallReply {
+        RedisTransaction::internal(ctx, TransactionTypes::Multi)
+    }
+    pub fn EXEC(ctx: &'c Context) -> CallReply {
+        RedisTransaction::internal(ctx, TransactionTypes::Exec)
+    }
+    pub fn DISCARD(ctx: &'c Context) -> CallReply {
+        RedisTransaction::internal(ctx, TransactionTypes::Discard)
+    }
+
+    fn internal(
+        ctx: &'c Context,
+        ttype: TransactionTypes,
+    ) -> CallReply {
+        let command = match ttype {
+            TransactionTypes::Multi => "MULTI",
+            TransactionTypes::Exec => "EXEC",
+            TransactionTypes::Discard => "DISCARD",
+        };
+        let command = CString::new(command).unwrap();
+        let call_specifiers = CString::new("!").unwrap();
+        let reply = unsafe {
+            ffi::RedisModule_Call.unwrap()(
+                ctx.as_ptr(),
+                command.as_ptr(),
+                call_specifiers.as_ptr(),
+            )
+        };
+        unsafe { CallReply::new(reply) }
+    }
+}
+
 #[allow(non_snake_case)]
 pub fn CreateCommand(
     ctx: &Context,
