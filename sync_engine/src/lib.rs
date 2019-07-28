@@ -182,17 +182,22 @@ pub extern "C" fn ExecNow(
                             dbkey.loop_data.set_rc(context);
                         let result = do_execute(&db, args[2]);
                         let context = redis_context.release();
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
                         let result = match result {
                             Ok(r) => {
                                 ReplicateVerbatim(&context);
+
                                 r.create_data_to_return(
                                     &context,
                                     &ReturnMethod::Reply,
+                                    t,
                                 )
                             }
                             Err(r) => r.create_data_to_return(
                                 &context,
                                 &ReturnMethod::Reply,
+                                t,
                             ),
                         };
 
@@ -242,14 +247,18 @@ pub extern "C" fn QueryNow(
                             dbkey.loop_data.set_rc(context);
                         let result = do_query(&db, args[2]);
                         let context = redis_context.release();
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
                         let result = match result {
                             Ok(r) => r.create_data_to_return(
                                 &context,
                                 &ReturnMethod::Reply,
+                                t,
                             ),
                             Err(r) => r.create_data_to_return(
                                 &context,
                                 &ReturnMethod::Reply,
+                                t,
                             ),
                         };
 
@@ -301,14 +310,18 @@ pub extern "C" fn QueryNowInto(
                         let context = redis_context.release();
                         let return_method =
                             ReturnMethod::Stream { name: args[1] };
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
                         let result = match result {
                             Ok(r) => r.create_data_to_return(
                                 &context,
                                 &return_method,
+                                t,
                             ),
                             Err(r) => r.create_data_to_return(
                                 &context,
                                 &return_method,
+                                t,
                             ),
                         };
                         (result, context)
@@ -642,6 +655,8 @@ pub extern "C" fn QueryStatementNowInto(
                         (result, context)
                     };
                     mem::forget(dbkey);
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
                     match result {
                         Ok(result) => {
                             let mut to_return = result
@@ -650,6 +665,7 @@ pub extern "C" fn QueryStatementNowInto(
                                     &ReturnMethod::Stream {
                                         name: args[1],
                                     },
+                                    t,
                                 );
                             Ok(to_return.reply(&context))
                         }
@@ -721,6 +737,8 @@ pub extern "C" fn MakeCopyNow(
             let mut result = {
                 let dest_loopdata = &dest_db.loop_data;
                 let source_loopdata = &source_db.loop_data;
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
                 match r::do_copy(
                     &source_loopdata.get_db(),
                     dest_loopdata,
@@ -730,11 +748,13 @@ pub extern "C" fn MakeCopyNow(
                         r.create_data_to_return(
                             &context,
                             &ReturnMethod::Reply,
+                            t,
                         )
                     }
                     Err(r) => r.create_data_to_return(
                         &context,
                         &ReturnMethod::Reply,
+                        t,
                     ),
                 }
             };

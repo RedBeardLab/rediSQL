@@ -487,6 +487,7 @@ pub enum Command {
     Stop,
     Exec {
         query: &'static str,
+        timeout: std::time::Instant,
         client: BlockedClient,
     },
     Query {
@@ -582,6 +583,7 @@ pub trait Returner {
         self,
         ctx: &Context,
         return_method: &ReturnMethod,
+        timeout: std::time::Instant,
     ) -> Box<Box<dyn RedisReply>>;
 }
 
@@ -590,6 +592,7 @@ impl Returner for QueryResult {
         self,
         ctx: &Context,
         return_method: &ReturnMethod,
+        timeout: std::time::Instant,
     ) -> Box<Box<dyn RedisReply>> {
         match return_method {
             ReturnMethod::Stream { name: stream_name } => {
@@ -621,6 +624,7 @@ impl Returner for RediSQLError {
         self,
         _ctx: &Context,
         _return_method: &ReturnMethod,
+        timeout: std::time::Instant,
     ) -> Box<Box<dyn RedisReply>> {
         Box::new(Box::new(self))
     }
@@ -631,6 +635,7 @@ impl<'s> Returner for Cursor {
         self,
         ctx: &Context,
         return_method: &ReturnMethod,
+        timeout: std::time::Instant,
     ) -> Box<Box<dyn RedisReply>> {
         match self {
             Cursor::RowsCursor {
@@ -843,11 +848,16 @@ fn return_value(
     client: &BlockedClient,
     return_method: &ReturnMethod,
     result: Result<impl Returner, err::RediSQLError>,
+    timeout: std::time::Instant,
 ) {
     let ctx = Context::thread_safe(client);
     let result = match result {
-        Ok(res) => res.create_data_to_return(&ctx, return_method),
-        Err(e) => e.create_data_to_return(&ctx, return_method),
+        Ok(res) => {
+            res.create_data_to_return(&ctx, return_method, timeout)
+        }
+        Err(e) => {
+            e.create_data_to_return(&ctx, return_method, timeout)
+        }
     };
     unsafe {
         rm::ffi::RedisModule_UnblockClient.unwrap()(
@@ -985,7 +995,11 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
     loop {
         debug!("Loop iteration");
         match rx.recv() {
-            Ok(Command::Exec { query, client }) => {
+            Ok(Command::Exec {
+                query,
+                client,
+                timeout,
+            }) => {
                 debug!("Exec | Query = {:?}", query);
                 loopdata.with_contex_set(
                     Context::no_client(),
@@ -1000,6 +1014,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                             &client,
                             &ReturnMethod::Reply,
                             result,
+                            timeout,
                         );
                     },
                 );
@@ -1016,6 +1031,9 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     |_| {
                         let result =
                             do_query(&loopdata.get_db(), query);
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
+
                         match (&return_method, &result) {
                             (ReturnMethod::Reply, Ok(_)) => {
                                 STATISTICS.query_ok()
@@ -1030,7 +1048,12 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                                 STATISTICS.query_into_err()
                             }
                         };
-                        return_value(&client, &return_method, result);
+                        return_value(
+                            &client,
+                            &return_method,
+                            result,
+                            t,
+                        );
                     },
                 );
             }
@@ -1050,7 +1073,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     Ok(_) => STATISTICS.update_statement_ok(),
                     Err(_) => STATISTICS.update_statement_err(),
                 };
-                return_value(&client, &ReturnMethod::Reply, result)
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
+
+                return_value(&client, &ReturnMethod::Reply, result, t)
             }
             Ok(Command::DeleteStatement { identifier, client }) => {
                 debug!(
@@ -1064,7 +1090,15 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     Ok(_) => STATISTICS.delete_statement_ok(),
                     Err(_) => STATISTICS.delete_statement_err(),
                 }
-                return_value(&client, &ReturnMethod::Reply, result);
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
+
+                return_value(
+                    &client,
+                    &ReturnMethod::Reply,
+                    result,
+                    t,
+                );
             }
             Ok(Command::CompileStatement {
                 identifier,
@@ -1082,7 +1116,15 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     Ok(_) => STATISTICS.create_statement_ok(),
                     Err(_) => STATISTICS.create_statement_err(),
                 }
-                return_value(&client, &ReturnMethod::Reply, result);
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
+
+                return_value(
+                    &client,
+                    &ReturnMethod::Reply,
+                    result,
+                    t,
+                );
             }
 
             Ok(Command::ExecStatement {
@@ -1104,10 +1146,14 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                             Ok(_) => STATISTICS.exec_statement_ok(),
                             Err(_) => STATISTICS.exec_statement_err(),
                         }
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
+
                         return_value(
                             &client,
                             &ReturnMethod::Reply,
                             result,
+                            t,
                         );
                     },
                 );
@@ -1141,7 +1187,15 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                                 STATISTICS.query_statement_into_err()
                             }
                         };
-                        return_value(&client, &return_method, result);
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
+
+                        return_value(
+                            &client,
+                            &return_method,
+                            result,
+                            t,
+                        );
                     },
                 );
             }
@@ -1163,10 +1217,14 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                             Ok(_) => STATISTICS.copy_ok(),
                             Err(_) => STATISTICS.copy_err(),
                         };
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
+
                         return_value(
                             &client,
                             &ReturnMethod::Reply,
                             result,
+                            t,
                         );
                     },
                 );

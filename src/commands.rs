@@ -350,6 +350,9 @@ pub extern "C" fn Exec(
             };
             let ch = get_ch_from_dbkeyptr(db);
 
+            let t = std::time::Instant::now()
+                + std::time::Duration::from_secs(10);
+
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -365,7 +368,9 @@ pub extern "C" fn Exec(
             let cmd = r::Command::Exec {
                 query: argvector[2],
                 client: blocked_client,
+                timeout: t,
             };
+
             match ch.send(cmd) {
                 Ok(()) => {
                     unsafe {
