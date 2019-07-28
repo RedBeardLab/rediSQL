@@ -223,20 +223,23 @@ enum TransactionTypes {
 }
 
 impl<'c> RedisTransaction {
-    pub fn MULTI(ctx: &'c Context) -> CallReply {
+    #[allow(non_snake_case)]
+    pub fn MULTI(ctx: &'c Context) -> Result<CallReply, CallReply> {
         RedisTransaction::internal(ctx, TransactionTypes::Multi)
     }
-    pub fn EXEC(ctx: &'c Context) -> CallReply {
+    #[allow(non_snake_case)]
+    pub fn EXEC(ctx: &'c Context) -> Result<CallReply, CallReply> {
         RedisTransaction::internal(ctx, TransactionTypes::Exec)
     }
-    pub fn DISCARD(ctx: &'c Context) -> CallReply {
+    #[allow(non_snake_case)]
+    pub fn DISCARD(ctx: &'c Context) -> Result<CallReply, CallReply> {
         RedisTransaction::internal(ctx, TransactionTypes::Discard)
     }
 
     fn internal(
         ctx: &'c Context,
         ttype: TransactionTypes,
-    ) -> CallReply {
+    ) -> Result<CallReply, CallReply> {
         let command = match ttype {
             TransactionTypes::Multi => "MULTI",
             TransactionTypes::Exec => "EXEC",
@@ -251,7 +254,11 @@ impl<'c> RedisTransaction {
                 call_specifiers.as_ptr(),
             )
         };
-        unsafe { CallReply::new(reply) }
+        let result = unsafe { CallReply::new(reply) };
+        match result {
+            CallReply::RError { .. } => Err(result),
+            _ => Ok(result),
+        }
     }
 }
 
