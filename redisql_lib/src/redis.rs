@@ -606,6 +606,7 @@ impl Returner for QueryResult {
                             stream_name,
                             &columns_names,
                             array.into_iter(),
+                            timeout,
                         ) {
                             Ok(res) => Box::new(Box::new(res)),
                             Err(e) => Box::new(Box::new(e)),
@@ -665,6 +666,7 @@ impl<'s> Returner for Cursor {
                         stream_name,
                         &names,
                         SQLiteResultIterator::from_stmt(stmt),
+                        timeout,
                     ) {
                         Ok(res) => Box::new(Box::new(res)),
                         Err(e) => Box::new(Box::new(e)),
@@ -872,6 +874,7 @@ pub fn stream_query_result_array<A>(
     stream_name: &str,
     columns_names: &[String],
     array: A,
+    timeout: std::time::Instant,
 ) -> Result<QueryResult, err::RediSQLError>
 where
     A: IntoIterator<Item = sql::Row>,
@@ -885,8 +888,21 @@ where
     let mut first_stream_index = None;
     let mut second_stream_index = None;
 
+    let mut now = std::time::Instant::now();
+
+    if now > timeout {
+        return Err(err::RediSQLError::timeout());
+    }
+
     let mut lock = context.lock();
     for row in array {
+        now = std::time::Instant::now();
+
+        if now > timeout {
+            context.release(lock);
+            return Err(err::RediSQLError::timeout());
+        }
+
         if i % 256 == 255 {
             // avoid that a big results lock the context for too long, should help in
             // keeping the latency low.
