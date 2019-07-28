@@ -435,48 +435,48 @@ pub extern "C" fn Query(
     };
 
     match argvector.len() {
-        3 => with_ch_and_loopdata(
-            context.as_ptr(),
-            argvector[1],
-            |ch_loopdata| match ch_loopdata {
-                Err(key_type) => {
-                    STATISTICS.query_err();
-
-                    reply_with_error_from_key_type(
+        3 => {
+            let db = match get_dbkeyptr_from_name(
+                context.as_ptr(),
+                argvector[1],
+            ) {
+                Ok(db) => db,
+                Err(e) => {
+                    STATISTICS.exec_err();
+                    return reply_with_error_from_key_type(
                         context.as_ptr(),
-                        key_type,
+                        e,
+                    );
+                }
+            };
+            let ch = get_ch_from_dbkeyptr(db);
+
+            let blocked_client = r::rm::BlockedClient {
+                client: unsafe {
+                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
+                        context.as_ptr(),
+                        Some(reply_exec),
+                        Some(timeout),
+                        Some(free_privdata),
+                        10000,
                     )
-                }
-                Ok((ch, _loopdata)) => {
-                    let blocked_client = r::rm::BlockedClient {
-                        client: unsafe {
-                            r::rm::ffi::RedisModule_BlockClient
-                                .unwrap()(
-                                context.as_ptr(),
-                                Some(reply_exec),
-                                Some(timeout),
-                                Some(free_privdata),
-                                10000,
-                            )
-                        },
-                    };
+                },
+            };
 
-                    let t = std::time::Instant::now()
-                        + std::time::Duration::from_secs(10);
+            let t = std::time::Instant::now()
+                + std::time::Duration::from_secs(10);
 
-                    let cmd = r::Command::Query {
-                        query: argvector[2],
-                        return_method: r::ReturnMethod::Reply,
-                        client: blocked_client,
-                        timeout: t,
-                    };
-                    match ch.send(cmd) {
-                        Ok(()) => r::rm::ffi::REDISMODULE_OK,
-                        Err(_) => r::rm::ffi::REDISMODULE_OK,
-                    }
-                }
-            },
-        ),
+            let cmd = r::Command::Query {
+                query: argvector[2],
+                return_method: r::ReturnMethod::Reply,
+                client: blocked_client,
+                timeout: t,
+            };
+            match ch.send(cmd) {
+                Ok(()) => r::rm::ffi::REDISMODULE_OK,
+                Err(_) => r::rm::ffi::REDISMODULE_OK,
+            }
+        }
         n => {
             let error = CString::new(format!(
                 "Wrong number of arguments, it \
