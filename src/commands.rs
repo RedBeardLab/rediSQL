@@ -21,39 +21,7 @@ use redisql_lib::statistics::STATISTICS;
 const REDISQL_VERSION: Option<&'static str> =
     option_env!("CARGO_PKG_VERSION");
 
-extern "C" fn reply_exec(
-    ctx: *mut r::rm::ffi::RedisModuleCtx,
-    _argv: *mut *mut r::rm::ffi::RedisModuleString,
-    _argc: ::std::os::raw::c_int,
-) -> i32 {
-    let context = r::rm::Context::new(ctx);
-    let result = unsafe {
-        r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
-            context.as_ptr(),
-        ) as *mut *mut RedisReply
-    };
-    let mut result: Box<r::RedisReply> =
-        unsafe { Box::from_raw(*result) };
-    result.reply(&context)
-}
-
-extern "C" fn reply_exec_statement(
-    ctx: *mut r::rm::ffi::RedisModuleCtx,
-    _argv: *mut *mut r::rm::ffi::RedisModuleString,
-    _argc: ::std::os::raw::c_int,
-) -> i32 {
-    let context = r::rm::Context::new(ctx);
-    let result = unsafe {
-        r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
-            context.as_ptr(),
-        ) as *mut *mut RedisReply
-    };
-    let mut result: Box<r::RedisReply> =
-        unsafe { Box::from_raw(*result) };
-    result.reply(&context)
-}
-
-extern "C" fn reply_create_statement(
+extern "C" fn reply(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
     _argv: *mut *mut r::rm::ffi::RedisModuleString,
     _argc: ::std::os::raw::c_int,
@@ -132,7 +100,7 @@ pub extern "C" fn ExecStatement(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_exec_statement),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -218,7 +186,7 @@ pub extern "C" fn QueryStatement(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_exec),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -298,7 +266,7 @@ pub extern "C" fn QueryStatementInto(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_exec),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -364,7 +332,7 @@ pub extern "C" fn Exec(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_exec),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -455,7 +423,7 @@ pub extern "C" fn Query(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_exec),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -534,7 +502,7 @@ pub extern "C" fn QueryInto(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_exec),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -614,7 +582,7 @@ pub extern "C" fn CreateStatement(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_exec),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -698,7 +666,7 @@ pub extern "C" fn UpdateStatement(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_exec),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -783,7 +751,7 @@ pub extern "C" fn DeleteStatement(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_create_statement),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
@@ -1046,7 +1014,7 @@ pub extern "C" fn MakeCopy(
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
                         context.as_ptr(),
-                        Some(reply_create_statement),
+                        Some(reply),
                         Some(timeout),
                         Some(free_privdata),
                         10000,
