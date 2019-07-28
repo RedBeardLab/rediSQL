@@ -13,14 +13,17 @@ pub struct RediSQLError {
 }
 
 impl RediSQLError {
-    pub fn new(
-        debug: String,
-        error_description: String,
-    ) -> RediSQLError {
+    pub fn new(debug: String, error_description: String) -> Self {
         RediSQLError {
             debug,
             error_description,
         }
+    }
+    pub fn timeout() -> Self {
+        RediSQLError::new(
+            "Timeout expired.".to_string(),
+            "It was impossible to return the whole result before the timeout expired.".to_string(),
+            )
     }
 }
 
