@@ -137,10 +137,14 @@ pub extern "C" fn ExecStatement(
                         },
                     };
 
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
+
                     let cmd = r::Command::ExecStatement {
                         identifier: argvector[2],
                         arguments: argvector[3..].to_vec(),
                         client: blocked_client,
+                        timeout: t,
                     };
                     match ch.send(cmd) {
                         Ok(()) => {
@@ -218,12 +222,15 @@ pub extern "C" fn QueryStatement(
                             )
                         },
                     };
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
 
                     let cmd = r::Command::QueryStatement {
                         identifier: argvector[2],
                         arguments: argvector[3..].to_vec(),
                         return_method: r::ReturnMethod::Reply,
                         client: blocked_client,
+                        timeout: t,
                     };
 
                     match ch.send(cmd) {
@@ -296,6 +303,8 @@ pub extern "C" fn QueryStatementInto(
                                 )
                             },
                         };
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
 
                         let cmd = r::Command::QueryStatement {
                             identifier: argvector[3],
@@ -304,6 +313,7 @@ pub extern "C" fn QueryStatementInto(
                                 name: stream_name,
                             },
                             client: blocked_client,
+                            timeout: t,
                         };
 
                         match ch.send(cmd) {
@@ -350,9 +360,6 @@ pub extern "C" fn Exec(
             };
             let ch = get_ch_from_dbkeyptr(db);
 
-            let t = std::time::Instant::now()
-                + std::time::Duration::from_secs(10);
-
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
                     r::rm::ffi::RedisModule_BlockClient.unwrap()(
@@ -364,6 +371,9 @@ pub extern "C" fn Exec(
                     )
                 },
             };
+
+            let t = std::time::Instant::now()
+                + std::time::Duration::from_secs(10);
 
             let cmd = r::Command::Exec {
                 query: argvector[2],
@@ -451,10 +461,14 @@ pub extern "C" fn Query(
                         },
                     };
 
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
+
                     let cmd = r::Command::Query {
                         query: argvector[2],
                         return_method: r::ReturnMethod::Reply,
                         client: blocked_client,
+                        timeout: t,
                     };
                     match ch.send(cmd) {
                         Ok(()) => r::rm::ffi::REDISMODULE_OK,
@@ -527,12 +541,16 @@ pub extern "C" fn QueryInto(
                             },
                         };
 
+                        let t = std::time::Instant::now()
+                            + std::time::Duration::from_secs(10);
+
                         let cmd = r::Command::Query {
                             query: argvector[3],
                             return_method: r::ReturnMethod::Stream {
                                 name: stream_name,
                             },
                             client: blocked_client,
+                            timeout: t,
                         };
                         match ch.send(cmd) {
                             Ok(()) => r::rm::ffi::REDISMODULE_OK,
