@@ -763,52 +763,53 @@ pub extern "C" fn DeleteStatement(
     };
 
     match argvector.len() {
-        3 => with_ch_and_loopdata(
-            context.as_ptr(),
-            argvector[1],
-            |ch_loopdata| {
-                match ch_loopdata {
-                    Err(key_type) => {
-                        STATISTICS.delete_statement_err();
-
-                        reply_with_error_from_key_type(
-                            context.as_ptr(),
-                            key_type,
-                        )
-                    }
-                    Ok((ch, _loopdata)) => {
-                        //let ch = &db.tx;
-                        //let _loopdata = &db.loop_data;
-                        let blocked_client = r::rm::BlockedClient {
-                            client: unsafe {
-                                r::rm::ffi::RedisModule_BlockClient
-                                    .unwrap()(
-                                    context.as_ptr(),
-                                    Some(reply_create_statement),
-                                    Some(timeout),
-                                    Some(free_privdata),
-                                    10000,
-                                )
-                            },
-                        };
-
-                        let cmd = r::Command::DeleteStatement {
-                            identifier: argvector[2],
-                            client: blocked_client,
-                        };
-                        match ch.send(cmd) {
-                            Ok(()) => {
-                                unsafe {
-                                    Replicate(&context, "REDISQL.DELETE_STATEMENT.NOW", argv, argc);
-                                }
-                                r::rm::ffi::REDISMODULE_OK
-                            }
-                            Err(_) => r::rm::ffi::REDISMODULE_OK,
-                        }
-                    }
+        3 => {
+            let db = match get_dbkeyptr_from_name(
+                context.as_ptr(),
+                argvector[1],
+            ) {
+                Ok(db) => db,
+                Err(e) => {
+                    STATISTICS.exec_err();
+                    return reply_with_error_from_key_type(
+                        context.as_ptr(),
+                        e,
+                    );
                 }
-            },
-        ),
+            };
+            let ch = get_ch_from_dbkeyptr(db);
+
+            let blocked_client = r::rm::BlockedClient {
+                client: unsafe {
+                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
+                        context.as_ptr(),
+                        Some(reply_create_statement),
+                        Some(timeout),
+                        Some(free_privdata),
+                        10000,
+                    )
+                },
+            };
+
+            let cmd = r::Command::DeleteStatement {
+                identifier: argvector[2],
+                client: blocked_client,
+            };
+            match ch.send(cmd) {
+                Ok(()) => {
+                    unsafe {
+                        Replicate(
+                            &context,
+                            "REDISQL.DELETE_STATEMENT.NOW",
+                            argv,
+                            argc,
+                        );
+                    }
+                    r::rm::ffi::REDISMODULE_OK
+                }
+                Err(_) => r::rm::ffi::REDISMODULE_OK,
+            }
+        }
         _ => {
             let error = CString::new(
                 "Wrong number of arguments, it \
