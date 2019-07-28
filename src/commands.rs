@@ -9,7 +9,7 @@ use redisql_lib::redis::{
     with_ch_and_loopdata, RedisReply,
 };
 use redisql_lib::redis_type::ReplicateVerbatim;
-use redisql_lib::sqlite::get_arc_connection;
+use redisql_lib::sqlite::{get_arc_connection, QueryResult};
 use redisql_lib::virtual_tables as vtab;
 
 use redisql_lib::redis as r;
@@ -884,7 +884,7 @@ pub extern "C" fn CreateDB(
                                     match type_set {
                                     r::rm::ffi::REDISMODULE_OK => {
                                         let mut ok =
-                                            r::QueryResult::OK {};
+                                            QueryResult::OK {};
                                         STATISTICS.create_db_ok();
                                         ReplicateVerbatim(&context);
                                         ok.reply(&context)

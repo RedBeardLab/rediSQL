@@ -8,8 +8,6 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 
-use crate::redis::QueryResult;
-
 use crate::redisql_error as err;
 
 use crate::community_statement::Statement;
@@ -313,6 +311,78 @@ fn get_entity_type(
         ffi::SQLITE_BLOB => EntityType::Blob,
         ffi::SQLITE_NULL => EntityType::Null,
         _ => EntityType::Null,
+    }
+}
+
+pub enum QueryResult {
+    OK {},
+    DONE { modified_rows: i32 },
+    Array { names: Vec<String>, array: Vec<Row> },
+}
+
+impl QueryResult {
+    pub fn from_cursor_before(
+        mut cursor: Cursor,
+        timeout: std::time::Instant,
+    ) -> Result<Self, err::RediSQLError> {
+        match cursor {
+            Cursor::OKCursor {} => Ok(QueryResult::OK {}),
+            Cursor::DONECursor { modified_rows } => {
+                Ok(QueryResult::DONE { modified_rows })
+            }
+            Cursor::RowsCursor {
+                ref stmt,
+                num_columns,
+                ref mut previous_status,
+                ..
+            } => {
+                let mut now = std::time::Instant::now();
+                if now > timeout {
+                    return Err(err::RediSQLError::timeout());
+                }
+                let mut result = vec![];
+                let mut names =
+                    Vec::with_capacity(num_columns as usize);
+                for i in 0..num_columns {
+                    let name = unsafe {
+                        CStr::from_ptr(ffi::sqlite3_column_name(
+                            stmt.as_ptr(),
+                            i,
+                        ))
+                        .to_string_lossy()
+                        .into_owned()
+                    };
+                    names.push(name);
+                }
+                while *previous_status == ffi::SQLITE_ROW {
+                    now = std::time::Instant::now();
+                    if now > timeout {
+                        return Err(err::RediSQLError::timeout());
+                    }
+                    let mut row =
+                        Vec::with_capacity(num_columns as usize);
+                    for i in 0..num_columns {
+                        let entity_value = Entity::new(stmt, i);
+                        row.push(entity_value);
+                    }
+                    unsafe {
+                        *previous_status =
+                            ffi::sqlite3_step(stmt.as_ptr());
+                    };
+
+                    result.push(row);
+                }
+                match *previous_status {
+                     ffi::SQLITE_INTERRUPT => {
+                        Err(err::RediSQLError::new("Query Interrupted".to_string(), "The query was interrupted, most likely because it runs out of time.".to_string()))
+                    },
+                    _ => Ok(QueryResult::Array {
+                        names,
+                        array: result,
+                    }),
+                }
+            }
+        }
     }
 }
 

@@ -23,7 +23,9 @@ use crate::redis_type::{
 use crate::redisql_error as err;
 use crate::redisql_error::RediSQLError;
 
-use crate::sqlite::{Cursor, SQLiteConnection, StatementTrait};
+use crate::sqlite::{
+    Cursor, QueryResult, SQLiteConnection, StatementTrait,
+};
 
 use crate::community_statement::MultiStatement;
 
@@ -567,17 +569,6 @@ impl<'s> Iterator for SQLiteResultIterator<'s> {
     }
 }
 
-pub enum QueryResult {
-    OK {},
-    DONE {
-        modified_rows: i32,
-    },
-    Array {
-        names: Vec<String>,
-        array: Vec<sql::Row>,
-    },
-}
-
 pub trait Returner {
     fn create_data_to_return(
         self,
@@ -673,7 +664,10 @@ impl<'s> Returner for Cursor {
                     }
                 }
                 ReturnMethod::Reply => {
-                    let query_result = QueryResult::try_from(self);
+                    let query_result =
+                        QueryResult::from_cursor_before(
+                            self, timeout,
+                        );
                     Box::new(Box::new(query_result))
                 }
             },
