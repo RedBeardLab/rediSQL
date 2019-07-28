@@ -595,48 +595,53 @@ pub extern "C" fn CreateStatement(
 
     match argvector.len() {
         4 => {
-            with_ch_and_loopdata(
+            let db = match get_dbkeyptr_from_name(
                 context.as_ptr(),
                 argvector[1],
-                |ch_loopdata| match ch_loopdata {
-                    Err(key_type) => {
-                        STATISTICS.create_statement_err();
+            ) {
+                Ok(db) => db,
+                Err(e) => {
+                    STATISTICS.exec_err();
+                    return reply_with_error_from_key_type(
+                        context.as_ptr(),
+                        e,
+                    );
+                }
+            };
+            let ch = get_ch_from_dbkeyptr(db);
 
-                        reply_with_error_from_key_type(
-                            context.as_ptr(),
-                            key_type,
-                        )
-                    }
-                    Ok((ch, _loopdata)) => {
-                        let blocked_client = r::rm::BlockedClient {
-                            client: unsafe {
-                                r::rm::ffi::RedisModule_BlockClient
-                                    .unwrap()(
-                                    context.as_ptr(),
-                                    Some(reply_create_statement),
-                                    Some(timeout),
-                                    Some(free_privdata),
-                                    10000,
-                                )
-                            },
-                        };
-                        let cmd = r::Command::CompileStatement {
-                            identifier: argvector[2],
-                            statement: argvector[3],
-                            client: blocked_client,
-                        };
-                        match ch.send(cmd) {
-                            Ok(()) => {
-                                unsafe {
-                                    Replicate(&context, "REDISQL.CREATE_STATEMENT.NOW", argv, argc);
-                                }
-                                r::rm::ffi::REDISMODULE_OK
-                            }
-                            Err(_) => r::rm::ffi::REDISMODULE_OK,
-                        }
-                    }
+            let blocked_client = r::rm::BlockedClient {
+                client: unsafe {
+                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
+                        context.as_ptr(),
+                        Some(reply_exec),
+                        Some(timeout),
+                        Some(free_privdata),
+                        10000,
+                    )
                 },
-            )
+            };
+
+            let cmd = r::Command::CompileStatement {
+                identifier: argvector[2],
+                statement: argvector[3],
+                client: blocked_client,
+            };
+
+            match ch.send(cmd) {
+                Ok(()) => {
+                    unsafe {
+                        Replicate(
+                            &context,
+                            "REDISQL.CREATE_STATEMENT.NOW",
+                            argv,
+                            argc,
+                        );
+                    }
+                    r::rm::ffi::REDISMODULE_OK
+                }
+                Err(_) => r::rm::ffi::REDISMODULE_OK,
+            }
         }
 
         _ => {
