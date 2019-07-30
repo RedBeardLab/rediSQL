@@ -10,6 +10,11 @@ rust:
 env:
   global:
   - CRATE_NAME=rediSQL
+script:
+  - cargo build --verbose --all
+  - cargo test --verbose --all
+  - cargo build --verbose --all --release
+
 matrix:
   include:
   - env: TARGET=aarch64-unknown-linux-gnu
@@ -41,6 +46,8 @@ cache: cargo
 notifications:
   email:
     on_success: never
+before_deploy:
+  
 deploy:
   provider: releases
   api_key:
@@ -49,3 +56,4 @@ deploy:
   on:
     repo: RedBeardLab/rediSQL
     branch: timeout_honor
+    tags: true
