@@ -52,9 +52,9 @@ before_deploy:
   - env
   - ls $TRAVIS_BUILD_DIR
   - ls $TRAVIS_BUILD_DIR/target/release
-  - echo "$TRAVIS_BUILD_DIR/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:5}_$TARGET.so"
-  - cp $TRAVIS_BUILD_DIR/target/release/libredis_sql.so "$TRAVIS_BUILD_DIR/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:5}_$TARGET_release.so"
-  - cp $TRAVIS_BUILD_DIR/target/debug/libredis_sql.so "$TRAVIS_BUILD_DIR/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:5}_$TARGET_debug.so"
+  - echo "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}.so"
+  - cp --verbose $TRAVIS_BUILD_DIR/target/release/libredis_sql.so "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}_release.so"
+  - cp --verbose $TRAVIS_BUILD_DIR/target/debug/libredis_sql.so "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}_debug.so"
   - ls $TRAVIS_BUILD_DIR/target/release
   
 deploy:
