@@ -17,42 +17,16 @@ script:
 
 matrix:
   include:
-          #  - env: TARGET=aarch64-unknown-linux-gnu
-          #  - env: TARGET=arm-unknown-linux-gnueabi
-          #  - env: TARGET=armv7-unknown-linux-gnueabihf
-          #  - env: TARGET=i686-unknown-linux-gnu
-          #  - env: TARGET=i686-unknown-linux-musl
-          #  - env: TARGET=mips-unknown-linux-gnu
-          #  - env: TARGET=mips64-unknown-linux-gnuabi64
-          #  - env: TARGET=mips64el-unknown-linux-gnuabi64
-          #  - env: TARGET=mipsel-unknown-linux-gnu
-          #  - env: TARGET=powerpc-unknown-linux-gnu
-          #  - env: TARGET=powerpc64-unknown-linux-gnu
-          #  - env: TARGET=powerpc64le-unknown-linux-gnu
-          #  - env: TARGET=s390x-unknown-linux-gnu DISABLE_TESTS=1
+  - env: TARGET=arm-unknown-linux-gnueabi
+  - env: TARGET=armv7-unknown-linux-gnueabihf
   - env: TARGET=x86_64-unknown-linux-gnu
-          #  - env: TARGET=x86_64-unknown-linux-musl
-          #  - env: TARGET=i686-apple-darwin
-          #    os: osx
-          #  - env: TARGET=x86_64-apple-darwin
-          #    os: osx
-          #  - env: TARGET=i686-unknown-freebsd DISABLE_TESTS=1
-          #  - env: TARGET=x86_64-unknown-freebsd DISABLE_TESTS=1
-          #  - env: TARGET=x86_64-unknown-netbsd DISABLE_TESTS=1
-          #  - env: TARGET=x86_64-pc-windows-gnu
-          #  - env: TARGET=x86_64-unknown-linux-gnu
-          #    rust: nightly
 cache: cargo
 notifications:
   email:
     on_success: never
 before_deploy:
-  - ls
-  - pwd
-  - env
-  - ls $TRAVIS_BUILD_DIR
   - ls $TRAVIS_BUILD_DIR/target/release
-  - echo "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}.so"
+  - echo "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}_(release|debug).so"
   - cp --verbose $TRAVIS_BUILD_DIR/target/release/libredis_sql.so "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}_release.so"
   - cp --verbose $TRAVIS_BUILD_DIR/target/debug/libredis_sql.so "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}_debug.so"
   - ls $TRAVIS_BUILD_DIR/target/release
