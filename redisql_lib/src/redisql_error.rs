@@ -2,7 +2,6 @@ use std::error;
 use std::error::Error;
 use std::fmt;
 
-use crate::redis;
 use crate::sqlite as sql;
 
 pub trait RediSQLErrorTrait: fmt::Display + error::Error {}
@@ -47,15 +46,6 @@ impl error::Error for RediSQLError {
 
 impl From<sql::SQLite3Error> for RediSQLError {
     fn from(err: sql::SQLite3Error) -> RediSQLError {
-        RediSQLError {
-            debug: format!("{}", err),
-            error_description: err.description().to_owned(),
-        }
-    }
-}
-
-impl From<redis::RedisError> for RediSQLError {
-    fn from(err: redis::RedisError) -> RediSQLError {
         RediSQLError {
             debug: format!("{}", err),
             error_description: err.description().to_owned(),

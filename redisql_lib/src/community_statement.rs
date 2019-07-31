@@ -411,6 +411,7 @@ fn count_parameters(
         }
     }
 }
+
 fn get_parameter_name(
     stmt: &Statement,
     index: i32,

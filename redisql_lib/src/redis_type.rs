@@ -139,19 +139,19 @@ impl<'a> Drop for RMString<'a> {
 //array and leak the RMString.
 //It is to be used as argument to RM_Call when the format includes the `v`, an array of RMString.
 #[derive(Debug)]
-pub struct LeakyArrayOfRMString<'a> {
+struct LeakyArrayOfRMString<'a> {
     array: Vec<*mut ffi::RedisModuleString>,
     ctx: &'a Context,
 }
 
 impl<'a> LeakyArrayOfRMString<'a> {
-    pub fn new(ctx: &'a Context) -> LeakyArrayOfRMString {
+    fn new(ctx: &'a Context) -> LeakyArrayOfRMString {
         LeakyArrayOfRMString {
             array: Vec::with_capacity(24),
             ctx,
         }
     }
-    pub fn push(&mut self, s: &str) {
+    fn push(&mut self, s: &str) {
         let ptr = unsafe {
             ffi::RedisModule_CreateString.unwrap()(
                 self.ctx.as_ptr(),
@@ -161,14 +161,11 @@ impl<'a> LeakyArrayOfRMString<'a> {
         };
         self.array.push(ptr);
     }
-    pub fn as_ptr(&mut self) -> *mut *mut ffi::RedisModuleString {
+    fn as_ptr(&mut self) -> *mut *mut ffi::RedisModuleString {
         self.array.as_mut_ptr()
     }
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.array.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }
 
@@ -298,15 +295,6 @@ pub fn OpenKey(
         ffi::Export_RedisModule_OpenKey(ctx.as_ptr(), name.ptr, mode)
     }
 }
-
-/*
-#[allow(non_snake_case)]
-pub fn LoadStringBuffer(rdb: *mut rm::ffi::RedisModuleIO,
-                        dimension: &mut usize)
-                        ->  {
-    unsafe { ffi::RedisModule_LoadStringBuffer(rdb, dimension) }
-}
-*/
 
 #[allow(non_snake_case)]
 pub unsafe fn LoadSigned(rdb: *mut ffi::RedisModuleIO) -> i64 {

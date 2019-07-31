@@ -4,9 +4,7 @@ use std::cell::RefCell;
 use std::clone::Clone;
 use std::collections::hash_map::Entry;
 use std::convert::TryFrom;
-use std::error;
 use std::ffi::{CStr, CString};
-use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::os::raw::{c_char, c_long};
@@ -24,7 +22,8 @@ use crate::redisql_error as err;
 use crate::redisql_error::RediSQLError;
 
 use crate::sqlite::{
-    Cursor, QueryResult, SQLiteConnection, StatementTrait,
+    Cursor, Entity, QueryResult, RawConnection, SQLite3Error,
+    StatementTrait,
 };
 
 use crate::community_statement::MultiStatement;
@@ -36,11 +35,11 @@ use crate::statistics::STATISTICS;
 #[derive(Clone)]
 pub struct ReplicationBook {
     data: Arc<RwLock<FnvHashMap<String, (MultiStatement, bool)>>>,
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
 }
 
 pub trait StatementCache<'a> {
-    fn new(db: &Arc<Mutex<sql::RawConnection>>) -> Self;
+    fn new(db: &Arc<Mutex<RawConnection>>) -> Self;
     fn is_statement_present(&self, identifier: &str) -> bool;
     fn insert_new_statement(
         &mut self,
@@ -69,7 +68,7 @@ pub trait StatementCache<'a> {
 }
 
 impl<'a> StatementCache<'a> for ReplicationBook {
-    fn new(db: &Arc<Mutex<sql::RawConnection>>) -> Self {
+    fn new(db: &Arc<Mutex<RawConnection>>) -> Self {
         ReplicationBook {
             data: Arc::new(RwLock::new(FnvHashMap::default())),
             db: Arc::clone(db),
@@ -241,7 +240,7 @@ impl<'a> Drop for RedisContextSet<'a> {
 
 #[derive(Clone)]
 pub struct Loop {
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
     replication_book: ReplicationBook,
     redis_context: ProtectedRedisContext,
 }
@@ -256,7 +255,7 @@ unsafe impl Send for Loop {}
 
 pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
-    fn get_db(&self) -> Arc<Mutex<sql::RawConnection>>;
+    fn get_db(&self) -> Arc<Mutex<RawConnection>>;
     fn set_rc(&self, ctx: Context) -> RedisContextSet;
     fn with_contex_set<F>(&self, ctx: Context, f: F)
     where
@@ -267,7 +266,7 @@ impl LoopData for Loop {
     fn get_replication_book(&self) -> ReplicationBook {
         self.replication_book.clone()
     }
-    fn get_db(&self) -> Arc<Mutex<sql::RawConnection>> {
+    fn get_db(&self) -> Arc<Mutex<RawConnection>> {
         Arc::clone(&self.db)
     }
     fn set_rc(&self, ctx: Context) -> RedisContextSet {
@@ -295,7 +294,7 @@ impl LoopData for Loop {
 
 impl Loop {
     fn new_from_arc(
-        db: Arc<Mutex<sql::RawConnection>>,
+        db: Arc<Mutex<RawConnection>>,
         redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
     ) -> Loop {
         let replication_book = ReplicationBook::new(&db);
@@ -312,24 +311,24 @@ pub trait RedisReply {
     fn reply(&mut self, ctx: &rm::Context) -> i32;
 }
 
-impl RedisReply for sql::Entity {
+impl RedisReply for Entity {
     fn reply(&mut self, ctx: &rm::Context) -> i32 {
         match *self {
-            sql::Entity::Integer { int } => {
+            Entity::Integer { int } => {
                 rm::ReplyWithLongLong(ctx, int)
             }
-            sql::Entity::Float { float } => {
+            Entity::Float { float } => {
                 rm::ReplyWithDouble(ctx, float)
             }
-            sql::Entity::Text { ref text } => {
+            Entity::Text { ref text } => {
                 rm::ReplyWithStringBuffer(ctx, text.as_bytes())
             }
-            sql::Entity::Blob { ref blob } => {
+            Entity::Blob { ref blob } => {
                 rm::ReplyWithStringBuffer(ctx, blob.as_bytes())
             }
-            sql::Entity::Null => rm::ReplyWithNull(ctx),
-            sql::Entity::OK { .. } => QueryResult::OK {}.reply(ctx),
-            sql::Entity::DONE { modified_rows, .. } => {
+            Entity::Null => rm::ReplyWithNull(ctx),
+            Entity::OK { .. } => QueryResult::OK {}.reply(ctx),
+            Entity::DONE { modified_rows, .. } => {
                 QueryResult::DONE { modified_rows }.reply(ctx)
             }
         }
@@ -401,7 +400,7 @@ fn reply_with_array(
     rm::ffi::REDISMODULE_OK
 }
 
-impl RedisReply for sql::SQLite3Error {
+impl RedisReply for SQLite3Error {
     fn reply(&mut self, ctx: &Context) -> i32 {
         let error = format!("{}", self);
         reply_with_error(ctx.as_ptr(), error)
@@ -455,7 +454,7 @@ fn parse_args(
     Ok(args)
 }
 
-pub unsafe fn string_ptr_len(
+unsafe fn string_ptr_len(
     str: *mut rm::ffi::RedisModuleString,
 ) -> Result<&'static str, std::str::Utf8Error> {
     let mut len = 0;
@@ -553,14 +552,14 @@ impl<'s> SQLiteResultIterator<'s> {
 }
 
 impl<'s> Iterator for SQLiteResultIterator<'s> {
-    type Item = Vec<sql::Entity>;
+    type Item = Vec<Entity>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.previous_status != sql::ffi::SQLITE_ROW {
             return None;
         }
         let mut row = Vec::with_capacity(self.num_columns as usize);
         for i in 0..self.num_columns {
-            let entity_value = sql::Entity::new(self.stmt, i);
+            let entity_value = Entity::new(self.stmt, i);
             row.push(entity_value);
         }
         unsafe {
@@ -719,7 +718,7 @@ impl RedisReply for QueryResult {
 }
 
 pub fn do_execute(
-    db: &Arc<Mutex<sql::RawConnection>>,
+    db: &Arc<Mutex<RawConnection>>,
     query: &str,
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -730,7 +729,7 @@ pub fn do_execute(
 }
 
 pub fn do_query(
-    db: &Arc<Mutex<sql::RawConnection>>,
+    db: &Arc<Mutex<RawConnection>>,
     query: &str,
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -746,7 +745,7 @@ pub fn do_query(
 /// implements the copy of the source database into the destination one
 /// it also leak the two DBKeys
 pub fn do_copy<L: LoopData>(
-    source_db: &Arc<Mutex<sql::RawConnection>>,
+    source_db: &Arc<Mutex<RawConnection>>,
     destination_loopdata: &L,
 ) -> Result<impl Returner, err::RediSQLError> {
     debug!("DoCopy | Start");
@@ -782,32 +781,10 @@ pub fn do_copy<L: LoopData>(
 fn bind_statement<'a>(
     stmt: &'a MultiStatement,
     arguments: &[&str],
-) -> Result<&'a MultiStatement, sql::SQLite3Error> {
+) -> Result<&'a MultiStatement, SQLite3Error> {
     match stmt.bind_texts(arguments) {
         Err(e) => Err(e),
         Ok(_) => Ok(stmt),
-    }
-}
-
-pub struct RedisError {
-    pub msg: String,
-}
-
-impl fmt::Display for RedisError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ERR - {}", self.msg)
-    }
-}
-
-impl fmt::Debug for RedisError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-impl error::Error for RedisError {
-    fn description(&self) -> &str {
-        self.msg.as_str()
     }
 }
 
@@ -824,11 +801,11 @@ fn restore_previous_statements<'a, L: 'a + LoopData>(loopdata: &L) {
         Ok(QueryResult::Array { array, .. }) => {
             for row in array {
                 let identifier = match row[1] {
-                    sql::Entity::Text { ref text } => text,
+                    Entity::Text { ref text } => text,
                     _ => continue,
                 };
                 let statement = match row[2] {
-                    sql::Entity::Text { ref text } => text,
+                    Entity::Text { ref text } => text,
                     _ => continue,
                 };
                 if let Err(e) = compile_and_insert_statement(
@@ -877,7 +854,7 @@ where
     A: IntoIterator<Item = sql::Row>,
 {
     let mut result = Vec::with_capacity(4);
-    result.push(sql::Entity::Text {
+    result.push(Entity::Text {
         text: stream_name.to_string(),
     });
 
@@ -909,34 +886,34 @@ where
         let mut xadd = rm::XADDCommand::new(&context, stream_name);
         for (j, entity) in row.iter().enumerate() {
             match entity {
-                sql::Entity::OK {} | sql::Entity::DONE { .. } => {
+                Entity::OK {} | Entity::DONE { .. } => {
                     // do nothing
                 }
-                sql::Entity::Null => {
+                Entity::Null => {
                     xadd.add_element(
                         &format!("null:{}", &columns_names[j]),
                         "(null)",
                     );
                 }
-                sql::Entity::Integer { int } => {
+                Entity::Integer { int } => {
                     xadd.add_element(
                         &format!("int:{}", &columns_names[j]),
                         &int.to_string(),
                     );
                 }
-                sql::Entity::Float { float } => {
+                Entity::Float { float } => {
                     xadd.add_element(
                         &format!("real:{}", &columns_names[j]),
                         &float.to_string(),
                     );
                 }
-                sql::Entity::Text { text } => {
+                Entity::Text { text } => {
                     xadd.add_element(
                         &format!("text:{}", &columns_names[j]),
                         &text,
                     );
                 }
-                sql::Entity::Blob { blob } => {
+                Entity::Blob { blob } => {
                     xadd.add_element(
                         &format!("blob:{}", &columns_names[j]),
                         &blob,
@@ -949,14 +926,14 @@ where
         match xadd_result {
             rm::CallReply::RString { .. } => match i {
                 0 => {
-                    let stream_index = sql::Entity::Text {
+                    let stream_index = Entity::Text {
                         text: xadd_result.access_string().unwrap(),
                     };
                     first_stream_index = Some(stream_index.clone());
                     second_stream_index = Some(stream_index);
                 }
                 _ => {
-                    second_stream_index = Some(sql::Entity::Text {
+                    second_stream_index = Some(Entity::Text {
                         text: xadd_result.access_string().unwrap(),
                     });
                 }
@@ -986,7 +963,7 @@ where
         .push(second_stream_index.expect(
             "Not found second index when returning a stream",
         ));
-    result.push(sql::Entity::Integer { int: i });
+    result.push(Entity::Integer { int: i });
 
     Ok(QueryResult::Array {
         names: vec![
@@ -1279,15 +1256,16 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData>(
             }
         }
         Entry::Occupied(_) => {
-            let err = RedisError {
-                msg: String::from(
-                    "Statement already exists, \
-                     impossible to overwrite it with \
+            let err = RediSQLError::new(
+                "Statement already exists".to_string(),
+                String::from(
+                    "Impossible to overwrite it with \
                      this command, try with \
                      UPDATE_STATEMENT",
                 ),
-            };
-            Err(err::RediSQLError::from(err))
+            );
+
+            Err(err)
         }
     }
 }
@@ -1296,33 +1274,20 @@ pub struct DBKey {
     pub tx: Sender<Command>,
     pub in_memory: bool,
     pub loop_data: Loop,
-    interrupt_hanlder: sql::InterruptHanlder,
 }
 
 impl DBKey {
     pub fn new_from_arc(
         tx: Sender<Command>,
-        db: Arc<Mutex<sql::RawConnection>>,
+        db: Arc<Mutex<RawConnection>>,
         in_memory: bool,
         redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
     ) -> DBKey {
         let loop_data = Loop::new_from_arc(db, redis_context);
-        let sqlite_ref = loop_data.get_db();
-        let sqlite_db = sqlite_ref.lock().unwrap();
         DBKey {
             tx,
             in_memory,
             loop_data,
-            interrupt_hanlder: sql::InterruptHanlder::new(
-                sqlite_db.get_db(),
-            ),
-        }
-    }
-    pub fn get_timeout(&self) -> impl FnOnce() {
-        let ptr = self.interrupt_hanlder.ptr;
-        move || {
-            let ptr = ptr.clone();
-            unsafe { sql::ffi::sqlite3_interrupt(ptr) }
         }
     }
 }
@@ -1334,8 +1299,8 @@ impl Drop for DBKey {
 }
 
 pub fn create_metadata_table(
-    db: Arc<Mutex<sql::RawConnection>>,
-) -> Result<(), sql::SQLite3Error> {
+    db: Arc<Mutex<RawConnection>>,
+) -> Result<(), SQLite3Error> {
     let statement = "CREATE TABLE IF NOT EXISTS RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
     let stmt = MultiStatement::new(db, statement)?;
@@ -1344,11 +1309,11 @@ pub fn create_metadata_table(
 }
 
 pub fn insert_metadata(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
     data_type: &str,
     key: &str,
     value: &str,
-) -> Result<(), sql::SQLite3Error> {
+) -> Result<(), SQLite3Error> {
     let statement = "INSERT INTO RediSQLMetadata VALUES(?1, ?2, ?3);";
 
     let stmt = MultiStatement::new(db, statement)?;
@@ -1360,8 +1325,8 @@ pub fn insert_metadata(
 }
 
 pub fn enable_foreign_key(
-    db: Arc<Mutex<sql::RawConnection>>,
-) -> Result<(), sql::SQLite3Error> {
+    db: Arc<Mutex<RawConnection>>,
+) -> Result<(), SQLite3Error> {
     let enable_foreign_key = "PRAGMA foreign_keys = ON;";
     match MultiStatement::new(db, enable_foreign_key) {
         Err(e) => Err(e),
@@ -1373,10 +1338,10 @@ pub fn enable_foreign_key(
 }
 
 fn update_statement_metadata(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
     key: &str,
     value: &str,
-) -> Result<(), sql::SQLite3Error> {
+) -> Result<(), SQLite3Error> {
     let statement =
         "UPDATE RediSQLMetadata SET value = ?1 WHERE data_type = 'statement' AND key = ?2";
 
@@ -1388,9 +1353,9 @@ fn update_statement_metadata(
 }
 
 fn remove_statement_metadata(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
     key: &str,
-) -> Result<(), sql::SQLite3Error> {
+) -> Result<(), SQLite3Error> {
     let statement = "DELETE FROM RediSQLMetadata WHERE data_type = 'statement' AND key = ?1";
 
     let stmt = MultiStatement::new(db, statement)?;
@@ -1400,7 +1365,7 @@ fn remove_statement_metadata(
 }
 
 fn get_statement_metadata(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
 ) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT * FROM RediSQLMetadata WHERE data_type = 'statement';";
 
@@ -1410,7 +1375,7 @@ fn get_statement_metadata(
 }
 
 fn get_path_metadata(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
 ) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT value FROM RediSQLMetadata WHERE data_type = 'path' AND key = 'path';";
 
@@ -1419,9 +1384,7 @@ fn get_path_metadata(
     QueryResult::try_from(cursor)
 }
 
-pub fn is_redisql_database(
-    db: Arc<Mutex<sql::RawConnection>>,
-) -> bool {
+pub fn is_redisql_database(db: Arc<Mutex<RawConnection>>) -> bool {
     let query = "SELECT name FROM sqlite_master WHERE type='table' AND name='RediSQLMetadata;";
 
     let query = MultiStatement::new(db, query);
@@ -1443,12 +1406,12 @@ pub fn is_redisql_database(
 }
 
 pub fn get_path_from_db(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
 ) -> Result<String, RediSQLError> {
     match get_path_metadata(db) {
         Err(e) => Err(e.into()),
         Ok(QueryResult::Array { array, .. }) => match array[0][0] {
-            sql::Entity::Text { ref text } => match text {
+            Entity::Text { ref text } => match text {
                 t if t.is_empty() => {
                     let err = RediSQLError::new(
                         "Found empty path".to_string(),
@@ -1472,16 +1435,16 @@ pub fn get_path_from_db(
 }
 
 pub fn insert_path_metadata(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
     path: &str,
-) -> Result<(), sql::SQLite3Error> {
+) -> Result<(), SQLite3Error> {
     insert_metadata(db, "path", "path", path)
 }
 
 fn update_path_metadata(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
     value: &str,
-) -> Result<(), sql::SQLite3Error> {
+) -> Result<(), SQLite3Error> {
     let statement =
         "UPDATE RediSQLMetadata SET value = ?1 WHERE data_type = 'path' AND key = 'path'";
 
@@ -1492,9 +1455,9 @@ fn update_path_metadata(
 }
 
 pub fn make_backup(
-    conn1: &sql::RawConnection,
-    conn2: &sql::RawConnection,
-) -> Result<i32, sql::SQLite3Error> {
+    conn1: &RawConnection,
+    conn2: &RawConnection,
+) -> Result<i32, SQLite3Error> {
     match sql::create_backup(conn1, conn2) {
         Err(e) => Err(e),
         Ok(bk) => {
@@ -1509,10 +1472,10 @@ pub fn make_backup(
 }
 
 pub fn create_backup(
-    conn: &sql::RawConnection,
+    conn: &RawConnection,
     path: &str,
-) -> Result<i32, sql::SQLite3Error> {
-    match sql::RawConnection::open_connection(path) {
+) -> Result<i32, SQLite3Error> {
+    match RawConnection::open_connection(path) {
         Err(e) => Err(e),
         Ok(new_db) => make_backup(conn, &new_db),
     }
@@ -1593,28 +1556,6 @@ pub unsafe fn write_rdb_to_file(
     Ok(())
 }
 
-pub fn with_leaky_db<F>(
-    ctx: *mut rm::ffi::RedisModuleCtx,
-    name: &str,
-    f: F,
-) -> i32
-where
-    F: Fn(&Result<DBKey, i32>) -> i32,
-{
-    let db = match get_dbkeyptr_from_name(ctx, name) {
-        Err(err) => Err(err),
-        Ok(ptr) => Ok(unsafe { ptr.read() }),
-    };
-    let result = f(&db);
-    debug!("with_leaky_db | go result {}", result);
-    if db.is_ok() {
-        debug!("with_leaky_db | forgetting db");
-        // Box::into_raw(db);
-        std::mem::forget(db);
-    }
-    result
-}
-
 pub fn get_dbkeyptr_from_name(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,
@@ -1653,43 +1594,8 @@ pub fn get_dbkey_from_name(
     Ok(dbkey)
 }
 
-pub fn with_ch_and_loopdata<F>(
-    ctx: *mut rm::ffi::RedisModuleCtx,
-    name: &str,
-    f: F,
-) -> i32
-where
-    F: Fn(Result<(&Sender<Command>, &mut Loop), i32>) -> i32,
-{
-    let r = get_ch_and_loopdata_from_name(ctx, name);
-    f(r)
-}
-
 pub fn get_ch_from_dbkeyptr(db: *mut DBKey) -> Sender<Command> {
     unsafe { (*db).tx.clone() }
-}
-
-pub fn get_ch_and_loopdata_from_name(
-    ctx: *mut rm::ffi::RedisModuleCtx,
-    name: &str,
-) -> Result<(&Sender<Command>, &mut Loop), i32> {
-    // here we are intentionally leaking the DBKey, so that it does
-    // not get destroyed
-    let db: *mut DBKey = get_dbkeyptr_from_name(ctx, name)?;
-    let channel = unsafe { &(*db).tx };
-    let loopdata = unsafe { &mut (*db).loop_data };
-    Ok((channel, loopdata))
-}
-
-pub fn get_db_channel_from_name(
-    ctx: *mut rm::ffi::RedisModuleCtx,
-    name: &str,
-) -> Result<Sender<Command>, i32> {
-    let db: *mut DBKey = get_dbkeyptr_from_name(ctx, name)?;
-    let db = unsafe { Box::from_raw(db) };
-    let channel = db.tx.clone();
-    std::mem::forget(db);
-    Ok(channel)
 }
 
 pub fn reply_with_error_from_key_type(
@@ -1712,7 +1618,7 @@ pub fn reply_with_error_from_key_type(
 }
 
 fn create_statement(
-    db: Arc<Mutex<sql::RawConnection>>,
+    db: Arc<Mutex<RawConnection>>,
     identifier: &str,
     statement: &str,
 ) -> Result<MultiStatement, err::RediSQLError> {
@@ -1722,7 +1628,7 @@ fn create_statement(
 }
 
 fn update_statement(
-    db: &Arc<Mutex<sql::RawConnection>>,
+    db: &Arc<Mutex<RawConnection>>,
     identifier: &str,
     statement: &str,
 ) -> Result<MultiStatement, err::RediSQLError> {
@@ -1732,20 +1638,11 @@ fn update_statement(
 }
 
 fn remove_statement(
-    db: &Arc<Mutex<sql::RawConnection>>,
+    db: &Arc<Mutex<RawConnection>>,
     identifier: &str,
 ) -> Result<(), err::RediSQLError> {
     remove_statement_metadata(Arc::clone(db), identifier)
         .or_else(|e| Err(err::RediSQLError::from(e)))
-}
-
-#[allow(non_snake_case)]
-pub unsafe fn Replicate(
-    _ctx: &rm::Context,
-    _command: &str,
-    _argv: *mut *mut rm::ffi::RedisModuleString,
-    _argc: std::os::raw::c_int,
-) {
 }
 
 pub fn register_function(

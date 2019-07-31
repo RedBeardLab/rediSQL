@@ -22,19 +22,6 @@ pub mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings_sqlite.rs"));
 }
 
-#[derive(Clone)]
-pub struct InterruptHanlder {
-    pub ptr: *mut ffi::sqlite3,
-}
-
-unsafe impl Send for InterruptHanlder {}
-
-impl InterruptHanlder {
-    pub fn new(ptr: *mut ffi::sqlite3) -> Self {
-        InterruptHanlder { ptr }
-    }
-}
-
 pub enum SQLiteOK {
     OK,
 }
@@ -185,7 +172,7 @@ pub trait StatementTrait<'a>: Sized {
     }
 }
 
-pub enum EntityType {
+enum EntityType {
     Integer,
     Float,
     Text,
