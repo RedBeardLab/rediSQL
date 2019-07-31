@@ -52,15 +52,16 @@ before_deploy:
   - env
   - ls $TRAVIS_BUILD_DIR
   - ls $TRAVIS_BUILD_DIR/target/release
-  - echo $TRAVIS_BUILD_DIR/target/release/RediSQL_$TRAVIS_TAG_${TRAVIS_COMMIT:0:5}_$TARGET.so
-  - cp $TRAVIS_BUILD_DIR/target/release/libredis_sql.so $TRAVIS_BUILD_DIR/target/release/RediSQL_$TRAVIS_TAG_${TRAVIS_COMMIT:0:5}_$TARGET.so
+  - echo "$TRAVIS_BUILD_DIR/target/release/RediSQL_$TRAVIS_TAG_${TRAVIS_COMMIT:0:5}_$TARGET.so"
+  - cp $TRAVIS_BUILD_DIR/target/release/libredis_sql.so "$TRAVIS_BUILD_DIR/target/release/RediSQL_$TRAVIS_TAG_${TRAVIS_COMMIT:0:5}_$TARGET.so"
+  - ls $TRAVIS_BUILD_DIR/target/release
   
 deploy:
   skip_cleanup: true
   provider: releases
   api_key:
     secure: IFiEcn4ln1fJEKfEUfXtGlq3dV4cl/1r36vMtGnUoOqoSR7yioCsWHszkIM0+KnvD08fC7hMiZSY7K2B5QKbirnbNZ7ha4hEESe+YTQlGETJsrN6EcVTSRJ/jMyY7LE3kHo565R2do5XsFhTz5KymJ562woaAGtYP+qmqj1DBFsDjoxLNzON23o5nnREjKyjDBu4Ie6PNuVm/pMUgjt0Erwhklac2tKvAJUUeT4PTEZ1FEJi3ubYoz0XLbR9wp8Ih3I9YEIOXpaLmoBmo7u8g/wCStSbZSvorssZfIP9uI9Q+VmQj7agMeI4nrm7uOas8uPf/UFFsY41dqKoWhO06XXLAot/PUw3saSpdpIobAtyX9x1SUb2BPs1hPwcoU6Pz/yBntr5xx0yLqdppcWof28t9S4dUeFstAtrkQB0iIjPa7J0JywWVcBQ1iPY1e87QeZKN9GJSf1Gk0B4AhR4ORLskvS8u29w2ZA1ca8PWJ9fokH3JYoYJGE8GtXqMFCW3ENTu953uX2B9f2JntqqYtFX8bk+YxpO/uBY+aAFS59ApCWhQDshx1zMzFLwqSxIpz5Qkgddso50L8Az39Kx1Due0V0FnO4G72q6rzSQayrAhxLdDF3z5xcvbjbsYrSAue5Ly5Y814D5ywKJMsjlGzz4JTNJjSvfChWihHwW61w=
-  file: target/release/RediSQL*.so
+  file: $TRAVIS_BUILD_DIR/target/release/RediSQL*
   on:
     repo: RedBeardLab/rediSQL
     branch: timeout_honor
