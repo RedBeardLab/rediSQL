@@ -328,32 +328,6 @@ pub extern "C" fn QueryNowInto(
                     };
                     mem::forget(dbkey);
                     Ok(result.reply(&context))
-                    /*
-                    match result {
-                        Ok(mut res @ r::QueryResult::OK {}) => {
-                            Ok(res.reply(&context))
-                        }
-                        Ok(mut res @ r::QueryResult::DONE { .. }) => {
-                            Ok(res.reply(&context))
-                        }
-
-                        Ok(r::QueryResult::Array {
-                            array: rows,
-                            names,
-                        }) => {
-                            let result = stream_query_result_array(
-                                &context, args[1], &names, &rows,
-                            );
-                            match result {
-                                Ok(mut res) => {
-                                    Ok(res.reply(&context))
-                                }
-                                Err(e) => Err(e.reply(&context)),
-                            }
-                        }
-                        Err(e) => Err(e.reply(&context)),
-                    }
-                    */
                 }
             }
         });
@@ -760,15 +734,7 @@ pub extern "C" fn MakeCopyNow(
             };
             mem::forget(source_db);
             mem::forget(dest_db);
-            /*
-            match result {
-                Ok(mut res) => {
-                    ReplicateVerbatim(&context);
-                    Ok(res.reply(&context))
-                }
-                Err(e) => Err(e.reply(&context)),
-            }
-            */
+
             Ok(result.reply(&context))
         });
 
