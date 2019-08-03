@@ -182,7 +182,7 @@ enum EntityType {
 
 // TODO XXX explore it is possible to change these String into &str
 // and then use Copy instead of Clone
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Entity {
     Integer { int: i64 },
     Float { float: f64 },
@@ -238,8 +238,6 @@ impl Entity {
         }
     }
 }
-
-pub type Row = Vec<Entity>;
 
 pub enum Cursor {
     OKCursor,
@@ -303,8 +301,13 @@ fn get_entity_type(
 
 pub enum QueryResult {
     OK {},
-    DONE { modified_rows: i32 },
-    Array { names: Vec<String>, array: Vec<Row> },
+    DONE {
+        modified_rows: i32,
+    },
+    Array {
+        names: Vec<String>,
+        array: Vec<Entity>,
+    },
 }
 
 impl QueryResult {
@@ -346,18 +349,14 @@ impl QueryResult {
                     if now > timeout {
                         return Err(err::RediSQLError::timeout());
                     }
-                    let mut row =
-                        Vec::with_capacity(num_columns as usize);
                     for i in 0..num_columns {
                         let entity_value = Entity::new(stmt, i);
-                        row.push(entity_value);
+                        result.push(entity_value);
                     }
                     unsafe {
                         *previous_status =
                             ffi::sqlite3_step(stmt.as_ptr());
                     };
-
-                    result.push(row);
                 }
                 match *previous_status {
                      ffi::SQLITE_INTERRUPT => {
@@ -405,18 +404,14 @@ impl TryFrom<Cursor> for QueryResult {
                     names.push(name);
                 }
                 while *previous_status == ffi::SQLITE_ROW {
-                    let mut row =
-                        Vec::with_capacity(num_columns as usize);
                     for i in 0..num_columns {
                         let entity_value = Entity::new(stmt, i);
-                        row.push(entity_value);
+                        result.push(entity_value);
                     }
                     unsafe {
                         *previous_status =
                             ffi::sqlite3_step(stmt.as_ptr());
                     };
-
-                    result.push(row);
                 }
                 match *previous_status {
                      ffi::SQLITE_INTERRUPT => {

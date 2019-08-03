@@ -368,9 +368,9 @@ fn reply_with_done(
     rm::ffi::REDISMODULE_OK
 }
 
-fn reply_with_array(
+fn reply_with_array<'r>(
     ctx: &rm::Context,
-    array: impl IntoIterator<Item = sql::Row>,
+    mut array: impl RowFiller,
 ) -> i32 {
     unsafe {
         rm::ffi::RedisModule_ReplyWithArray.unwrap()(
@@ -378,8 +378,9 @@ fn reply_with_array(
             rm::ffi::REDISMODULE_POSTPONED_ARRAY_LEN.into(),
         );
     }
+    let mut row = Vec::new();
     let mut i = 0;
-    for row in array {
+    while array.fill_row(&mut row) != None {
         i += 1;
         unsafe {
             rm::ffi::RedisModule_ReplyWithArray.unwrap()(
@@ -387,9 +388,12 @@ fn reply_with_array(
                 row.len() as c_long,
             );
         }
-        for mut entity in row {
+
+        for entity in row.iter_mut() {
             entity.reply(&ctx);
         }
+
+        row.clear();
     }
     unsafe {
         rm::ffi::RedisModule_ReplySetArrayLength.unwrap()(
@@ -549,6 +553,51 @@ impl<'s> SQLiteResultIterator<'s> {
             stmt,
         }
     }
+    fn get_next_row(
+        &mut self,
+        row: &mut Vec<Entity>,
+    ) -> Option<usize> {
+        row.clear();
+        if self.previous_status != sql::ffi::SQLITE_ROW {
+            return None;
+        }
+        for i in 0..self.num_columns {
+            let entity_value = Entity::new(self.stmt, i);
+            row.push(entity_value);
+        }
+        unsafe {
+            self.previous_status =
+                sql::ffi::sqlite3_step(self.stmt.as_ptr());
+        };
+        Some(self.num_columns as usize)
+    }
+}
+
+pub trait RowFiller {
+    fn fill_row(&mut self, row: &mut Vec<Entity>) -> Option<usize>;
+}
+
+impl<'s> RowFiller for SQLiteResultIterator<'s> {
+    fn fill_row(&mut self, row: &mut Vec<Entity>) -> Option<usize> {
+        row.clear();
+        self.get_next_row(row)
+    }
+}
+
+impl<'r> RowFiller for std::slice::Chunks<'_, Entity> {
+    fn fill_row(&mut self, row: &mut Vec<Entity>) -> Option<usize> {
+        row.clear();
+        let r = self.next();
+        match r {
+            None => None,
+            Some(r) => {
+                for e in r.iter() {
+                    row.push(e.clone());
+                }
+                Some(r.len())
+            }
+        }
+    }
 }
 
 impl<'s> Iterator for SQLiteResultIterator<'s> {
@@ -598,7 +647,7 @@ impl Returner for QueryResult {
                             ctx,
                             stream_name,
                             &columns_names,
-                            array.into_iter(),
+                            array.chunks(columns_names.len()),
                             timeout,
                         ) {
                             Ok(res) => Box::new(Box::new(res)),
@@ -709,9 +758,9 @@ impl RedisReply for QueryResult {
             QueryResult::DONE { modified_rows, .. } => {
                 reply_with_done(ctx.as_ptr(), *modified_rows)
             }
-            QueryResult::Array { array, .. } => {
+            QueryResult::Array { array, names } => {
                 debug!("QueryResult::Array");
-                reply_with_array(ctx, array.to_vec())
+                reply_with_array(ctx, array.chunks(names.len()))
             }
         }
     }
@@ -798,8 +847,8 @@ fn bind_statement<'a>(
 fn restore_previous_statements<'a, L: 'a + LoopData>(loopdata: &L) {
     let saved_statements = get_statement_metadata(loopdata.get_db());
     match saved_statements {
-        Ok(QueryResult::Array { array, .. }) => {
-            for row in array {
+        Ok(QueryResult::Array { array, names }) => {
+            for row in array.chunks(names.len()) {
                 let identifier = match row[1] {
                     Entity::Text { ref text } => text,
                     _ => continue,
@@ -843,15 +892,15 @@ fn return_value(
     }
 }
 
-pub fn stream_query_result_array<A>(
+pub fn stream_query_result_array<'r, A>(
     context: &Context,
     stream_name: &str,
     columns_names: &[String],
-    array: A,
+    mut array: A,
     timeout: std::time::Instant,
 ) -> Result<QueryResult, err::RediSQLError>
 where
-    A: IntoIterator<Item = sql::Row>,
+    A: RowFiller,
 {
     let mut result = Vec::with_capacity(4);
     result.push(Entity::Text {
@@ -869,7 +918,8 @@ where
     }
 
     let mut lock = context.lock();
-    for row in array {
+    let mut row = Vec::new();
+    while array.fill_row(&mut row) != None {
         now = std::time::Instant::now();
 
         if now > timeout {
@@ -884,6 +934,7 @@ where
             lock = context.lock();
         }
         let mut xadd = rm::XADDCommand::new(&context, stream_name);
+
         for (j, entity) in row.iter().enumerate() {
             match entity {
                 Entity::OK {} | Entity::DONE { .. } => {
@@ -972,7 +1023,7 @@ where
             String::from("last_id"),
             String::from("size"),
         ],
-        array: vec![result],
+        array: result,
     })
 }
 
@@ -1410,7 +1461,9 @@ pub fn get_path_from_db(
 ) -> Result<String, RediSQLError> {
     match get_path_metadata(db) {
         Err(e) => Err(e.into()),
-        Ok(QueryResult::Array { array, .. }) => match array[0][0] {
+        // we have one big vector of results, else the first element is just [0] and not [0][0]
+        // it use to be a matrix, is not anymore the case.
+        Ok(QueryResult::Array { array, .. }) => match array[0] {
             Entity::Text { ref text } => match text {
                 t if t.is_empty() => {
                     let err = RediSQLError::new(
