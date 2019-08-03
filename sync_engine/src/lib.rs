@@ -298,15 +298,17 @@ pub extern "C" fn QueryNowInto(
                     key_type,
                 )),
                 Ok(dbkey) => {
-                    let db = dbkey.loop_data.get_db();
-                    dbkey.loop_data.set_rc(Context::no_client());
-                    let (mut result, context) = {
+                    let res = {
+                        let db = dbkey.loop_data.get_db();
+                        let _rc = dbkey
+                            .loop_data
+                            .set_rc(Context::no_client());
                         let result = do_query(&db, args[3]);
                         let return_method =
                             ReturnMethod::Stream { name: args[1] };
                         let t = std::time::Instant::now()
                             + std::time::Duration::from_secs(10);
-                        let result = match result {
+                        let mut result = match result {
                             Ok(r) => r.create_data_to_return(
                                 &context,
                                 &return_method,
@@ -318,10 +320,10 @@ pub extern "C" fn QueryNowInto(
                                 t,
                             ),
                         };
-                        (result, context)
+                        Ok(result.reply(&context))
                     };
                     mem::forget(dbkey);
-                    Ok(result.reply(&context))
+                    res
                 }
             }
         });
@@ -358,7 +360,7 @@ pub extern "C" fn ExecStatementNow(
                 Ok(dbkey) => {
                     let result = {
                         // _rc must be
-                        // 1. Define for the call to exec_statement() and .reply(&context)
+                        // 1. Define befor the call to exec_statement() and .reply(&context)
                         // 2. Dropped before we forget the `dbkey`
                         let _rc = dbkey
                             .loop_data
