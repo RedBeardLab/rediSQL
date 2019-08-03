@@ -176,12 +176,10 @@ pub extern "C" fn ExecNow(
                     key_type,
                 )),
                 Ok(dbkey) => {
+                    dbkey.loop_data.set_rc(Context::no_client());
                     let (mut result, context) = {
                         let db = dbkey.loop_data.get_db();
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
                         let result = do_execute(&db, args[2]);
-                        let context = redis_context.release();
                         let t = std::time::Instant::now()
                             + std::time::Duration::from_secs(10);
                         let result = match result {
@@ -242,11 +240,9 @@ pub extern "C" fn QueryNow(
                 )),
                 Ok(dbkey) => {
                     let db = dbkey.loop_data.get_db();
+                    dbkey.loop_data.set_rc(Context::no_client());
                     let (mut result, context) = {
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
                         let result = do_query(&db, args[2]);
-                        let context = redis_context.release();
                         let t = std::time::Instant::now()
                             + std::time::Duration::from_secs(10);
                         let result = match result {
@@ -303,11 +299,9 @@ pub extern "C" fn QueryNowInto(
                 )),
                 Ok(dbkey) => {
                     let db = dbkey.loop_data.get_db();
+                    dbkey.loop_data.set_rc(Context::no_client());
                     let (mut result, context) = {
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
                         let result = do_query(&db, args[3]);
-                        let context = redis_context.release();
                         let return_method =
                             ReturnMethod::Stream { name: args[1] };
                         let t = std::time::Instant::now()
@@ -362,9 +356,13 @@ pub extern "C" fn ExecStatementNow(
                     key_type,
                 ),
                 Ok(dbkey) => {
-                    let (result, context) = {
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
+                    let result = {
+                        // rc must be
+                        // 1. Define
+                        // 2. Dropped before we forget the db key
+                        let _rc = dbkey
+                            .loop_data
+                            .set_rc(Context::no_client());
                         let result = dbkey
                             .loop_data
                             .get_replication_book()
@@ -372,17 +370,16 @@ pub extern "C" fn ExecStatementNow(
                                 argvector[2],
                                 &argvector[3..],
                             );
-                        let context = redis_context.release();
-                        (result, context)
+                        match result {
+                            Ok(mut res) => {
+                                ReplicateVerbatim(&context);
+                                res.reply(&context)
+                            }
+                            Err(mut err) => err.reply(&context),
+                        }
                     };
                     mem::forget(dbkey);
-                    match result {
-                        Ok(mut res) => {
-                            ReplicateVerbatim(&context);
-                            res.reply(&context)
-                        }
-                        Err(mut err) => err.reply(&context),
-                    }
+                    result
                 }
             }
         }
@@ -561,9 +558,8 @@ pub extern "C" fn QueryStatementNow(
                     key_type,
                 ),
                 Ok(dbkey) => {
+                    dbkey.loop_data.set_rc(Context::no_client());
                     let (result, context) = {
-                        let redis_context =
-                            &dbkey.loop_data.set_rc(context);
                         let result = dbkey
                             .loop_data
                             .get_replication_book()
@@ -571,7 +567,6 @@ pub extern "C" fn QueryStatementNow(
                                 argvector[2],
                                 &argvector[3..],
                             );
-                        let context = redis_context.release();
                         (result, context)
                     };
                     mem::forget(dbkey);
@@ -618,14 +613,12 @@ pub extern "C" fn QueryStatementNowInto(
                     key_type,
                 )),
                 Ok(dbkey) => {
+                    dbkey.loop_data.set_rc(Context::no_client());
                     let (result, context) = {
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
                         let result = dbkey
                             .loop_data
                             .get_replication_book()
                             .query_statement(args[3], &args[4..]);
-                        let context = redis_context.release();
                         (result, context)
                     };
                     mem::forget(dbkey);
