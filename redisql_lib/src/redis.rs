@@ -368,7 +368,7 @@ fn reply_with_done(
     rm::ffi::REDISMODULE_OK
 }
 
-fn reply_with_array<'r>(
+fn reply_with_array(
     ctx: &rm::Context,
     mut array: impl RowFiller,
 ) -> i32 {
@@ -892,7 +892,7 @@ fn return_value(
     }
 }
 
-pub fn stream_query_result_array<'r, A>(
+pub fn stream_query_result_array<A>(
     context: &Context,
     stream_name: &str,
     columns_names: &[String],
@@ -1422,7 +1422,7 @@ fn get_statement_metadata(
 
     let stmt = MultiStatement::new(db, statement)?;
     let cursor = stmt.execute()?;
-    QueryResult::try_from(cursor).into()
+    QueryResult::try_from(cursor)
 }
 
 fn get_path_metadata(
@@ -1460,7 +1460,7 @@ pub fn get_path_from_db(
     db: Arc<Mutex<RawConnection>>,
 ) -> Result<String, RediSQLError> {
     match get_path_metadata(db) {
-        Err(e) => Err(e.into()),
+        Err(e) => Err(e),
         // we have one big vector of results, else the first element is just [0] and not [0][0]
         // it use to be a matrix, is not anymore the case.
         Ok(QueryResult::Array { array, .. }) => match array[0] {
