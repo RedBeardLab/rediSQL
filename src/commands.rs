@@ -94,7 +94,7 @@ pub extern "C" fn ExecStatement(
                 }
             };
 
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -180,7 +180,7 @@ pub extern "C" fn QueryStatement(
                     );
                 }
             };
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -260,7 +260,7 @@ pub extern "C" fn QueryStatementInto(
                     );
                 }
             };
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -326,7 +326,7 @@ pub extern "C" fn Exec(
                     );
                 }
             };
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -417,7 +417,7 @@ pub extern "C" fn Query(
                     );
                 }
             };
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -496,7 +496,7 @@ pub extern "C" fn QueryInto(
                     );
                 }
             };
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -576,7 +576,7 @@ pub extern "C" fn CreateStatement(
                     );
                 }
             };
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -660,7 +660,7 @@ pub extern "C" fn UpdateStatement(
                     );
                 }
             };
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -745,7 +745,7 @@ pub extern "C" fn DeleteStatement(
                     );
                 }
             };
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -992,7 +992,7 @@ pub extern "C" fn MakeCopy(
                 }
             };
 
-            let ch = get_ch_from_dbkeyptr(db);
+            let ch = unsafe { get_ch_from_dbkeyptr(db) };
             let dest_db =
                 get_dbkey_from_name(context.as_ptr(), argvector[2]);
             if dest_db.is_err() {

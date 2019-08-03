@@ -1647,8 +1647,10 @@ pub fn get_dbkey_from_name(
     Ok(dbkey)
 }
 
-pub fn get_ch_from_dbkeyptr(db: *mut DBKey) -> Sender<Command> {
-    unsafe { (*db).tx.clone() }
+pub unsafe fn get_ch_from_dbkeyptr(
+    db: *mut DBKey,
+) -> Sender<Command> {
+    (*db).tx.clone()
 }
 
 pub fn reply_with_error_from_key_type(
