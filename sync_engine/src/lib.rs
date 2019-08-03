@@ -357,9 +357,9 @@ pub extern "C" fn ExecStatementNow(
                 ),
                 Ok(dbkey) => {
                     let result = {
-                        // rc must be
-                        // 1. Define
-                        // 2. Dropped before we forget the db key
+                        // _rc must be
+                        // 1. Define for the call to exec_statement() and .reply(&context)
+                        // 2. Dropped before we forget the `dbkey`
                         let _rc = dbkey
                             .loop_data
                             .set_rc(Context::no_client());
