@@ -1,6 +1,6 @@
 [package]
 name = "rediSQL"
-version = "1.0.3-rc04"
+version = "1.0.3-rc05"
 authors = ["Simone Mosciatti <simone@redbeardlab.tech>"]
 edition = "2018"
 

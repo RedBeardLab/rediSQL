@@ -1013,12 +1013,12 @@ dependencies = [
 
 [[package]]
 name = "rediSQL"
-version = "1.0.3-rc04"
+version = "1.0.3-rc05"
 dependencies = [
  "env_logger 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "redisql_lib 0.5.5-rc03",
- "sync_engine 0.5.1-rc01",
+ "sync_engine 0.5.1-rc02",
  "telemetrics 0.1.0",
  "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1254,7 +1254,7 @@ dependencies = [
 
 [[package]]
 name = "sync_engine"
-version = "0.5.1-rc01"
+version = "0.5.1-rc02"
 dependencies = [
  "cc 1.0.36 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
