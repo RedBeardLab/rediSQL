@@ -16,6 +16,7 @@ enum Parameters {
     Named { index: i32 },
 }
 
+#[derive(Clone)]
 pub struct MultiStatement {
     stmts: Vec<Statement>,
     db: Arc<Mutex<RawConnection>>,
@@ -38,12 +39,17 @@ impl<'a> fmt::Display for MultiStatement {
     }
 }
 
+#[derive(Clone)]
 pub struct Statement {
+    stmt: Arc<InternalStatement>,
+}
+
+struct InternalStatement {
     stmt: ptr::NonNull<ffi::sqlite3_stmt>,
 }
 
-unsafe impl Send for Statement {}
-unsafe impl Sync for Statement {}
+unsafe impl Send for InternalStatement {}
+unsafe impl Sync for InternalStatement {}
 
 impl<'a> fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -56,10 +62,10 @@ impl<'a> fmt::Display for Statement {
     }
 }
 
-impl<'a> Drop for Statement {
+impl<'a> Drop for InternalStatement {
     fn drop(&mut self) {
         unsafe {
-            ffi::sqlite3_finalize(self.as_ptr());
+            ffi::sqlite3_finalize(self.stmt.as_ptr());
         };
     }
 }
@@ -120,7 +126,9 @@ pub fn generate_statements(
 impl Statement {
     fn from_ptr(stmt: *mut ffi::sqlite3_stmt) -> Self {
         Statement {
-            stmt: ptr::NonNull::new(stmt).unwrap(),
+            stmt: Arc::new(InternalStatement {
+                stmt: ptr::NonNull::new(stmt).unwrap(),
+            }),
         }
     }
     fn execute(
@@ -139,7 +147,7 @@ impl Statement {
                     ffi::sqlite3_column_count(self.as_ptr())
                 } as i32;
                 Ok(Cursor::RowsCursor {
-                    stmt: self,
+                    stmt: self.clone(),
                     num_columns,
                     previous_status: ffi::SQLITE_ROW,
                     modified_rows: 0,
@@ -154,7 +162,7 @@ impl Statement {
         rc.get_last_error()
     }
     pub fn as_ptr(&self) -> *mut ffi::sqlite3_stmt {
-        self.stmt.as_ptr()
+        self.stmt.stmt.as_ptr()
     }
 }
 
@@ -403,6 +411,7 @@ fn count_parameters(
         }
     }
 }
+
 fn get_parameter_name(
     stmt: &Statement,
     index: i32,

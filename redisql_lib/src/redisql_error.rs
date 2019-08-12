@@ -2,7 +2,6 @@ use std::error;
 use std::error::Error;
 use std::fmt;
 
-use crate::redis;
 use crate::sqlite as sql;
 
 pub trait RediSQLErrorTrait: fmt::Display + error::Error {}
@@ -13,14 +12,17 @@ pub struct RediSQLError {
 }
 
 impl RediSQLError {
-    pub fn new(
-        debug: String,
-        error_description: String,
-    ) -> RediSQLError {
+    pub fn new(debug: String, error_description: String) -> Self {
         RediSQLError {
             debug,
             error_description,
         }
+    }
+    pub fn timeout() -> Self {
+        RediSQLError::new(
+            "Timeout expired.".to_string(),
+            "It was impossible to return the whole result before the timeout expired.".to_string(),
+            )
     }
 }
 
@@ -44,15 +46,6 @@ impl error::Error for RediSQLError {
 
 impl From<sql::SQLite3Error> for RediSQLError {
     fn from(err: sql::SQLite3Error) -> RediSQLError {
-        RediSQLError {
-            debug: format!("{}", err),
-            error_description: err.description().to_owned(),
-        }
-    }
-}
-
-impl From<redis::RedisError> for RediSQLError {
-    fn from(err: redis::RedisError) -> RediSQLError {
         RediSQLError {
             debug: format!("{}", err),
             error_description: err.description().to_owned(),

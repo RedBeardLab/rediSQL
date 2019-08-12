@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::error;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -6,8 +7,6 @@ use std::mem;
 use std::os::raw::c_char;
 use std::ptr;
 use std::sync::{Arc, Mutex};
-
-use crate::redis::QueryResult;
 
 use crate::redisql_error as err;
 
@@ -173,7 +172,7 @@ pub trait StatementTrait<'a>: Sized {
     }
 }
 
-pub enum EntityType {
+enum EntityType {
     Integer,
     Float,
     Text,
@@ -183,7 +182,7 @@ pub enum EntityType {
 
 // TODO XXX explore it is possible to change these String into &str
 // and then use Copy instead of Clone
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Entity {
     Integer { int: i64 },
     Float { float: f64 },
@@ -196,7 +195,7 @@ pub enum Entity {
 }
 
 impl Entity {
-    fn new(stmt: &Statement, i: i32) -> Entity {
+    pub fn new(stmt: &Statement, i: i32) -> Entity {
         match get_entity_type(stmt.as_ptr(), i) {
             EntityType::Integer => {
                 let int = unsafe {
@@ -240,9 +239,7 @@ impl Entity {
     }
 }
 
-pub type Row = Vec<Entity>;
-
-pub enum Cursor<'a> {
+pub enum Cursor {
     OKCursor,
     DONECursor {
         modified_rows: i32,
@@ -250,19 +247,19 @@ pub enum Cursor<'a> {
     RowsCursor {
         num_columns: i32,
         previous_status: i32,
-        stmt: &'a Statement,
+        stmt: Statement,
         modified_rows: i32,
     },
     /* ADD empty cursor, it will be the easiest (and maybe
      * cleaner?) way to manage empty return statements */
 }
 
-impl<'a> FromIterator<Cursor<'a>> for Cursor<'a> {
-    fn from_iter<I: IntoIterator<Item = Cursor<'a>>>(
+impl<'a> FromIterator<Cursor> for Cursor {
+    fn from_iter<I: IntoIterator<Item = Cursor>>(
         cursors: I,
-    ) -> Cursor<'a> {
+    ) -> Cursor {
         let mut modified = 0;
-        let mut last: Option<Cursor<'a>> = None;
+        let mut last: Option<Cursor> = None;
         for cursor in cursors {
             match cursor {
                 Cursor::OKCursor {} => {
@@ -302,16 +299,92 @@ fn get_entity_type(
     }
 }
 
-impl<'a> From<Cursor<'a>> for QueryResult {
-    fn from(mut cursor: Cursor) -> QueryResult {
+pub enum QueryResult {
+    OK {},
+    DONE {
+        modified_rows: i32,
+    },
+    Array {
+        names: Vec<String>,
+        array: Vec<Entity>,
+    },
+}
+
+impl QueryResult {
+    pub fn from_cursor_before(
+        mut cursor: Cursor,
+        timeout: std::time::Instant,
+    ) -> Result<Self, err::RediSQLError> {
         match cursor {
-            Cursor::OKCursor {} => QueryResult::OK {},
+            Cursor::OKCursor {} => Ok(QueryResult::OK {}),
             Cursor::DONECursor { modified_rows } => {
-                QueryResult::DONE { modified_rows }
+                Ok(QueryResult::DONE { modified_rows })
+            }
+            Cursor::RowsCursor {
+                ref stmt,
+                num_columns,
+                ref mut previous_status,
+                ..
+            } => {
+                let mut now = std::time::Instant::now();
+                if now > timeout {
+                    return Err(err::RediSQLError::timeout());
+                }
+                let mut result = vec![];
+                let mut names =
+                    Vec::with_capacity(num_columns as usize);
+                for i in 0..num_columns {
+                    let name = unsafe {
+                        CStr::from_ptr(ffi::sqlite3_column_name(
+                            stmt.as_ptr(),
+                            i,
+                        ))
+                        .to_string_lossy()
+                        .into_owned()
+                    };
+                    names.push(name);
+                }
+                while *previous_status == ffi::SQLITE_ROW {
+                    now = std::time::Instant::now();
+                    if now > timeout {
+                        return Err(err::RediSQLError::timeout());
+                    }
+                    for i in 0..num_columns {
+                        let entity_value = Entity::new(stmt, i);
+                        result.push(entity_value);
+                    }
+                    unsafe {
+                        *previous_status =
+                            ffi::sqlite3_step(stmt.as_ptr());
+                    };
+                }
+                match *previous_status {
+                     ffi::SQLITE_INTERRUPT => {
+                        Err(err::RediSQLError::new("Query Interrupted".to_string(), "The query was interrupted, most likely because it runs out of time.".to_string()))
+                    },
+                    _ => Ok(QueryResult::Array {
+                        names,
+                        array: result,
+                    }),
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<Cursor> for QueryResult {
+    type Error = err::RediSQLError;
+    fn try_from(
+        mut cursor: Cursor,
+    ) -> Result<QueryResult, Self::Error> {
+        match cursor {
+            Cursor::OKCursor {} => Ok(QueryResult::OK {}),
+            Cursor::DONECursor { modified_rows } => {
+                Ok(QueryResult::DONE { modified_rows })
             }
 
             Cursor::RowsCursor {
-                stmt,
+                ref stmt,
                 num_columns,
                 ref mut previous_status,
                 ..
@@ -331,22 +404,23 @@ impl<'a> From<Cursor<'a>> for QueryResult {
                     names.push(name);
                 }
                 while *previous_status == ffi::SQLITE_ROW {
-                    let mut row =
-                        Vec::with_capacity(num_columns as usize);
                     for i in 0..num_columns {
                         let entity_value = Entity::new(stmt, i);
-                        row.push(entity_value);
+                        result.push(entity_value);
                     }
                     unsafe {
                         *previous_status =
                             ffi::sqlite3_step(stmt.as_ptr());
                     };
-
-                    result.push(row);
                 }
-                QueryResult::Array {
-                    names,
-                    array: result,
+                match *previous_status {
+                     ffi::SQLITE_INTERRUPT => {
+                        Err(Self::Error::new("Query Interrupted".to_string(), "The query was interrupted, most likely because it runs out of time.".to_string()))
+                    },
+                    _ => Ok(QueryResult::Array {
+                        names,
+                        array: result,
+                    }),
                 }
             }
         }

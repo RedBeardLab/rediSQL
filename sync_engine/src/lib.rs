@@ -2,7 +2,8 @@ extern crate redisql_lib;
 
 use std::collections::vec_deque::VecDeque;
 use std::ffi::CString;
-use std::mem;
+use std::mem::zeroed;
+use std::mem::ManuallyDrop;
 use std::os::raw;
 use std::sync::{Arc, Mutex};
 
@@ -14,8 +15,8 @@ use redisql_lib::redis as r;
 use redisql_lib::redis::{
     do_execute, do_query, get_dbkey_from_name, register_function,
     register_function_with_keys, register_write_function,
-    reply_with_error_from_key_type, stream_query_result_array,
-    LoopData, RedisReply, StatementCache,
+    reply_with_error_from_key_type, LoopData, RedisReply,
+    ReturnMethod, Returner, StatementCache,
 };
 use redisql_lib::redis_type::ffi::{
     RedisModuleIO, RedisModuleString,
@@ -32,7 +33,7 @@ struct DumpIterator {
 impl<'b> DumpIterator {
     fn new(conn: &Arc<Mutex<RawConnection>>) -> DumpIterator {
         let db = conn.lock().unwrap();
-        let buffer: [u8; 4096] = unsafe { mem::zeroed() };
+        let buffer: [u8; 4096] = unsafe { zeroed() };
         let fd = unsafe { ffi::start((*db).get_db()) };
         let iterator = VecDeque::new();
         let first_chunk = String::from("");
@@ -139,13 +140,6 @@ fn check_args(
     }
 }
 
-fn unwrap_return_code(r: Result<i32, i32>) -> i32 {
-    match r {
-        Ok(ok) => ok,
-        Err(e) => e,
-    }
-}
-
 #[allow(non_snake_case)]
 pub extern "C" fn ExecNow(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
@@ -155,47 +149,53 @@ pub extern "C" fn ExecNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
 
-    let return_code = check_args(argvector, 3)
-        .or_else(|e| {
-            Err(unsafe {
-                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    context.as_ptr(),
-                    e.as_ptr(),
-                )
-            })
-        })
-        .and_then(|args| {
+    match check_args(argvector, 3) {
+        Err(e) => unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                e.as_ptr(),
+            )
+        },
+        Ok(args) => {
             match get_dbkey_from_name(context.as_ptr(), args[1]) {
-                Err(key_type) => Err(reply_with_error_from_key_type(
+                Err(key_type) => reply_with_error_from_key_type(
                     context.as_ptr(),
                     key_type,
-                )),
+                ),
                 Ok(dbkey) => {
-                    let (result, context) = {
-                        let db = dbkey.loop_data.get_db();
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
-                        let result = do_execute(&db, args[2]);
-                        let context = redis_context.release();
-                        (result, context)
-                    };
-                    mem::forget(dbkey);
-                    match result {
-                        Ok(result) => {
+                    let dbkey = ManuallyDrop::new(dbkey);
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
+                    let db = dbkey.loop_data.get_db();
+                    let result = do_execute(&db, args[2]);
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
+                    let mut result = match result {
+                        Ok(r) => {
                             ReplicateVerbatim(&context);
-                            Ok(result.reply(&context))
+                            r.create_data_to_return(
+                                &context,
+                                &ReturnMethod::Reply,
+                                t,
+                            )
                         }
-                        Err(e) => Err(e.reply(&context)),
-                    }
+                        Err(r) => r.create_data_to_return(
+                            &context,
+                            &ReturnMethod::Reply,
+                            t,
+                        ),
+                    };
+
+                    result.reply(&context)
                 }
             }
-        });
-    unwrap_return_code(return_code)
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -207,44 +207,49 @@ pub extern "C" fn QueryNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
 
-    let return_code = check_args(argvector, 3)
-        .or_else(|e| {
-            Err(unsafe {
-                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    context.as_ptr(),
-                    e.as_ptr(),
-                )
-            })
-        })
-        .and_then(|args| {
+    match check_args(argvector, 3) {
+        Err(e) => unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                e.as_ptr(),
+            )
+        },
+        Ok(args) => {
             match get_dbkey_from_name(context.as_ptr(), args[1]) {
-                Err(key_type) => Err(reply_with_error_from_key_type(
+                Err(key_type) => reply_with_error_from_key_type(
                     context.as_ptr(),
                     key_type,
-                )),
+                ),
                 Ok(dbkey) => {
+                    let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let (result, context) = {
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
-                        let result = do_query(&db, args[2]);
-                        let context = redis_context.release();
-                        (result, context)
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
+                    let result = do_query(&db, args[2]);
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
+                    let mut result = match result {
+                        Ok(r) => r.create_data_to_return(
+                            &context,
+                            &ReturnMethod::Reply,
+                            t,
+                        ),
+                        Err(r) => r.create_data_to_return(
+                            &context,
+                            &ReturnMethod::Reply,
+                            t,
+                        ),
                     };
-                    mem::forget(dbkey);
-                    match result {
-                        Ok(res) => Ok(res.reply(&context)),
-                        Err(e) => Err(e.reply(&context)),
-                    }
+                    result.reply(&context)
                 }
             }
-        });
-    unwrap_return_code(return_code)
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -256,64 +261,51 @@ pub extern "C" fn QueryNowInto(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
 
-    let return_code = check_args(argvector, 4)
-        .or_else(|e| {
-            Err(unsafe {
-                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    context.as_ptr(),
-                    e.as_ptr(),
-                )
-            })
-        })
-        .and_then(|args| {
+    match check_args(argvector, 4) {
+        Err(e) => unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                e.as_ptr(),
+            )
+        },
+        Ok(args) => {
             match get_dbkey_from_name(context.as_ptr(), args[2]) {
-                Err(key_type) => Err(reply_with_error_from_key_type(
+                Err(key_type) => reply_with_error_from_key_type(
                     context.as_ptr(),
                     key_type,
-                )),
+                ),
                 Ok(dbkey) => {
+                    let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let (result, context) = {
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
-                        let result = do_query(&db, args[3]);
-                        let context = redis_context.release();
-                        (result, context)
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
+                    let result = do_query(&db, args[3]);
+                    let return_method =
+                        ReturnMethod::Stream { name: args[1] };
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
+                    let mut result = match result {
+                        Ok(r) => r.create_data_to_return(
+                            &context,
+                            &return_method,
+                            t,
+                        ),
+                        Err(r) => r.create_data_to_return(
+                            &context,
+                            &return_method,
+                            t,
+                        ),
                     };
-                    mem::forget(dbkey);
-                    match result {
-                        Ok(res @ r::QueryResult::OK {}) => {
-                            Ok(res.reply(&context))
-                        }
-                        Ok(res @ r::QueryResult::DONE { .. }) => {
-                            Ok(res.reply(&context))
-                        }
-
-                        Ok(r::QueryResult::Array {
-                            array: rows,
-                            names,
-                        }) => {
-                            let result = stream_query_result_array(
-                                &context, args[1], &names, rows,
-                            );
-                            match result {
-                                Ok(result) => {
-                                    Ok(result.reply(&context))
-                                }
-                                Err(e) => Err(e.reply(&context)),
-                            }
-                        }
-                        Err(e) => Err(e.reply(&context)),
-                    }
+                    result.reply(&context)
                 }
             }
-        });
-    unwrap_return_code(return_code)
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -325,7 +317,7 @@ pub extern "C" fn ExecStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -344,26 +336,25 @@ pub extern "C" fn ExecStatementNow(
                     key_type,
                 ),
                 Ok(dbkey) => {
-                    let (result, context) = {
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
-                        let result = dbkey
-                            .loop_data
-                            .get_replication_book()
-                            .exec_statement(
-                                argvector[2],
-                                &argvector[3..],
-                            );
-                        let context = redis_context.release();
-                        (result, context)
-                    };
-                    mem::forget(dbkey);
+                    let dbkey = ManuallyDrop::new(dbkey);
+                    // _rc must be
+                    // 1. Define befor the call to exec_statement() and .reply(&context)
+                    // 2. Dropped before we forget the `dbkey`
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
+                    let result = dbkey
+                        .loop_data
+                        .get_replication_book()
+                        .exec_statement(
+                            argvector[2],
+                            &argvector[3..],
+                        );
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
                             res.reply(&context)
                         }
-                        Err(err) => err.reply(&context),
+                        Err(mut err) => err.reply(&context),
                     }
                 }
             }
@@ -380,43 +371,43 @@ pub extern "C" fn CreateStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
 
-    let return_code = check_args(argvector, 4)
-        .or_else(|e| {
-            Err(unsafe {
-                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    context.as_ptr(),
-                    e.as_ptr(),
-                )
-            })
-        })
-        .and_then(|args| {
+    match check_args(argvector, 4) {
+        Err(e) => unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                e.as_ptr(),
+            )
+        },
+        Ok(args) => {
             match get_dbkey_from_name(context.as_ptr(), args[1]) {
-                Err(key_type) => Err(reply_with_error_from_key_type(
+                Err(key_type) => reply_with_error_from_key_type(
                     context.as_ptr(),
                     key_type,
-                )),
+                ),
                 Ok(dbkey) => {
+                    let dbkey = ManuallyDrop::new(dbkey);
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
                         .insert_new_statement(args[2], args[3]);
-                    mem::forget(dbkey);
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
-                            Ok(res.reply(&context))
+                            res.reply(&context)
                         }
-                        Err(e) => Err(e.reply(&context)),
+                        Err(mut e) => e.reply(&context),
                     }
                 }
             }
-        });
-    unwrap_return_code(return_code)
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -428,43 +419,44 @@ pub extern "C" fn UpdateStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
 
-    let return_code = check_args(argvector, 4)
-        .or_else(|e| {
-            Err(unsafe {
-                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    context.as_ptr(),
-                    e.as_ptr(),
-                )
-            })
-        })
-        .and_then(|args| {
+    match check_args(argvector, 4) {
+        Err(e) => unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                e.as_ptr(),
+            )
+        },
+
+        Ok(args) => {
             match get_dbkey_from_name(context.as_ptr(), args[1]) {
-                Err(key_type) => Err(reply_with_error_from_key_type(
+                Err(key_type) => reply_with_error_from_key_type(
                     context.as_ptr(),
                     key_type,
-                )),
+                ),
                 Ok(dbkey) => {
+                    let dbkey = ManuallyDrop::new(dbkey);
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
                         .update_statement(args[2], args[3]);
-                    mem::forget(dbkey);
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
-                            Ok(res.reply(&context))
+                            res.reply(&context)
                         }
-                        Err(e) => Err(e.reply(&context)),
+                        Err(mut e) => e.reply(&context),
                     }
                 }
             }
-        });
-    unwrap_return_code(return_code)
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -476,43 +468,44 @@ pub extern "C" fn DeleteStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
 
-    let return_code = check_args(argvector, 3)
-        .or_else(|e| {
-            Err(unsafe {
-                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    context.as_ptr(),
-                    e.as_ptr(),
-                )
-            })
-        })
-        .and_then(|args| {
+    match check_args(argvector, 3) {
+        Err(e) => unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                e.as_ptr(),
+            )
+        },
+
+        Ok(args) => {
             match get_dbkey_from_name(context.as_ptr(), args[1]) {
-                Err(key_type) => Err(reply_with_error_from_key_type(
+                Err(key_type) => reply_with_error_from_key_type(
                     context.as_ptr(),
                     key_type,
-                )),
+                ),
                 Ok(dbkey) => {
+                    let dbkey = ManuallyDrop::new(dbkey);
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
                         .delete_statement(args[2]);
-                    mem::forget(dbkey);
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
-                            Ok(res.reply(&context))
+                            res.reply(&context)
                         }
-                        Err(e) => Err(e.reply(&context)),
+                        Err(mut e) => e.reply(&context),
                     }
                 }
             }
-        });
-    unwrap_return_code(return_code)
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -524,7 +517,7 @@ pub extern "C" fn QueryStatementNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
@@ -543,26 +536,22 @@ pub extern "C" fn QueryStatementNow(
                     key_type,
                 ),
                 Ok(dbkey) => {
-                    let (result, context) = {
-                        let redis_context =
-                            &dbkey.loop_data.set_rc(context);
-                        let result = dbkey
-                            .loop_data
-                            .get_replication_book()
-                            .query_statement(
-                                argvector[2],
-                                &argvector[3..],
-                            );
-                        let context = redis_context.release();
-                        (result, context)
-                    };
-                    mem::forget(dbkey);
+                    let dbkey = ManuallyDrop::new(dbkey);
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
+                    let result = dbkey
+                        .loop_data
+                        .get_replication_book()
+                        .query_statement(
+                            argvector[2],
+                            &argvector[3..],
+                        );
                     match result {
-                        Ok(res) => {
+                        Ok(mut res) => {
                             ReplicateVerbatim(&context);
                             res.reply(&context)
                         }
-                        Err(err) => err.reply(&context),
+                        Err(mut err) => err.reply(&context),
                     }
                 }
             }
@@ -579,66 +568,52 @@ pub extern "C" fn QueryStatementNowInto(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
 
-    let return_code = check_args(argvector, 4)
-        .or_else(|e| {
-            Err(unsafe {
-                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    context.as_ptr(),
-                    e.as_ptr(),
-                )
-            })
-        })
-        .and_then(|args| {
+    match check_args(argvector, 4) {
+        Err(e) => unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                e.as_ptr(),
+            )
+        },
+        Ok(args) => {
             match get_dbkey_from_name(context.as_ptr(), args[2]) {
-                Err(key_type) => Err(reply_with_error_from_key_type(
+                Err(key_type) => reply_with_error_from_key_type(
                     context.as_ptr(),
                     key_type,
-                )),
+                ),
                 Ok(dbkey) => {
-                    let (result, context) = {
-                        let redis_context =
-                            dbkey.loop_data.set_rc(context);
-                        let result = dbkey
-                            .loop_data
-                            .get_replication_book()
-                            .query_statement(args[3], &args[4..]);
-                        let context = redis_context.release();
-                        (result, context)
-                    };
-                    mem::forget(dbkey);
+                    let dbkey = ManuallyDrop::new(dbkey);
+                    let _rc =
+                        dbkey.loop_data.set_rc(Context::no_client());
+                    let result = dbkey
+                        .loop_data
+                        .get_replication_book()
+                        .query_statement(args[3], &args[4..]);
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
                     match result {
-                        Ok(res @ r::QueryResult::OK {}) => {
-                            Ok(res.reply(&context))
+                        Ok(result) => {
+                            let mut to_return = result
+                                .create_data_to_return(
+                                    &context,
+                                    &ReturnMethod::Stream {
+                                        name: args[1],
+                                    },
+                                    t,
+                                );
+                            to_return.reply(&context)
                         }
-                        Ok(res @ r::QueryResult::DONE { .. }) => {
-                            Ok(res.reply(&context))
-                        }
-
-                        Ok(r::QueryResult::Array {
-                            array: rows,
-                            names,
-                        }) => {
-                            let result = stream_query_result_array(
-                                &context, args[1], &names, rows,
-                            );
-                            match result {
-                                Ok(result) => {
-                                    Ok(result.reply(&context))
-                                }
-                                Err(e) => Err(e.reply(&context)),
-                            }
-                        }
-                        Err(e) => Err(e.reply(&context)),
+                        Err(mut err) => err.reply(&context),
                     }
                 }
             }
-        });
-    unwrap_return_code(return_code)
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -650,21 +625,19 @@ pub extern "C" fn MakeCopyNow(
     let context = r::rm::Context::new(ctx);
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
-        Err(error) => {
+        Err(mut error) => {
             return error.reply(&context);
         }
     };
 
-    let return_code = check_args(argvector, 3)
-        .or_else(|e| {
-            Err(unsafe {
-                r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
-                    context.as_ptr(),
-                    e.as_ptr(),
-                )
-            })
-        })
-        .and_then(|argvector| {
+    match check_args(argvector, 3) {
+        Err(e) => unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                e.as_ptr(),
+            )
+        },
+        Ok(argvector) => {
             let source_db =
                 get_dbkey_from_name(context.as_ptr(), argvector[1]);
             if source_db.is_err() {
@@ -672,14 +645,15 @@ pub extern "C" fn MakeCopyNow(
                     "Error in opening the SOURCE database",
                 )
                 .unwrap();
-                return Err(unsafe {
+                return unsafe {
                     r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                         context.as_ptr(),
                         error.as_ptr(),
                     )
-                });
+                };
             }
             let source_db = source_db.unwrap();
+            let source_db = ManuallyDrop::new(source_db);
 
             let dest_db =
                 get_dbkey_from_name(context.as_ptr(), argvector[2]);
@@ -688,33 +662,43 @@ pub extern "C" fn MakeCopyNow(
                     "Error in opening the DESTINATION database",
                 )
                 .unwrap();
-                return Err(unsafe {
+                return unsafe {
                     r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
                         context.as_ptr(),
                         error.as_ptr(),
                     )
-                });
+                };
             }
 
             let dest_db = dest_db.unwrap();
+            let dest_db = ManuallyDrop::new(dest_db);
 
-            let result = {
-                let dest_loopdata = &dest_db.loop_data;
-                let source_loopdata = &source_db.loop_data;
-                r::do_copy(&source_loopdata.get_db(), dest_loopdata)
-            };
-            mem::forget(source_db);
-            mem::forget(dest_db);
-            match result {
-                Ok(res) => {
+            let dest_loopdata = &dest_db.loop_data;
+            let source_loopdata = &source_db.loop_data;
+            let t = std::time::Instant::now()
+                + std::time::Duration::from_secs(10);
+            let mut result = match r::do_copy(
+                &source_loopdata.get_db(),
+                dest_loopdata,
+            ) {
+                Ok(r) => {
                     ReplicateVerbatim(&context);
-                    Ok(res.reply(&context))
+                    r.create_data_to_return(
+                        &context,
+                        &ReturnMethod::Reply,
+                        t,
+                    )
                 }
-                Err(e) => Err(e.reply(&context)),
-            }
-        });
+                Err(r) => r.create_data_to_return(
+                    &context,
+                    &ReturnMethod::Reply,
+                    t,
+                ),
+            };
 
-    unwrap_return_code(return_code)
+            result.reply(&context)
+        }
+    }
 }
 
 #[allow(non_snake_case)]

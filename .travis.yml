@@ -1,62 +1,45 @@
-
 services: docker
-
 git:
   submodules: false
-
 sudo: required
-
 language: rust
 rust:
-  - stable
-  - beta
-  - nightly
-
+- stable
+- beta
+- nightly
 env:
   global:
-    - CRATE_NAME=rediSQL
+  - CRATE_NAME=rediSQL
+script:
+  - cargo build --verbose --all
+  - cargo test --verbose --all
+  - cargo build --verbose --all --release
 
 matrix:
   include:
-    
-    # Linux
-    - env: TARGET=aarch64-unknown-linux-gnu
-    - env: TARGET=arm-unknown-linux-gnueabi
-    - env: TARGET=armv7-unknown-linux-gnueabihf
-    - env: TARGET=i686-unknown-linux-gnu
-    - env: TARGET=i686-unknown-linux-musl
-    - env: TARGET=mips-unknown-linux-gnu
-    - env: TARGET=mips64-unknown-linux-gnuabi64
-    - env: TARGET=mips64el-unknown-linux-gnuabi64
-    - env: TARGET=mipsel-unknown-linux-gnu
-    - env: TARGET=powerpc-unknown-linux-gnu
-    - env: TARGET=powerpc64-unknown-linux-gnu
-    - env: TARGET=powerpc64le-unknown-linux-gnu
-    - env: TARGET=s390x-unknown-linux-gnu DISABLE_TESTS=1
-    - env: TARGET=x86_64-unknown-linux-gnu
-      dist: trusty
-    - env: TARGET=x86_64-unknown-linux-musl
-
-    # OSX
-    - env: TARGET=i686-apple-darwin
-      os: osx
-    - env: TARGET=x86_64-apple-darwin
-      os: osx
-
-    # *BSD
-    - env: TARGET=i686-unknown-freebsd DISABLE_TESTS=1
-    - env: TARGET=x86_64-unknown-freebsd DISABLE_TESTS=1
-    - env: TARGET=x86_64-unknown-netbsd DISABLE_TESTS=1
-
-    # Windows
-    - env: TARGET=x86_64-pc-windows-gnu
-
-    # Testing other channels
-    - env: TARGET=x86_64-unknown-linux-gnu
-      rust: nightly
+  - env: TARGET=arm-unknown-linux-gnueabi
+  - env: TARGET=armv7-unknown-linux-gnueabihf
+  - env: TARGET=x86_64-unknown-linux-gnu
 
 cache: cargo
-
 notifications:
   email:
     on_success: never
+before_deploy:
+  - ls $TRAVIS_BUILD_DIR/target/release
+  - echo "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}_(release|debug).so"
+  - cp --verbose $TRAVIS_BUILD_DIR/target/release/libredis_sql.so "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}_release.so"
+  - cp --verbose $TRAVIS_BUILD_DIR/target/debug/libredis_sql.so "${TRAVIS_BUILD_DIR}/target/release/RediSQL_${TRAVIS_TAG}_${TRAVIS_COMMIT:0:6}_${TARGET}_debug.so"
+  - ls $TRAVIS_BUILD_DIR/target/release
+  
+deploy:
+  skip_cleanup: true
+  provider: releases
+  api_key:
+    secure: IFiEcn4ln1fJEKfEUfXtGlq3dV4cl/1r36vMtGnUoOqoSR7yioCsWHszkIM0+KnvD08fC7hMiZSY7K2B5QKbirnbNZ7ha4hEESe+YTQlGETJsrN6EcVTSRJ/jMyY7LE3kHo565R2do5XsFhTz5KymJ562woaAGtYP+qmqj1DBFsDjoxLNzON23o5nnREjKyjDBu4Ie6PNuVm/pMUgjt0Erwhklac2tKvAJUUeT4PTEZ1FEJi3ubYoz0XLbR9wp8Ih3I9YEIOXpaLmoBmo7u8g/wCStSbZSvorssZfIP9uI9Q+VmQj7agMeI4nrm7uOas8uPf/UFFsY41dqKoWhO06XXLAot/PUw3saSpdpIobAtyX9x1SUb2BPs1hPwcoU6Pz/yBntr5xx0yLqdppcWof28t9S4dUeFstAtrkQB0iIjPa7J0JywWVcBQ1iPY1e87QeZKN9GJSf1Gk0B4AhR4ORLskvS8u29w2ZA1ca8PWJ9fokH3JYoYJGE8GtXqMFCW3ENTu953uX2B9f2JntqqYtFX8bk+YxpO/uBY+aAFS59ApCWhQDshx1zMzFLwqSxIpz5Qkgddso50L8Az39Kx1Due0V0FnO4G72q6rzSQayrAhxLdDF3z5xcvbjbsYrSAue5Ly5Y814D5ywKJMsjlGzz4JTNJjSvfChWihHwW61w=
+  file_glob: true
+  file: $TRAVIS_BUILD_DIR/target/release/RediSQL_*.so
+  on:
+    repo: RedBeardLab/rediSQL
+    branch: timeout_honor
+    tags: true
