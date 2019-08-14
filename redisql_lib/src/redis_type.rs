@@ -29,6 +29,7 @@ impl Context {
         }
     }
     pub fn no_client() -> Self {
+        debug!("New thread safe context");
         let ctx = unsafe {
             ffi::RedisModule_GetThreadSafeContext.unwrap()(
                 std::ptr::null_mut(),
@@ -36,13 +37,14 @@ impl Context {
         };
         Context {
             ctx,
-            thread_safe: false,
+            thread_safe: true,
         }
     }
     pub fn as_ptr(&self) -> *mut ffi::RedisModuleCtx {
         self.ctx
     }
     pub fn thread_safe(blocked_client: &BlockedClient) -> Context {
+        debug!("New thread safe context");
         let ctx = unsafe {
             ffi::RedisModule_GetThreadSafeContext.unwrap()(
                 blocked_client.as_ptr(),
