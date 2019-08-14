@@ -32,8 +32,10 @@ extern "C" fn reply(
             context.as_ptr(),
         ) as *mut *mut RedisReply
     };
+    let result_wrap: Box<*mut r::RedisReply> =
+        unsafe { Box::from_raw(result) };
     let mut result: Box<r::RedisReply> =
-        unsafe { Box::from_raw(*result) };
+        unsafe { Box::from_raw(*result_wrap) };
     result.reply(&context)
 }
 
