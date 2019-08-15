@@ -16,7 +16,7 @@ pub mod ffi {
 #[derive(Debug)]
 pub struct Context {
     ctx: *mut ffi::RedisModuleCtx,
-    thread_safe: bool,
+    need_destructor: bool,
 }
 
 pub struct ContextLock {}
@@ -25,7 +25,7 @@ impl Context {
     pub fn new(ctx: *mut ffi::RedisModuleCtx) -> Context {
         Context {
             ctx,
-            thread_safe: false,
+            need_destructor: false,
         }
     }
     pub fn no_client() -> Self {
@@ -37,7 +37,7 @@ impl Context {
         };
         Context {
             ctx,
-            thread_safe: true,
+            need_destructor: true,
         }
     }
     pub fn as_ptr(&self) -> *mut ffi::RedisModuleCtx {
@@ -52,11 +52,11 @@ impl Context {
         };
         Context {
             ctx,
-            thread_safe: true,
+            need_destructor: true,
         }
     }
     pub fn lock(&self) -> ContextLock {
-        if self.thread_safe {
+        if self.need_destructor {
             unsafe {
                 ffi::RedisModule_ThreadSafeContextLock.unwrap()(
                     self.as_ptr(),
@@ -66,7 +66,7 @@ impl Context {
         ContextLock {}
     }
     pub fn release(&self, _lock: ContextLock) {
-        if self.thread_safe {
+        if self.need_destructor {
             unsafe {
                 ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(
                     self.as_ptr(),
@@ -78,7 +78,7 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
-        if self.thread_safe {
+        if self.need_destructor {
             debug!("Free thread safe context");
             unsafe {
                 ffi::RedisModule_FreeThreadSafeContext.unwrap()(
