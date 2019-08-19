@@ -17,6 +17,8 @@ use sync_engine::Replicate;
 
 use redisql_lib::statistics::STATISTICS;
 
+use uuid::Uuid;
+
 const REDISQL_VERSION: Option<&'static str> =
     option_env!("CARGO_PKG_VERSION");
 
@@ -828,10 +830,14 @@ pub extern "C" fn CreateDB(
                 r::rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
             } {
                 r::rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
+                    let db_name = format!(
+                        "file:{}?mode=memory&cache=shared",
+                        Uuid::new_v4().to_simple()
+                    );
                     let (path, in_memory): (&str, bool) =
                         match argvector.len() {
                             3 => (argvector[2], false),
-                            _ => (":memory:", true),
+                            _ => (&db_name, true),
                         };
                     match get_arc_connection(path) {
                         Ok(rc) => {
