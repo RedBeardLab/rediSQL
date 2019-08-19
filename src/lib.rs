@@ -13,7 +13,6 @@ use redisql_lib::redis::{
 };
 use redisql_lib::redis_type::Context;
 use redisql_lib::sqlite as sql;
-use redisql_lib::virtual_tables as vtab;
 use std::ffi::CString;
 use std::fs::{remove_file, File};
 use std::ptr;
@@ -142,14 +141,7 @@ unsafe extern "C" fn rdb_load(
     }
 
     let (tx, rx) = channel();
-    let redis_context = match vtab::register_modules(&conn) {
-        Err(e) => {
-            println!("{}", e);
-            return ptr::null_mut();
-        }
-        Ok(redis_context) => redis_context,
-    };
-    let db = r::DBKey::new_from_arc(tx, conn, true, redis_context);
+    let db = r::DBKey::new_from_arc(tx, conn, true);
     let mut loop_data = db.loop_data.clone();
 
     thread::spawn(move || r::listen_and_execute(&mut loop_data, &rx));

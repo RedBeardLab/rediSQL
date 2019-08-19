@@ -1,6 +1,5 @@
 use fnv::FnvHashMap;
 use std;
-use std::cell::RefCell;
 use std::clone::Clone;
 use std::collections::hash_map::Entry;
 use std::convert::TryFrom;
@@ -11,7 +10,7 @@ use std::os::raw::{c_char, c_long};
 use std::slice;
 use std::str;
 use std::sync::mpsc::{Receiver, RecvError, Sender};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 pub use crate::redis_type as rm;
 use crate::redis_type::{
@@ -203,46 +202,10 @@ impl<'a> StatementCache<'a> for ReplicationBook {
     }
 }
 
-type ProtectedRedisContext =
-    Arc<Mutex<Arc<Mutex<RefCell<Option<Context>>>>>>;
-
-pub struct RedisContextSet<'external>(
-    MutexGuard<'external, Arc<Mutex<RefCell<Option<Context>>>>>,
-);
-
-impl<'a> RedisContextSet<'a> {
-    fn new(
-        ctx: Context,
-        redis_ctx: &'a ProtectedRedisContext,
-    ) -> RedisContextSet<'a> {
-        let wrap = redis_ctx.lock().unwrap();
-        {
-            let locked = wrap.lock().unwrap();
-            *locked.borrow_mut() = Some(ctx);
-        }
-        RedisContextSet(wrap)
-    }
-    pub fn release(&self) -> Context {
-        let locked = self.0.lock().unwrap();
-        let none_to_ctx = RefCell::new(None);
-        locked.swap(&none_to_ctx);
-        none_to_ctx.into_inner().unwrap()
-    }
-}
-
-impl<'a> Drop for RedisContextSet<'a> {
-    fn drop(&mut self) {
-        let locked = self.0.lock().unwrap();
-        *locked.borrow_mut() = None;
-        debug!("RedisContextSet | Drop");
-    }
-}
-
 #[derive(Clone)]
 pub struct Loop {
     db: Arc<Mutex<RawConnection>>,
     replication_book: ReplicationBook,
-    redis_context: ProtectedRedisContext,
 }
 
 impl Drop for Loop {
@@ -256,10 +219,6 @@ unsafe impl Send for Loop {}
 pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
     fn get_db(&self) -> Arc<Mutex<RawConnection>>;
-    fn set_rc(&self, ctx: Context) -> RedisContextSet;
-    fn with_contex_set<F>(&self, ctx: Context, f: F)
-    where
-        F: Fn(RedisContextSet) -> ();
 }
 
 impl LoopData for Loop {
@@ -269,40 +228,14 @@ impl LoopData for Loop {
     fn get_db(&self) -> Arc<Mutex<RawConnection>> {
         Arc::clone(&self.db)
     }
-    fn set_rc(&self, ctx: Context) -> RedisContextSet {
-        debug!("set_rc | enter");
-        let wrap = self.redis_context.lock().unwrap();
-
-        {
-            let locked = wrap.lock().unwrap();
-            *locked.borrow_mut() = Some(ctx);
-        }
-
-        debug!("set_rc | exit");
-        RedisContextSet(wrap)
-    }
-    fn with_contex_set<F>(&self, ctx: Context, f: F)
-    where
-        F: Fn(RedisContextSet) -> (),
-    {
-        let redis_context =
-            RedisContextSet::new(ctx, &self.redis_context);
-        f(redis_context);
-        debug!("with_contex_set | exit");
-    }
 }
 
 impl Loop {
-    fn new_from_arc(
-        db: Arc<Mutex<RawConnection>>,
-        redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
-    ) -> Loop {
+    fn new_from_arc(db: Arc<Mutex<RawConnection>>) -> Loop {
         let replication_book = ReplicationBook::new(&db);
-        let redis_context = Arc::new(Mutex::new(redis_context));
         Loop {
             db,
             replication_book,
-            redis_context,
         }
     }
 }
@@ -1042,22 +975,16 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 timeout,
             }) => {
                 debug!("Exec | Query = {:?}", query);
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        let result =
-                            do_execute(&loopdata.get_db(), query);
-                        match result {
-                            Ok(_) => STATISTICS.exec_ok(),
-                            Err(_) => STATISTICS.exec_err(),
-                        }
-                        return_value(
-                            &client,
-                            &ReturnMethod::Reply,
-                            result,
-                            timeout,
-                        );
-                    },
+                let result = do_execute(&loopdata.get_db(), query);
+                match result {
+                    Ok(_) => STATISTICS.exec_ok(),
+                    Err(_) => STATISTICS.exec_err(),
+                }
+                return_value(
+                    &client,
+                    &ReturnMethod::Reply,
+                    result,
+                    timeout,
                 );
                 debug!("Exec | DONE, returning result");
             }
@@ -1068,33 +995,27 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 client,
             }) => {
                 debug!("Query | Query = {:?}", query);
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        let result =
-                            do_query(&loopdata.get_db(), query);
+                let result = do_query(&loopdata.get_db(), query);
 
-                        match (&return_method, &result) {
-                            (ReturnMethod::Reply, Ok(_)) => {
-                                STATISTICS.query_ok()
-                            }
-                            (ReturnMethod::Reply, Err(_)) => {
-                                STATISTICS.query_err()
-                            }
-                            (ReturnMethod::Stream { .. }, Ok(_)) => {
-                                STATISTICS.query_into_ok()
-                            }
-                            (ReturnMethod::Stream { .. }, Err(_)) => {
-                                STATISTICS.query_into_err()
-                            }
-                        };
-                        return_value(
-                            &client,
-                            &return_method,
-                            result,
-                            timeout,
-                        );
-                    },
+                match (&return_method, &result) {
+                    (ReturnMethod::Reply, Ok(_)) => {
+                        STATISTICS.query_ok()
+                    }
+                    (ReturnMethod::Reply, Err(_)) => {
+                        STATISTICS.query_err()
+                    }
+                    (ReturnMethod::Stream { .. }, Ok(_)) => {
+                        STATISTICS.query_into_ok()
+                    }
+                    (ReturnMethod::Stream { .. }, Err(_)) => {
+                        STATISTICS.query_into_err()
+                    }
+                };
+                return_value(
+                    &client,
+                    &return_method,
+                    result,
+                    timeout,
                 );
             }
             Ok(Command::UpdateStatement {
@@ -1177,24 +1098,19 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     "ExecStatement | Identifier = {:?} Arguments = {:?}",
                     identifier, arguments
                 );
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        let result = loopdata
-                            .get_replication_book()
-                            .exec_statement(identifier, &arguments);
-                        match result {
-                            Ok(_) => STATISTICS.exec_statement_ok(),
-                            Err(_) => STATISTICS.exec_statement_err(),
-                        }
+                let result = loopdata
+                    .get_replication_book()
+                    .exec_statement(identifier, &arguments);
+                match result {
+                    Ok(_) => STATISTICS.exec_statement_ok(),
+                    Err(_) => STATISTICS.exec_statement_err(),
+                }
 
-                        return_value(
-                            &client,
-                            &ReturnMethod::Reply,
-                            result,
-                            timeout,
-                        );
-                    },
+                return_value(
+                    &client,
+                    &ReturnMethod::Reply,
+                    result,
+                    timeout,
                 );
             }
             Ok(Command::QueryStatement {
@@ -1204,67 +1120,53 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 timeout,
                 client,
             }) => {
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        let result = loopdata
-                            .get_replication_book()
-                            .query_statement(
-                                identifier,
-                                arguments.as_slice(),
-                            );
-                        match (&return_method, &result) {
-                            (ReturnMethod::Reply, Ok(_)) => {
-                                STATISTICS.query_statement_ok()
-                            }
-                            (ReturnMethod::Reply, Err(_)) => {
-                                STATISTICS.query_statement_err()
-                            }
-                            (ReturnMethod::Stream { .. }, Ok(_)) => {
-                                STATISTICS.query_statement_into_ok()
-                            }
-                            (ReturnMethod::Stream { .. }, Err(_)) => {
-                                STATISTICS.query_statement_into_err()
-                            }
-                        };
+                let result =
+                    loopdata.get_replication_book().query_statement(
+                        identifier,
+                        arguments.as_slice(),
+                    );
+                match (&return_method, &result) {
+                    (ReturnMethod::Reply, Ok(_)) => {
+                        STATISTICS.query_statement_ok()
+                    }
+                    (ReturnMethod::Reply, Err(_)) => {
+                        STATISTICS.query_statement_err()
+                    }
+                    (ReturnMethod::Stream { .. }, Ok(_)) => {
+                        STATISTICS.query_statement_into_ok()
+                    }
+                    (ReturnMethod::Stream { .. }, Err(_)) => {
+                        STATISTICS.query_statement_into_err()
+                    }
+                };
 
-                        return_value(
-                            &client,
-                            &return_method,
-                            result,
-                            timeout,
-                        );
-                    },
+                return_value(
+                    &client,
+                    &return_method,
+                    result,
+                    timeout,
                 );
             }
             Ok(Command::MakeCopy {
                 destination,
                 client,
             }) => {
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        debug!("MakeCopy | Doing do_copy");
-                        let destination_loopdata =
-                            &destination.loop_data;
-                        let result = do_copy(
-                            &loopdata.get_db(),
-                            destination_loopdata,
-                        );
-                        match result {
-                            Ok(_) => STATISTICS.copy_ok(),
-                            Err(_) => STATISTICS.copy_err(),
-                        };
-                        let t = std::time::Instant::now()
-                            + std::time::Duration::from_secs(10);
+                debug!("MakeCopy | Doing do_copy");
+                let destination_loopdata = &destination.loop_data;
+                let result =
+                    do_copy(&loopdata.get_db(), destination_loopdata);
+                match result {
+                    Ok(_) => STATISTICS.copy_ok(),
+                    Err(_) => STATISTICS.copy_err(),
+                };
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
 
-                        return_value(
-                            &client,
-                            &ReturnMethod::Reply,
-                            result,
-                            t,
-                        );
-                    },
+                return_value(
+                    &client,
+                    &ReturnMethod::Reply,
+                    result,
+                    t,
                 );
                 std::mem::forget(destination);
             }
@@ -1332,9 +1234,8 @@ impl DBKey {
         tx: Sender<Command>,
         db: Arc<Mutex<RawConnection>>,
         in_memory: bool,
-        redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
     ) -> DBKey {
-        let loop_data = Loop::new_from_arc(db, redis_context);
+        let loop_data = Loop::new_from_arc(db);
         DBKey {
             tx,
             in_memory,

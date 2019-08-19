@@ -169,8 +169,6 @@ pub extern "C" fn ExecNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let db = dbkey.loop_data.get_db();
                     let result = do_execute(&db, args[2]);
                     let t = std::time::Instant::now()
@@ -228,8 +226,6 @@ pub extern "C" fn QueryNow(
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = do_query(&db, args[2]);
                     let t = std::time::Instant::now()
                         + std::time::Duration::from_secs(10);
@@ -282,8 +278,6 @@ pub extern "C" fn QueryNowInto(
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = do_query(&db, args[3]);
                     let return_method =
                         ReturnMethod::Stream { name: args[1] };
@@ -340,8 +334,6 @@ pub extern "C" fn ExecStatementNow(
                     // _rc must be
                     // 1. Define befor the call to exec_statement() and .reply(&context)
                     // 2. Dropped before we forget the `dbkey`
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -391,8 +383,6 @@ pub extern "C" fn CreateStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -440,8 +430,6 @@ pub extern "C" fn UpdateStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -489,8 +477,6 @@ pub extern "C" fn DeleteStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -537,8 +523,6 @@ pub extern "C" fn QueryStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -588,8 +572,6 @@ pub extern "C" fn QueryStatementNowInto(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()

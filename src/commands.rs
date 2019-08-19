@@ -10,7 +10,6 @@ use redisql_lib::redis::{
 };
 use redisql_lib::redis_type::ReplicateVerbatim;
 use redisql_lib::sqlite::{get_arc_connection, QueryResult};
-use redisql_lib::virtual_tables as vtab;
 
 use redisql_lib::redis as r;
 
@@ -845,18 +844,12 @@ pub extern "C" fn CreateDB(
                                         rc.clone(),
                                         path,
                                     )
-                                })
-                                .and_then(|_| {
-                                    vtab::register_modules(&rc)
                                 }) {
                                 Err(mut e) => e.reply(&context),
-                                Ok(vtab_context) => {
+                                Ok(()) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(
-                                        tx,
-                                        rc,
-                                        in_memory,
-                                        vtab_context,
+                                        tx, rc, in_memory,
                                     );
                                     let mut loop_data =
                                         db.loop_data.clone();
