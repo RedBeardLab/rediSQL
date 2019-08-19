@@ -29,11 +29,11 @@ extern "C" fn reply(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut *mut RedisReply
+        ) as *mut *mut dyn RedisReply
     };
-    let result_wrap: Box<*mut r::RedisReply> =
+    let result_wrap: Box<*mut dyn r::RedisReply> =
         unsafe { Box::from_raw(result) };
-    let mut result: Box<r::RedisReply> =
+    let mut result: Box<dyn r::RedisReply> =
         unsafe { Box::from_raw(*result_wrap) };
     result.reply(&context)
 }
@@ -66,7 +66,7 @@ pub extern "C" fn ExecStatement(
     };
 
     match argvector.len() {
-        0...2 => {
+        0..=2 => {
             let error = CString::new(
                 "Wrong number of arguments, it \
                  needs at least 3",
@@ -153,7 +153,7 @@ pub extern "C" fn QueryStatement(
     };
 
     match argvector.len() {
-        0...2 => {
+        0..=2 => {
             let error = CString::new(
                 "Wrong number of arguments, it \
                  needs at least 3",
@@ -231,7 +231,7 @@ pub extern "C" fn QueryStatementInto(
     };
 
     match argvector.len() {
-        0...3 => {
+        0..=3 => {
             let error = CString::new(
                 "Wrong number of arguments, it \
                  needs at least 4",

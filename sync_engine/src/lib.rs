@@ -317,7 +317,7 @@ pub extern "C" fn ExecStatementNow(
     };
 
     match argvector.len() {
-        0...2 => {
+        0..=2 => {
             let str_error = format!("Wrong number of arguments, it needs at least more than 2, you provide only {}",
                                     argvector.len());
             r::rm::ReplyWithError(&context, &str_error)
@@ -509,7 +509,7 @@ pub extern "C" fn QueryStatementNow(
     };
 
     match argvector.len() {
-        0...2 => {
+        0..=2 => {
             let str_error = format!("Wrong number of arguments, it needs at least more than 2, you provide only {}",
                                     argvector.len());
             r::rm::ReplyWithError(&context, &str_error)
