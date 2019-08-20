@@ -21,7 +21,7 @@ use crate::redisql_error as err;
 use crate::redisql_error::RediSQLError;
 
 use crate::sqlite::{
-    Cursor, Entity, QueryResult, RawConnection, SQLite3Error,
+    Connection, Cursor, Entity, QueryResult, SQLite3Error,
     StatementTrait,
 };
 
@@ -34,11 +34,11 @@ use crate::statistics::STATISTICS;
 #[derive(Clone)]
 pub struct ReplicationBook {
     data: Arc<RwLock<FnvHashMap<String, (MultiStatement, bool)>>>,
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 }
 
 pub trait StatementCache<'a> {
-    fn new(db: &Arc<Mutex<RawConnection>>) -> Self;
+    fn new(db: &Arc<Mutex<Connection>>) -> Self;
     fn is_statement_present(&self, identifier: &str) -> bool;
     fn insert_new_statement(
         &mut self,
@@ -67,7 +67,7 @@ pub trait StatementCache<'a> {
 }
 
 impl<'a> StatementCache<'a> for ReplicationBook {
-    fn new(db: &Arc<Mutex<RawConnection>>) -> Self {
+    fn new(db: &Arc<Mutex<Connection>>) -> Self {
         ReplicationBook {
             data: Arc::new(RwLock::new(FnvHashMap::default())),
             db: Arc::clone(db),
@@ -204,7 +204,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
 
 #[derive(Clone)]
 pub struct Loop {
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     replication_book: ReplicationBook,
 }
 
@@ -218,20 +218,20 @@ unsafe impl Send for Loop {}
 
 pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
-    fn get_db(&self) -> Arc<Mutex<RawConnection>>;
+    fn get_db(&self) -> Arc<Mutex<Connection>>;
 }
 
 impl LoopData for Loop {
     fn get_replication_book(&self) -> ReplicationBook {
         self.replication_book.clone()
     }
-    fn get_db(&self) -> Arc<Mutex<RawConnection>> {
+    fn get_db(&self) -> Arc<Mutex<Connection>> {
         Arc::clone(&self.db)
     }
 }
 
 impl Loop {
-    fn new_from_arc(db: Arc<Mutex<RawConnection>>) -> Loop {
+    fn new_from_arc(db: Arc<Mutex<Connection>>) -> Loop {
         let replication_book = ReplicationBook::new(&db);
         Loop {
             db,
@@ -700,7 +700,7 @@ impl RedisReply for QueryResult {
 }
 
 pub fn do_execute(
-    db: &Arc<Mutex<RawConnection>>,
+    db: &Arc<Mutex<Connection>>,
     query: &str,
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -711,7 +711,7 @@ pub fn do_execute(
 }
 
 pub fn do_query(
-    db: &Arc<Mutex<RawConnection>>,
+    db: &Arc<Mutex<Connection>>,
     query: &str,
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -727,7 +727,7 @@ pub fn do_query(
 /// implements the copy of the source database into the destination one
 /// it also leak the two DBKeys
 pub fn do_copy<L: LoopData>(
-    source_db: &Arc<Mutex<RawConnection>>,
+    source_db: &Arc<Mutex<Connection>>,
     destination_loopdata: &L,
 ) -> Result<impl Returner, err::RediSQLError> {
     debug!("DoCopy | Start");
@@ -1232,7 +1232,7 @@ pub struct DBKey {
 impl DBKey {
     pub fn new_from_arc(
         tx: Sender<Command>,
-        db: Arc<Mutex<RawConnection>>,
+        db: Arc<Mutex<Connection>>,
         in_memory: bool,
     ) -> DBKey {
         let loop_data = Loop::new_from_arc(db);
@@ -1251,7 +1251,7 @@ impl Drop for DBKey {
 }
 
 pub fn create_metadata_table(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 ) -> Result<(), SQLite3Error> {
     let statement = "CREATE TABLE IF NOT EXISTS RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
@@ -1261,7 +1261,7 @@ pub fn create_metadata_table(
 }
 
 pub fn insert_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     data_type: &str,
     key: &str,
     value: &str,
@@ -1277,7 +1277,7 @@ pub fn insert_metadata(
 }
 
 pub fn enable_foreign_key(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 ) -> Result<(), SQLite3Error> {
     let enable_foreign_key = "PRAGMA foreign_keys = ON;";
     match MultiStatement::new(db, enable_foreign_key) {
@@ -1290,7 +1290,7 @@ pub fn enable_foreign_key(
 }
 
 fn update_statement_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     key: &str,
     value: &str,
 ) -> Result<(), SQLite3Error> {
@@ -1305,7 +1305,7 @@ fn update_statement_metadata(
 }
 
 fn remove_statement_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     key: &str,
 ) -> Result<(), SQLite3Error> {
     let statement = "DELETE FROM RediSQLMetadata WHERE data_type = 'statement' AND key = ?1";
@@ -1317,7 +1317,7 @@ fn remove_statement_metadata(
 }
 
 fn get_statement_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 ) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT * FROM RediSQLMetadata WHERE data_type = 'statement';";
 
@@ -1327,7 +1327,7 @@ fn get_statement_metadata(
 }
 
 fn get_path_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 ) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT value FROM RediSQLMetadata WHERE data_type = 'path' AND key = 'path';";
 
@@ -1336,7 +1336,7 @@ fn get_path_metadata(
     QueryResult::try_from(cursor)
 }
 
-pub fn is_redisql_database(db: Arc<Mutex<RawConnection>>) -> bool {
+pub fn is_redisql_database(db: Arc<Mutex<Connection>>) -> bool {
     let query = "SELECT name FROM sqlite_master WHERE type='table' AND name='RediSQLMetadata;";
 
     let query = MultiStatement::new(db, query);
@@ -1358,7 +1358,7 @@ pub fn is_redisql_database(db: Arc<Mutex<RawConnection>>) -> bool {
 }
 
 pub fn get_path_from_db(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 ) -> Result<String, RediSQLError> {
     match get_path_metadata(db) {
         Err(e) => Err(e),
@@ -1389,14 +1389,14 @@ pub fn get_path_from_db(
 }
 
 pub fn insert_path_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     path: &str,
 ) -> Result<(), SQLite3Error> {
     insert_metadata(db, "path", "path", path)
 }
 
 fn update_path_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     value: &str,
 ) -> Result<(), SQLite3Error> {
     let statement =
@@ -1409,8 +1409,8 @@ fn update_path_metadata(
 }
 
 pub fn make_backup(
-    conn1: &RawConnection,
-    conn2: &RawConnection,
+    conn1: &Connection,
+    conn2: &Connection,
 ) -> Result<i32, SQLite3Error> {
     match sql::create_backup(conn1, conn2) {
         Err(e) => Err(e),
@@ -1426,10 +1426,10 @@ pub fn make_backup(
 }
 
 pub fn create_backup(
-    conn: &RawConnection,
+    conn: &Connection,
     path: &str,
 ) -> Result<i32, SQLite3Error> {
-    match RawConnection::open_connection(path) {
+    match Connection::open_connection(path) {
         Err(e) => Err(e),
         Ok(new_db) => make_backup(conn, &new_db),
     }
@@ -1574,7 +1574,7 @@ pub fn reply_with_error_from_key_type(
 }
 
 fn create_statement(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     identifier: &str,
     statement: &str,
 ) -> Result<MultiStatement, err::RediSQLError> {
@@ -1584,7 +1584,7 @@ fn create_statement(
 }
 
 fn update_statement(
-    db: &Arc<Mutex<RawConnection>>,
+    db: &Arc<Mutex<Connection>>,
     identifier: &str,
     statement: &str,
 ) -> Result<MultiStatement, err::RediSQLError> {
@@ -1594,7 +1594,7 @@ fn update_statement(
 }
 
 fn remove_statement(
-    db: &Arc<Mutex<RawConnection>>,
+    db: &Arc<Mutex<Connection>>,
     identifier: &str,
 ) -> Result<(), err::RediSQLError> {
     remove_statement_metadata(Arc::clone(db), identifier)

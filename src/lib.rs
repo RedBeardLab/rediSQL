@@ -97,7 +97,7 @@ unsafe extern "C" fn rdb_load(
         return ptr::null_mut();
     }
 
-    let on_disk = match sql::RawConnection::open_connection(&path) {
+    let on_disk = match sql::Connection::open_connection(&path) {
         Err(_) => {
             println!("Error in opening the rdb database");
             return ptr::null_mut();
@@ -114,11 +114,10 @@ unsafe extern "C" fn rdb_load(
         }
     };
 
-    let db = match sql::RawConnection::open_connection(&previous_path)
-    {
+    let db = match sql::Connection::open_connection(&previous_path) {
         Err(_) => {
             println!("WARN: Was impossible to open the database {}, using an in-memory database!", previous_path);
-            match sql::RawConnection::open_connection(":memory:") {
+            match sql::Connection::open_connection(":memory:") {
                 Err(_) => {
                     println!("ERROR: Was impossible to open also an in-memory database, fail!");
                     return ptr::null_mut();

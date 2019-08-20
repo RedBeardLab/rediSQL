@@ -8,7 +8,7 @@ use std::os::raw;
 use std::sync::{Arc, Mutex};
 
 use redisql_lib::sqlite::ffi;
-use redisql_lib::sqlite::RawConnection;
+use redisql_lib::sqlite::Connection;
 use redisql_lib::sqlite::SQLiteConnection;
 
 use redisql_lib::redis as r;
@@ -31,7 +31,7 @@ struct DumpIterator {
 }
 
 impl<'b> DumpIterator {
-    fn new(conn: &Arc<Mutex<RawConnection>>) -> DumpIterator {
+    fn new(conn: &Arc<Mutex<Connection>>) -> DumpIterator {
         let db = conn.lock().unwrap();
         let buffer: [u8; 4096] = unsafe { zeroed() };
         let fd = unsafe { ffi::start((*db).get_db()) };
