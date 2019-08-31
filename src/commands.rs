@@ -316,7 +316,7 @@ pub extern "C" fn Exec(
     };
 
     match argvector.len() {
-        3 => {
+        len if len == 3 || len == 5 => {
             let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
@@ -327,7 +327,15 @@ pub extern "C" fn Exec(
                     );
                 }
             };
-            let ch = &db.dbkey.tx;
+            let connection = match len {
+                3 => None,
+                5 => match argvector[3] {
+                    "using" => Some(argvector[4]),
+                    _ => None,
+                },
+                _ => unreachable!(),
+            };
+            let ch = db.get_channel(connection);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -406,10 +414,7 @@ pub extern "C" fn Query(
 
     match argvector.len() {
         3 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -419,7 +424,7 @@ pub extern "C" fn Query(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -485,10 +490,7 @@ pub extern "C" fn QueryInto(
         4 => {
             let stream_name = argvector[1];
 
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[2],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[2]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -498,7 +500,7 @@ pub extern "C" fn QueryInto(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -565,10 +567,7 @@ pub extern "C" fn CreateStatement(
 
     match argvector.len() {
         4 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -578,7 +577,7 @@ pub extern "C" fn CreateStatement(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -649,10 +648,7 @@ pub extern "C" fn UpdateStatement(
 
     match argvector.len() {
         4 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -662,7 +658,7 @@ pub extern "C" fn UpdateStatement(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -734,10 +730,7 @@ pub extern "C" fn DeleteStatement(
 
     match argvector.len() {
         3 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -747,7 +740,7 @@ pub extern "C" fn DeleteStatement(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -831,8 +824,7 @@ pub extern "C" fn CreateDB(
                 r::rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
                     let db_name = format!(
                         "file:{}?mode=memory&cache=shared",
-                        //Uuid::new_v4().to_simple()
-                        "fooooo"
+                        Uuid::new_v4().to_simple()
                     );
                     let (path, in_memory): (&str, bool) =
                         match argvector.len() {
@@ -1144,7 +1136,7 @@ pub extern "C" fn AddRediSQLConnection(
     {
         let connection_name = argvector[2];
 
-        db.dbkey.add_connection(connection_name);
+        unsafe { (*db.dbkey).add_connection(connection_name) };
         println!("Done add_connection");
     }
     r::rm::ReplyWithOk(&context);

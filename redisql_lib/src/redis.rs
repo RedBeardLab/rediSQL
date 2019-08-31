@@ -1286,37 +1286,34 @@ impl DBKey {
         if self.connections.get(clone_name).is_some() {
             return Err(());
         }
-        let replication_book = self.loop_data.get_replication_book();
-        let db = self.loop_data.get_db();
-        let db = db.lock().unwrap();
-        if db.is_multithread() {
-            let serialized_db = match db.duplicate_connection() {
-                Ok(db) => {
-                    dbg!(&db.path);
-                    Arc::new(Mutex::new(db))
-                }
-                Err(_) => return Err(()),
-            };
-            let new_replication_book = replication_book
-                .clone_replication_book(&serialized_db);
-            let mut new_loop = Loop::new_from_db_and_replication_book(
-                serialized_db,
-                new_replication_book,
-            );
-            let (new_tx, new_rx) = channel();
-            self.tx.send(Command::Stop);
-            self.tx = new_tx;
-            self.loop_data = new_loop.clone();
-            thread::spawn(move || {
-                dbg!("Spawn new thread");
-                listen_and_execute(&mut new_loop, &new_rx);
-                dbg!("Done with new thread");
-            });
-            self.tx.send(Command::Ping);
-            dbg!("Done swapping the channels");
+        {
+            let replication_book =
+                self.loop_data.get_replication_book();
+            let db = self.loop_data.get_db();
+            let db = db.lock().unwrap();
+            if db.is_multithread() {
+                let serialized_db = match db.duplicate_connection() {
+                    Ok(db) => Arc::new(Mutex::new(db)),
+                    Err(_) => return Err(()),
+                };
+                let new_replication_book = replication_book
+                    .clone_replication_book(&serialized_db);
+                let mut new_loop =
+                    Loop::new_from_db_and_replication_book(
+                        serialized_db,
+                        new_replication_book,
+                    );
+                let (new_tx, new_rx) = channel();
+                self.tx.send(Command::Stop);
+                self.tx = new_tx;
+                self.loop_data = new_loop.clone();
+                thread::spawn(move || {
+                    listen_and_execute(&mut new_loop, &new_rx);
+                });
+                self.tx.send(Command::Ping);
+            }
         }
 
-        /*
         let db = self.loop_data.get_db();
         let db = db.lock().unwrap();
         let new_db = match db.duplicate_connection() {
@@ -1336,7 +1333,6 @@ impl DBKey {
             listen_and_execute(&mut new_loop, &rx);
         });
         self.connections.insert(clone_name.to_string(), tx);
-        */
         Ok(())
     }
 }
@@ -1638,7 +1634,7 @@ pub fn get_dbkeyptr_from_name(
 
 pub struct RedisDBKey {
     key: *mut rm::ffi::RedisModuleKey,
-    pub dbkey: std::mem::ManuallyDrop<DBKey>,
+    pub dbkey: *mut DBKey,
 }
 
 impl Drop for RedisDBKey {
@@ -1663,24 +1659,33 @@ impl RedisDBKey {
                     key,
                 )
         } {
-            let db_ptr = unsafe {
+            let dbkey = unsafe {
                 rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(key)
                     as *mut DBKey
             };
-            let dbkey =
-                std::mem::ManuallyDrop::new(unsafe { db_ptr.read() });
-            {
-                let db = dbkey.loop_data.get_db();
-                let db = db.lock().unwrap();
-                dbg!(&db.path);
-            }
             Ok(RedisDBKey { key, dbkey })
         } else {
             Err(key_type)
         }
     }
-    fn delete_key(mut self) {
-        unsafe { std::mem::ManuallyDrop::drop(&mut self.dbkey) };
+    pub fn get_channel(
+        &self,
+        connection: Option<&str>,
+    ) -> &Sender<Command> {
+        unsafe {
+            match connection {
+                None => unsafe { &(*self.dbkey).tx },
+                Some(connection) => {
+                    match (*self.dbkey).connections.get(connection) {
+                        None => {
+                            dbg!("\nDid not use different connection\n");
+                            &(*self.dbkey).tx
+                        }
+                        Some(s) => s,
+                    }
+                }
+            }
+        }
     }
 }
 
