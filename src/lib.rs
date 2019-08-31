@@ -24,9 +24,10 @@ use uuid::Uuid;
 use sync_engine::{register, WriteAOF};
 
 use commands::{
-    CreateDB, CreateStatement, DeleteStatement, Exec, ExecStatement,
-    GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
-    QueryStatementInto, RediSQLVersion, UpdateStatement,
+    AddRediSQLConnection, CreateDB, CreateStatement, DeleteStatement,
+    Exec, ExecStatement, GetStatistics, MakeCopy, Query, QueryInto,
+    QueryStatement, QueryStatementInto, RediSQLVersion,
+    UpdateStatement,
 };
 
 #[cfg(not(feature = "pro"))]
@@ -330,6 +331,15 @@ pub extern "C" fn RedisModule_OnLoad(
         "REDISQL.VERSION",
         "readonly",
         RediSQLVersion,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(
+        &ctx,
+        "REDISQL.ADD_CONNECTION",
+        AddRediSQLConnection,
     ) {
         Ok(()) => (),
         Err(e) => return e,

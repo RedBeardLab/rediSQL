@@ -338,6 +338,21 @@ pub fn ReplyWithStringBuffer(ctx: &Context, buffer: &[u8]) -> i32 {
     }
 }
 
+#[allow(non_snake_case)]
+pub fn ReplyWithSimpleString(ctx: &Context, s: &str) -> i32 {
+    unsafe {
+        ffi::RedisModule_ReplyWithSimpleString.unwrap()(
+            ctx.as_ptr(),
+            s.as_ptr() as *const c_char,
+        )
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn ReplyWithOk(ctx: &Context) -> i32 {
+    ReplyWithSimpleString(ctx, "OK\0")
+}
+
 pub struct AOF {
     aof: *mut ffi::RedisModuleIO,
 }

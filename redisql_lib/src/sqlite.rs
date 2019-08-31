@@ -80,6 +80,7 @@ impl RawConnection {
     fn new(path: &str, flags: i32) -> Result<Self, SQLite3Error> {
         let mut conn: *mut ffi::sqlite3 =
             unsafe { mem::uninitialized() };
+        dbg!(path);
         let c_path = CString::new(path).unwrap();
         let r = unsafe {
             let ptr_path = c_path.as_ptr();
@@ -110,6 +111,9 @@ impl RawConnection {
     }
     pub fn is_multithread(&self) -> bool {
         (self.flags & ffi::SQLITE_OPEN_NOMUTEX) != 0
+    }
+    pub fn is_serialized(&self) -> bool {
+        (self.flags & ffi::SQLITE_OPEN_FULLMUTEX) != 0
     }
 }
 
@@ -159,7 +163,7 @@ pub fn get_last_error_from_db_connection(
 pub struct Connection {
     db: RawConnection,
     modified_rows: i32,
-    path: String,
+    pub path: String,
 }
 
 impl Connection {
@@ -175,20 +179,23 @@ impl Connection {
         })
     }
     pub fn duplicate_connection(
-        &mut self,
+        &self,
     ) -> Result<Connection, SQLite3Error> {
+        dbg!(&self.path);
         let cn1 = RawConnection::new_serialize(&self.path)?;
         let cn1 = Connection {
             db: cn1,
-            path: self.path.clone(),
+            path: String::from(&self.path),
             modified_rows: 0,
-        };
-        if self.db.is_multithread() {
-            let cn2 = RawConnection::new_serialize(&self.path)?;
-            self.db = cn2;
         };
 
         Ok(cn1)
+    }
+    pub fn is_serialized(&self) -> bool {
+        self.db.is_serialized()
+    }
+    pub fn is_multithread(&self) -> bool {
+        self.db.is_multithread()
     }
 }
 

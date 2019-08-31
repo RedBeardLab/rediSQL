@@ -2,15 +2,19 @@ use fnv::FnvHashMap;
 use std;
 use std::clone::Clone;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
+use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_long};
 use std::slice;
 use std::str;
+use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, RecvError, Sender};
 use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
 
 pub use crate::redis_type as rm;
 use crate::redis_type::{
@@ -35,6 +39,20 @@ use crate::statistics::STATISTICS;
 pub struct ReplicationBook {
     data: Arc<RwLock<FnvHashMap<String, (MultiStatement, bool)>>>,
     db: Arc<Mutex<Connection>>,
+}
+
+impl ReplicationBook {
+    fn clone_replication_book(
+        &self,
+        db: &Arc<Mutex<Connection>>,
+    ) -> Self {
+        let mut new = ReplicationBook::new(db);
+        let data = self.data.read().unwrap();
+        for (name, (statement, _)) in data.iter() {
+            new.insert_new_statement(name, &statement.to_string());
+        }
+        new
+    }
 }
 
 pub trait StatementCache<'a> {
@@ -73,7 +91,6 @@ impl<'a> StatementCache<'a> for ReplicationBook {
             db: Arc::clone(db),
         }
     }
-
     fn is_statement_present(&self, identifier: &str) -> bool {
         self.data.read().unwrap().contains_key(identifier)
     }
@@ -231,8 +248,17 @@ impl LoopData for Loop {
 }
 
 impl Loop {
-    fn new_from_arc(db: Arc<Mutex<Connection>>) -> Loop {
+    fn new_from_arc(db: Arc<Mutex<Connection>>) -> Self {
         let replication_book = ReplicationBook::new(&db);
+        Loop {
+            db,
+            replication_book,
+        }
+    }
+    fn new_from_db_and_replication_book(
+        db: Arc<Mutex<Connection>>,
+        replication_book: ReplicationBook,
+    ) -> Self {
         Loop {
             db,
             replication_book,
@@ -422,6 +448,7 @@ pub enum ReturnMethod {
 }
 
 pub enum Command {
+    Ping,
     Stop,
     Exec {
         query: &'static str,
@@ -770,7 +797,7 @@ fn bind_statement<'a>(
     }
 }
 
-/// restore_previous_statements wread the statements written in the database and add them to the
+/// restore_previous_statements read the statements written in the database and add them to the
 /// loopdata datastructure.
 /// At the moment this function returns `()` no matter if there are errors or not.
 /// Errors are pretty unlikely, especially if nobody touched manually the metadata database, but
@@ -966,9 +993,16 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
 ) {
     debug!("Start thread execution");
     restore_previous_statements(loopdata);
+    debug!("Done restoring statements");
     loop {
         debug!("Loop iteration");
         match rx.recv() {
+            Ok(Command::Ping {}) => {
+                let db = loopdata.get_db();
+                let db = db.lock().unwrap();
+                dbg!(&db.path);
+                debug!("Received PING!")
+            }
             Ok(Command::Exec {
                 query,
                 client,
@@ -1183,6 +1217,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             }
         }
     }
+    dbg!("Exiting from loop");
 }
 
 fn compile_and_insert_statement<'a, L: 'a + LoopData>(
@@ -1227,6 +1262,7 @@ pub struct DBKey {
     pub tx: Sender<Command>,
     pub in_memory: bool,
     pub loop_data: Loop,
+    pub connections: HashMap<String, Sender<Command>>,
 }
 
 impl DBKey {
@@ -1240,7 +1276,68 @@ impl DBKey {
             tx,
             in_memory,
             loop_data,
+            connections: HashMap::new(),
         }
+    }
+    pub fn add_connection(
+        &mut self,
+        clone_name: &str,
+    ) -> Result<(), ()> {
+        if self.connections.get(clone_name).is_some() {
+            return Err(());
+        }
+        let replication_book = self.loop_data.get_replication_book();
+        let db = self.loop_data.get_db();
+        let db = db.lock().unwrap();
+        if db.is_multithread() {
+            let serialized_db = match db.duplicate_connection() {
+                Ok(db) => {
+                    dbg!(&db.path);
+                    Arc::new(Mutex::new(db))
+                }
+                Err(_) => return Err(()),
+            };
+            let new_replication_book = replication_book
+                .clone_replication_book(&serialized_db);
+            let mut new_loop = Loop::new_from_db_and_replication_book(
+                serialized_db,
+                new_replication_book,
+            );
+            let (new_tx, new_rx) = channel();
+            self.tx.send(Command::Stop);
+            self.tx = new_tx;
+            self.loop_data = new_loop.clone();
+            thread::spawn(move || {
+                dbg!("Spawn new thread");
+                listen_and_execute(&mut new_loop, &new_rx);
+                dbg!("Done with new thread");
+            });
+            self.tx.send(Command::Ping);
+            dbg!("Done swapping the channels");
+        }
+
+        /*
+        let db = self.loop_data.get_db();
+        let db = db.lock().unwrap();
+        let new_db = match db.duplicate_connection() {
+            Ok(db) => Arc::new(Mutex::new(db)),
+            Err(_) => return Err(()),
+        };
+        let new_replication_book = self
+            .loop_data
+            .get_replication_book()
+            .clone_replication_book(&new_db);
+        let mut new_loop = Loop::new_from_db_and_replication_book(
+            new_db,
+            new_replication_book,
+        );
+        let (tx, rx) = channel();
+        thread::spawn(move || {
+            listen_and_execute(&mut new_loop, &rx);
+        });
+        self.connections.insert(clone_name.to_string(), tx);
+        */
+        Ok(())
     }
 }
 
@@ -1539,6 +1636,54 @@ pub fn get_dbkeyptr_from_name(
     }
 }
 
+pub struct RedisDBKey {
+    key: *mut rm::ffi::RedisModuleKey,
+    pub dbkey: std::mem::ManuallyDrop<DBKey>,
+}
+
+impl Drop for RedisDBKey {
+    fn drop(&mut self) {
+        debug!("***Closing the key.***");
+        unsafe {
+            rm::ffi::RedisModule_CloseKey.unwrap()(self.key);
+        }
+    }
+}
+
+impl RedisDBKey {
+    pub fn new(context: &Context, name: &str) -> Result<Self, i32> {
+        let key_name = rm::RMString::new(&context, name);
+        let key =
+            OpenKey(context, &key_name, rm::ffi::REDISMODULE_WRITE);
+        let key_type =
+            unsafe { rm::ffi::RedisModule_KeyType.unwrap()(key) };
+        if unsafe {
+            rm::ffi::DBType
+                == rm::ffi::RedisModule_ModuleTypeGetType.unwrap()(
+                    key,
+                )
+        } {
+            let db_ptr = unsafe {
+                rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(key)
+                    as *mut DBKey
+            };
+            let dbkey =
+                std::mem::ManuallyDrop::new(unsafe { db_ptr.read() });
+            {
+                let db = dbkey.loop_data.get_db();
+                let db = db.lock().unwrap();
+                dbg!(&db.path);
+            }
+            Ok(RedisDBKey { key, dbkey })
+        } else {
+            Err(key_type)
+        }
+    }
+    fn delete_key(mut self) {
+        unsafe { std::mem::ManuallyDrop::drop(&mut self.dbkey) };
+    }
+}
+
 pub fn get_dbkey_from_name(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,
@@ -1551,7 +1696,9 @@ pub fn get_dbkey_from_name(
 pub unsafe fn get_ch_from_dbkeyptr(
     db: *mut DBKey,
 ) -> Sender<Command> {
-    (*db).tx.clone()
+    let tx = (*db).tx.clone();
+    dbg!(&tx as *const _);
+    tx.clone()
 }
 
 pub fn reply_with_error_from_key_type(
