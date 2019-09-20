@@ -7,7 +7,6 @@ use std::convert::TryFrom;
 use std::ffi::{CStr, CString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
-use std::ops::{Deref, DerefMut};
 use std::os::raw::{c_char, c_long};
 use std::slice;
 use std::str;
@@ -1217,7 +1216,6 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             }
         }
     }
-    dbg!("Exiting from loop");
 }
 
 fn compile_and_insert_statement<'a, L: 'a + LoopData>(
@@ -1674,11 +1672,10 @@ impl RedisDBKey {
     ) -> &Sender<Command> {
         unsafe {
             match connection {
-                None => unsafe { &(*self.dbkey).tx },
+                None => &(*self.dbkey).tx ,
                 Some(connection) => {
                     match (*self.dbkey).connections.get(connection) {
                         None => {
-                            dbg!("\nDid not use different connection\n");
                             &(*self.dbkey).tx
                         }
                         Some(s) => s,

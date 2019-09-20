@@ -1,5 +1,4 @@
 use std::ffi::{CStr, CString};
-use std::mem::ManuallyDrop;
 use std::os::raw::c_long;
 use std::sync::mpsc::channel;
 use std::thread;
@@ -1094,6 +1093,8 @@ pub extern "C" fn RediSQLVersion(
     r::rm::ffi::REDISMODULE_OK
 }
 
+/*
+ * WORK IN PROGRESS
 #[allow(non_snake_case)]
 pub extern "C" fn AddRediSQLConnection(
     ctx: *mut r::rm::ffi::RedisModuleCtx,
@@ -1124,7 +1125,7 @@ pub extern "C" fn AddRediSQLConnection(
         };
     }
 
-    let mut db = match RedisDBKey::new(&context, argvector[1]) {
+    let db = match RedisDBKey::new(&context, argvector[1]) {
         Ok(db) => db,
         Err(e) => {
             return reply_with_error_from_key_type(
@@ -1142,3 +1143,5 @@ pub extern "C" fn AddRediSQLConnection(
     r::rm::ReplyWithOk(&context);
     r::rm::ffi::REDISMODULE_OK
 }
+
+*/

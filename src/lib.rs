@@ -24,7 +24,7 @@ use uuid::Uuid;
 use sync_engine::{register, WriteAOF};
 
 use commands::{
-    AddRediSQLConnection, CreateDB, CreateStatement, DeleteStatement,
+    CreateDB, CreateStatement, DeleteStatement,
     Exec, ExecStatement, GetStatistics, MakeCopy, Query, QueryInto,
     QueryStatement, QueryStatementInto, RediSQLVersion,
     UpdateStatement,
@@ -336,6 +336,7 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
+    /*
     match register_write_function(
         &ctx,
         "REDISQL.ADD_CONNECTION",
@@ -344,6 +345,7 @@ pub extern "C" fn RedisModule_OnLoad(
         Ok(()) => (),
         Err(e) => return e,
     }
+    */
 
     match register(ctx) {
         Ok(()) => (),
