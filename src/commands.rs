@@ -371,7 +371,6 @@ pub extern "C" fn Exec(
                     r::rm::ffi::REDISMODULE_OK
                 }
                 Err(e) => {
-                    dbg!(e);
                     STATISTICS.exec_err();
                     r::rm::ffi::REDISMODULE_OK
                 }

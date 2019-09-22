@@ -80,7 +80,6 @@ impl RawConnection {
     fn new(path: &str, flags: i32) -> Result<Self, SQLite3Error> {
         let mut conn: *mut ffi::sqlite3 =
             unsafe { mem::uninitialized() };
-        dbg!(path);
         let c_path = CString::new(path).unwrap();
         let r = unsafe {
             let ptr_path = c_path.as_ptr();
@@ -181,7 +180,6 @@ impl Connection {
     pub fn duplicate_connection(
         &self,
     ) -> Result<Connection, SQLite3Error> {
-        dbg!(&self.path);
         let cn1 = RawConnection::new_serialize(&self.path)?;
         let cn1 = Connection {
             db: cn1,

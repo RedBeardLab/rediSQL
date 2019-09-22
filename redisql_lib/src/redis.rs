@@ -999,7 +999,6 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             Ok(Command::Ping {}) => {
                 let db = loopdata.get_db();
                 let db = db.lock().unwrap();
-                dbg!(&db.path);
                 debug!("Received PING!")
             }
             Ok(Command::Exec {
@@ -1699,7 +1698,6 @@ pub unsafe fn get_ch_from_dbkeyptr(
     db: *mut DBKey,
 ) -> Sender<Command> {
     let tx = (*db).tx.clone();
-    dbg!(&tx as *const _);
     tx.clone()
 }
 
