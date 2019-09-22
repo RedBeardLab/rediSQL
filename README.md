@@ -19,7 +19,7 @@ It provides several benefits for your application.
 
 [![RediSQL tutorial](http://img.youtube.com/vi/YRusC-AIq_g/0.jpg)](http://www.youtube.com/watch?v=YRusC-AIq_g "RediSQL tutorial")
 
-You can follow the video above and the whole tutorial [on the documentation.](https://redisql.redbeardlab.com/rediSQL/blog/tutorial/)
+You can follow [the video above](https://www.youtube.com/watch?v=YRusC-AIq_g) and the whole tutorial [on the documentation.](https://redisql.redbeardlab.com/rediSQL/blog/tutorial/)
 
 We provide a demo machine at `demo.redisql.com`.
 
