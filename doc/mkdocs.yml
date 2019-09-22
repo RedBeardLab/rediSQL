@@ -16,6 +16,7 @@ pages:
     Motivations: motivations.md
   -
     Blog:
+      - 'Tutorial': 'blog/tutorial.md'
       - 'Release 0.9.0': 'blog/release_0.9.0.md'
       - 'Release 0.8.0': 'blog/release_0.8.0.md'
       - 'Release 0.7.0': 'blog/release_0.7.0.md'
