@@ -4,7 +4,7 @@
     
     <url>
      <loc>/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
     
@@ -12,7 +12,7 @@
     
     <url>
      <loc>/references/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
     
@@ -20,7 +20,7 @@
     
     <url>
      <loc>/pro/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
     
@@ -28,7 +28,7 @@
     
     <url>
      <loc>/motivations/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
     
@@ -36,68 +36,74 @@
     
         
     <url>
+     <loc>/blog/tutorial/</loc>
+     <lastmod>2019-09-22</lastmod>
+     <changefreq>daily</changefreq>
+    </url>
+        
+    <url>
      <loc>/blog/release_0.9.0/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/release_0.8.0/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/release_0.7.0/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/release_0.6.0/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/release_0.5.0/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/analytics/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/JaaS/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/performances/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/python/using-redisql-with-python/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/golang/using-redisql-with-golang/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
     <url>
      <loc>/blog/node/using-redisql-with-node/</loc>
-     <lastmod>2019-04-09</lastmod>
+     <lastmod>2019-09-22</lastmod>
      <changefreq>daily</changefreq>
     </url>
         
