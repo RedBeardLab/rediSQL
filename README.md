@@ -15,6 +15,24 @@ It provides several benefits for your application.
 3. Easy to Operate, it is based on Redis, just start the standard Redis binary and and pass the RediSQL binary.
 4. Easy to Use, being based on Redis there are already bindings for any language.
 
+## Jump start
+
+[![RediSQL tutorial](http://img.youtube.com/vi/YRusC-AIq_g/0.jpg)](http://www.youtube.com/watch?v=YRusC-AIq_g "RediSQL tutorial")
+
+You can follow the video above and the whole tutorial [on the documentation.](https://redisql.redbeardlab.com/rediSQL/blog/tutorial/)
+
+We provide a demo machine at `demo.redisql.com`.
+
+```
+redis-cli -h demo.redisql.com
+```
+
+Or with docker
+
+```
+docker run -it redis redis-cli -h demo.redisql.com
+```
+
 ## Use cases
 
 There are several use cases for RediSQL.
