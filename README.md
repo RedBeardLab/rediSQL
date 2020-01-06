@@ -3,6 +3,7 @@
 [![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql.svg?color=%2346BC99&style=for-the-badge)](https://gitter.im/rediSQL/community)
 ![GitHub All Releases](https://img.shields.io/github/downloads/redbeardlab/redisql/total.svg?style=for-the-badge)
 ![Docker Pulls](https://img.shields.io/docker/pulls/siscia/redisql.svg?style=for-the-badge)
+![Docker Pulls](https://img.shields.io/docker/pulls/redbeardlab/redisql.svg?style=for-the-badge)
 
 ![RediSQL Logo](website/hatchful_logs/logo_markdown.png?raw=true "RediSQL")
 
