@@ -8,20 +8,21 @@
         
         
         <link rel="shortcut icon" href="../../../img/favicon.ico">
-        <title>Using RediSQL with Node.js - RediSQL</title>
+
+	<title>Using RediSQL with Node.js - RediSQL</title>
+
         <link href="../../../css/bootstrap-custom.min.css" rel="stylesheet">
-        <link href="../../../css/font-awesome-4.5.0.css" rel="stylesheet">
+        <link href="../../../css/font-awesome-4.0.3.css" rel="stylesheet">
         <link href="../../../css/base.css" rel="stylesheet">
         <link rel="stylesheet" href="../../../css/highlight.css">
+
         <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
         <!--[if lt IE 9]>
             <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
             <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
         <![endif]-->
-	
-	<script src="../../../js/jquery-1.10.2.min.js"></script>
-        <script src="../../../js/bootstrap-3.0.3.min.js"></script>
-        <script src="../../../js/highlight.pack.js"></script>
+
+        
         <script>
             (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
             (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -30,7 +31,8 @@
 
             ga('create', 'UA-116709819-1', 'auto');
             ga('send', 'pageview');
-        </script> 
+        </script>
+        
     </head>
 
     <body>
@@ -40,6 +42,7 @@
 
         <!-- Collapsed navigation -->
         <div class="navbar-header">
+            
             <!-- Expander button -->
             <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
                 <span class="sr-only">Toggle navigation</span>
@@ -47,79 +50,125 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
+            
+
+            <!-- Main title -->
             <a class="navbar-brand" href="../../..">RediSQL</a>
         </div>
 
         <!-- Expanded navigation -->
         <div class="navbar-collapse collapse">
+            
                 <!-- Main navigation -->
                 <ul class="nav navbar-nav">
+                
+                
                     <li >
                         <a href="../../..">Overview</a>
                     </li>
+                
+                
+                
                     <li >
                         <a href="../../../references/">References</a>
                     </li>
+                
+                
+                
                     <li >
                         <a href="../../../pro/">Pro</a>
                     </li>
+                
+                
+                
                     <li >
                         <a href="../../../motivations/">Motivations</a>
                     </li>
+                
+                
+                
                     <li class="dropdown active">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Blog <b class="caret"></b></a>
                         <ul class="dropdown-menu">
-                            
-<li >
-    <a href="../../tutorial/">Tutorial</a>
-</li>
+                        
                             
 <li >
     <a href="../../release_0.9.0/">Release 0.9.0</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../release_0.8.0/">Release 0.8.0</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../release_0.7.0/">Release 0.7.0</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../release_0.6.0/">Release 0.6.0</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../release_0.5.0/">Release 0.5.0</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../analytics/">Analytics</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../JaaS/">JSON on Redis using RediSQL, SQL steroids for Redis</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../performances/">Double performances of RediSQL going zero copy</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../python/using-redisql-with-python/">Using RediSQL with Python</a>
 </li>
+
+                        
                             
 <li >
     <a href="../../golang/using-redisql-with-golang/">Using RediSQL with Go(lang)</a>
 </li>
+
+                        
                             
 <li class="active">
     <a href="./">Using RediSQL with Node.js</a>
 </li>
+
+                        
                         </ul>
                     </li>
+                
+                
+                
+                    <li >
+                        <a href="../../../faqs/">FAQs</a>
+                    </li>
+                
+                
                 </ul>
+            
 
             <ul class="nav navbar-nav navbar-right">
                 <li>
@@ -127,37 +176,55 @@
                         <i class="fa fa-search"></i> Search
                     </a>
                 </li>
+                
                     <li >
                         <a rel="next" href="../../golang/using-redisql-with-golang/">
                             <i class="fa fa-arrow-left"></i> Previous
                         </a>
                     </li>
-                    <li class="disabled">
-                        <a rel="prev" >
+                    <li >
+                        <a rel="prev" href="../../../faqs/">
                             Next <i class="fa fa-arrow-right"></i>
                         </a>
                     </li>
+                
+                
                     <li>
                         <a href="https://github.com/RedBeardLab/rediSQL">
-                                <i class="fa fa-github"></i>GitHub
+                            
+                                <i class="fa fa-github"></i>
+                            
+                            GitHub
                         </a>
                     </li>
+                
             </ul>
         </div>
     </div>
 </div>
 
         <div class="container">
+            
                 <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
     <ul class="nav bs-sidenav">
+    
         <li class="main active"><a href="#using-redisql-with-nodejs">Using RediSQL with Node.js</a></li>
+        
             <li><a href="#dependencies">Dependencies</a></li>
+        
             <li><a href="#connect-to-redis-and-make-it-asycnawait-ready">Connect to Redis and make it asycn/await ready.</a></li>
+        
             <li><a href="#polling-hn-api-to-get-the-newest-items">Polling HN API to get the newest items</a></li>
+        
             <li><a href="#the-redisql-structure">The RediSQL structure</a></li>
+        
             <li><a href="#insert-data-into-the-database">Insert data into the database</a></li>
+        
             <li><a href="#running-it">Running it</a></li>
+        
             <li><a href="#concluding">Concluding</a></li>
+        
+    
     </ul>
 </div></div>
                 <div class="col-md-9" role="main">
@@ -289,39 +356,47 @@ A much quicker set up, especially for testing, than using classical databases as
 <p>Feel free to explore our <a href="../../../references">references documentation</a> to understand better what capabilities RediSQL provides you.</p>
 <p>The complete code of this example is <a href="https://github.com/RedBeardLab/rediSQL/blob/master/doc/docs/blog/node/hn.js">available here.</a></p>
 <p>If you wish to see a similar tutorial for a different language, <a href="https://github.com/RedBeardLab/rediSQL/issues/new">open an issue on github.</a></p></div>
+            
         </div>
 
         <footer class="col-md-12">
             <hr>
+            
             <p>Documentation built with <a href="http://www.mkdocs.org/">MkDocs</a>.</p>
         </footer>
+
+        <script src="../../../js/jquery-1.10.2.min.js"></script>
+        <script src="../../../js/bootstrap-3.0.3.min.js"></script>
+        <script src="../../../js/highlight.pack.js"></script>
         <script>var base_url = '../../..';</script>
         <script data-main="../../../mkdocs/js/search.js" src="../../../mkdocs/js/require.js"></script>
         <script src="../../../js/base.js"></script>
-        <script src="../../../blog/node/hn.js"></script><div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="Search Modal" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
-                <h4 class="modal-title" id="exampleModalLabel">Search</h4>
-            </div>
-            <div class="modal-body">
-                <p>
-                    From here you can search these documents. Enter
-                    your search terms below.
-                </p>
-                <form role="form">
-                    <div class="form-group">
-                        <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query">
+        <script src="../../../blog/node/hn.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="Search Modal" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                        <h4 class="modal-title" id="exampleModalLabel">Search</h4>
                     </div>
-                </form>
-                <div id="mkdocs-search-results"></div>
-            </div>
-            <div class="modal-footer">
+                    <div class="modal-body">
+                        <p>
+                            From here you can search these documents. Enter
+                            your search terms below.
+                        </p>
+                        <form role="form">
+                            <div class="form-group">
+                                <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query">
+                            </div>
+                        </form>
+                        <div id="mkdocs-search-results"></div>
+                    </div>
+                    <div class="modal-footer">
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-</div>
 
     </body>
 </html>
