@@ -1,7 +1,7 @@
-use sqlite::ffi;
-use sqlite::SQLiteConnection;
-use sqlite::StatementTrait;
-use sqlite::{Cursor, RawConnection, SQLite3Error, SQLiteOK};
+use crate::sqlite::ffi;
+use crate::sqlite::SQLiteConnection;
+use crate::sqlite::StatementTrait;
+use crate::sqlite::{Cursor, RawConnection, SQLite3Error, SQLiteOK};
 
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -16,6 +16,7 @@ enum Parameters {
     Named { index: i32 },
 }
 
+#[derive(Clone)]
 pub struct MultiStatement {
     stmts: Vec<Statement>,
     db: Arc<Mutex<RawConnection>>,
@@ -38,12 +39,17 @@ impl<'a> fmt::Display for MultiStatement {
     }
 }
 
+#[derive(Clone)]
 pub struct Statement {
+    stmt: Arc<InternalStatement>,
+}
+
+struct InternalStatement {
     stmt: ptr::NonNull<ffi::sqlite3_stmt>,
 }
 
-unsafe impl Send for Statement {}
-unsafe impl Sync for Statement {}
+unsafe impl Send for InternalStatement {}
+unsafe impl Sync for InternalStatement {}
 
 impl<'a> fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -56,10 +62,10 @@ impl<'a> fmt::Display for Statement {
     }
 }
 
-impl<'a> Drop for Statement {
+impl<'a> Drop for InternalStatement {
     fn drop(&mut self) {
         unsafe {
-            ffi::sqlite3_finalize(self.as_ptr());
+            ffi::sqlite3_finalize(self.stmt.as_ptr());
         };
     }
 }
@@ -68,7 +74,14 @@ pub fn generate_statements(
     db: Arc<Mutex<RawConnection>>,
     query: &str,
 ) -> Result<MultiStatement, SQLite3Error> {
-    let raw_query = CString::new(query.to_string()).unwrap();
+    let raw_query = match CString::new(query.to_string()) {
+        Ok(r) => r,
+        Err(e) => return Err(SQLite3Error{
+            code: 999,
+            error_message: "Trying to create a statement with a NULL byte.".to_string(),
+            error_string: format!("Find NULL byte in position {} while trying to create a statement", e.nul_position()),
+        }),
+    };
     let mut next_query = raw_query.as_ptr();
     let mut stmts = Vec::new();
 
@@ -113,7 +126,9 @@ pub fn generate_statements(
 impl Statement {
     fn from_ptr(stmt: *mut ffi::sqlite3_stmt) -> Self {
         Statement {
-            stmt: ptr::NonNull::new(stmt).unwrap(),
+            stmt: Arc::new(InternalStatement {
+                stmt: ptr::NonNull::new(stmt).unwrap(),
+            }),
         }
     }
     fn execute(
@@ -132,7 +147,7 @@ impl Statement {
                     ffi::sqlite3_column_count(self.as_ptr())
                 } as i32;
                 Ok(Cursor::RowsCursor {
-                    stmt: self,
+                    stmt: self.clone(),
                     num_columns,
                     previous_status: ffi::SQLITE_ROW,
                     modified_rows: 0,
@@ -147,7 +162,7 @@ impl Statement {
         rc.get_last_error()
     }
     pub fn as_ptr(&self) -> *mut ffi::sqlite3_stmt {
-        self.stmt.as_ptr()
+        self.stmt.stmt.as_ptr()
     }
 }
 
@@ -396,6 +411,7 @@ fn count_parameters(
         }
     }
 }
+
 fn get_parameter_name(
     stmt: &Statement,
     index: i32,

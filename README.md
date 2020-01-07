@@ -3,6 +3,7 @@
 [![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql.svg?color=%2346BC99&style=for-the-badge)](https://gitter.im/rediSQL/community)
 ![GitHub All Releases](https://img.shields.io/github/downloads/redbeardlab/redisql/total.svg?style=for-the-badge)
 ![Docker Pulls](https://img.shields.io/docker/pulls/siscia/redisql.svg?style=for-the-badge)
+![Docker Pulls](https://img.shields.io/docker/pulls/redbeardlab/redisql.svg?style=for-the-badge)
 
 ![RediSQL Logo](website/hatchful_logs/logo_markdown.png?raw=true "RediSQL")
 
@@ -14,6 +15,24 @@ It provides several benefits for your application.
 2. Familiar, it works with standard SQL, no weird dialect or syntax to learn.
 3. Easy to Operate, it is based on Redis, just start the standard Redis binary and and pass the RediSQL binary.
 4. Easy to Use, being based on Redis there are already bindings for any language.
+
+## Jump start
+
+[![RediSQL tutorial](http://img.youtube.com/vi/YRusC-AIq_g/0.jpg)](http://www.youtube.com/watch?v=YRusC-AIq_g "RediSQL tutorial")
+
+You can follow [the video above](https://www.youtube.com/watch?v=YRusC-AIq_g) and the whole tutorial [on the documentation.](https://redisql.redbeardlab.com/rediSQL/blog/tutorial/)
+
+We provide a demo machine at `demo.redisql.com`.
+
+```
+redis-cli -h demo.redisql.com
+```
+
+Or with docker
+
+```
+docker run -it redis redis-cli -h demo.redisql.com
+```
 
 ## Use cases
 
@@ -202,7 +221,7 @@ Moreover we encourage users to report any kind of issue, problem or possible erg
 
 We encorage user feedback and contribution with a free copy of RediSQL PRO.
 
-Chat on gitter: ![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql.svg?color=%2346BC99&style=for-the-badge)
+Chat on gitter: [![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql.svg?color=%2346BC99&style=for-the-badge)](https://gitter.im/rediSQL/community)
 
 For any other information feel free to write me directly: [simone@redbeardlab.com](mailto:simone@redbeardlab.com)
 

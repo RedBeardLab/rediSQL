@@ -402,6 +402,7 @@ class TestRead(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM test ORDER BY a ASC")
         self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
 
+###@unittest.skip("Testing without virtual tables")
 class TestBruteHash(TestRediSQLWithExec):
   def testSimple(self):
     with DB(self, "B"):
@@ -508,6 +509,7 @@ class TestBruteHash(TestRediSQLWithExec):
       self.assertTrue([4L, "cat:4", "4"] in result)
 
 
+###@unittest.skip("Testing without virtual tables")
 class TestBruteHashSyncronous(TestRediSQLWithExec):
   def testSimpleNow(self):
     with DB(self, "B"):
@@ -924,6 +926,13 @@ class TestBlankAfterSemicolon(TestRediSQLWithExec):
       with DB(self, "NULL"):
           one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;\nSELECT 2;")
           self.assertEquals(one, [[2]])
+
+class TestWithNullChars(TestRediSQLWithExec):
+    def test_with_null_at_the_end(self):
+        with DB(self, 'A'):
+            self.assertRaises(redis.ResponseError, self.exec_naked, "REDISQL.EXEC", "A", "SELECT \0 1;")
+        with DB(self, 'B'):
+            self.assertRaises(redis.ResponseError, self.exec_naked, "REDISQL.EXEC", "A", "SELECT 1;\0")
 
 if __name__ == '__main__':
    unittest.main()

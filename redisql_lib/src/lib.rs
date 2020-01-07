@@ -2,7 +2,6 @@
 
 #[macro_use]
 extern crate log;
-extern crate serde;
 
 pub mod community_statement;
 pub mod redis;
