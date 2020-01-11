@@ -11,7 +11,7 @@ pub struct CreateDB<'s> {
 }
 
 impl<'s> CreateDB<'s> {
-    fn parse(mut args: Vec<&'s str>) -> Result<Self, RediSQLError> {
+    pub fn parse(args: Vec<&'s str>) -> Result<Self, RediSQLError> {
         let mut args_iter = args.iter();
         args_iter.next();
         let name = match args_iter.next() {
@@ -53,7 +53,6 @@ impl<'s> CreateDB<'s> {
 }
 
 mod test {
-    use super::*;
 
     #[test]
     fn simple_tag() {

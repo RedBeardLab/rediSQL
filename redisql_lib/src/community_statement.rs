@@ -91,21 +91,21 @@ pub fn generate_statements(
     let arc_db = db.clone();
     let conn = arc_db.lock().unwrap();
     loop {
-        let mut stmt: *mut ffi::sqlite3_stmt =
-            unsafe { mem::uninitialized() };
+        let mut stmt = std::mem::MaybeUninit::uninit();
 
         let r = unsafe {
             ffi::sqlite3_prepare_v2(
                 conn.get_db(),
                 next_query,
                 -1,
-                &mut stmt,
+                stmt.as_mut_ptr(),
                 &mut next_query,
             )
         };
 
         match r {
             ffi::SQLITE_OK => {
+                let stmt = unsafe { stmt.assume_init() };
                 if !stmt.is_null() {
                     let stmt = Statement::from_ptr(stmt);
                     stmts.push(stmt);
@@ -179,8 +179,7 @@ impl<'a> StatementTrait<'a> for Statement {
     ) -> Result<Self, SQLite3Error> {
         let raw_query = CString::new(query).unwrap();
 
-        let mut stmt: *mut ffi::sqlite3_stmt =
-            unsafe { mem::uninitialized() };
+        let mut stmt = std::mem::MaybeUninit::uninit();
 
         let conn = conn.lock().unwrap();
         let r = unsafe {
@@ -188,10 +187,11 @@ impl<'a> StatementTrait<'a> for Statement {
                 conn.get_db(),
                 raw_query.as_ptr(),
                 -1,
-                &mut stmt,
+                stmt.as_mut_ptr(),
                 ptr::null_mut(),
             )
         };
+        let stmt = unsafe { stmt.assume_init() };
         match r {
             ffi::SQLITE_OK => Ok(Statement::from_ptr(stmt)),
             _ => Err(conn.get_last_error()),

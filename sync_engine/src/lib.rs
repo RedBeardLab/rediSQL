@@ -113,7 +113,7 @@ pub unsafe extern "C" fn WriteAOF(
     let aof = r::rm::AOF::new(aof);
     let dbkey: Box<r::DBKey> = Box::from_raw(value as *mut r::DBKey);
 
-    let db = dbkey.loop_data.get_db().clone();
+    let db = dbkey.loop_data.get_db();
 
     r::rm::EmitAOF(&aof, "REDISQL.CREATE_DB", "s", key, "");
 

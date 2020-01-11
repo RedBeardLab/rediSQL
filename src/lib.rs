@@ -107,7 +107,7 @@ unsafe extern "C" fn rdb_load(
 
     let on_disk = Arc::new(Mutex::new(on_disk));
     let previous_path = match get_path_from_db(on_disk.clone()) {
-        Ok(path) => path.clone(),
+        Ok(path) => path,
         Err(e) => {
             println!("Warning trying to load from RDB: {}", e);
             ":memory:".to_string()

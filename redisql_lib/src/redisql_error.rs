@@ -7,6 +7,7 @@ use crate::sqlite as sql;
 pub trait RediSQLErrorTrait: fmt::Display + error::Error {}
 
 pub struct RediSQLError {
+    #[allow(dead_code)]
     code: u32,
     debug: String,
     error_description: String,
