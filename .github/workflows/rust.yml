@@ -28,4 +28,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r test/correctness/requirements.txt
-        
+      - name: Install redis
+        run: |
+          sudo apt-get install redis 
+      - name: Run the tests
+        run: python test/correctness/test.py
+        env:
+          REDIS_MODULE_PATH: target/release/libredis_sql.so
