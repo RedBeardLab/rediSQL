@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Build
-        run: carbo build --release
+        run: cargo build --release
       - name: Setup python for integration tests
         uses: actions/setup-python@v1.1.1
         with:
