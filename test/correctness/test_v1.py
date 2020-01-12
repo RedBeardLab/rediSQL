@@ -137,9 +137,9 @@ class TestRediSQLExec(TestRediSQLWithExec):
         result = self.exec_cmd("F", "SELECT A, B, C FROM test6 ORDER BY A")
         result = [[A, float(B), C] for [A, B, C] in result]
         self.assertEqual(result, 
-            [[1, 1.0, "1point1"], [2, 2.0, '2point2'],
-             [3, 3.0, '3point3'], [4, 4.0, '4point4'],
-             [5, 5.0, '5point5']])
+            [[1, 1.0, b'1point1'], [2, 2.0, b'2point2'],
+             [3, 3.0, b'3point3'], [4, 4.0, b'4point4'],
+             [5, 5.0, b'5point5']])
 
   def test_join(self):
     with DB(self, "G"):
@@ -166,7 +166,7 @@ class TestRediSQLKeys(TestRediSQLWithExec):
     ok = self.create_db("A_REDISQL")
     self.assertEqual(ok, b'OK')
     keys = self.client.keys("A_REDISQL")
-    self.assertEqual(["A_REDISQL"], keys)
+    self.assertEqual([b'A_REDISQL'], keys)
     ok = self.delete_db("A_REDISQL")
     keys = self.client.keys("A_REDISQL")
     self.assertEqual([], keys)
@@ -230,7 +230,7 @@ class TestJSON(TestRediSQLWithExec):
               COMMIT;""")
         self.assertEqual(done, [b'DONE', 4])
         result = self.exec_naked("REDISQL.V1.EXEC", "H", "SELECT json_extract(A, '$.foo') FROM j1 ORDER BY B;")
-        self.assertEqual(result, [["bar"], [3], ["[1,2,3]"], ['{"baz":[1,2,3]}']])
+        self.assertEqual(result, [[b'bar'], [3], [b'[1,2,3]'], [b'{"baz":[1,2,3]}']])
 
 
 class TestStatements(TestRediSQLWithExec):
@@ -364,7 +364,7 @@ class TestSynchronous(TestRediSQLWithExec):
       done = self.exec_naked("REDISQL.V1.EXEC.NOW", "A", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
       self.assertEqual(done, [b'DONE', 3])
       result = self.exec_naked("REDISQL.V1.EXEC.NOW", "A", "SELECT * FROM test ORDER BY a ASC")
-      self.assertEqual(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
+      self.assertEqual(result, [[1, b'ciao'], [2, b'foo'], [100, b'baz']])
 
   def test_statements(self):
     with DB(self, "A"):
@@ -400,7 +400,7 @@ class TestRead(TestRediSQLWithExec):
         done = self.exec_naked("REDISQL.V1.EXEC", "B", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
         self.assertEqual(done, [b'DONE', 3])
         result = self.exec_naked("REDISQL.V1.QUERY", "B", "SELECT * FROM test ORDER BY a ASC")
-        self.assertEqual(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
+        self.assertEqual(result, [[1, b'ciao'], [2, b'foo'], [100, b'baz']])
 
 class TestCopy(TestRediSQLWithExec):
     def test_copy_mem_from_mem(self):
@@ -480,7 +480,7 @@ class TestCopySyncronous(TestRediSQLWithExec):
         self.assertEqual(result, [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]])
 
         result = self.exec_naked("REDISQL.V1.QUERY", "DB2", "SELECT a FROM foo ORDER BY a")
-        elf.assertEqual(result, [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]])
+        self.assertEqual(result, [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]])
 
     def test_statements_copy_now_mem_from_mem(self):
         done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB1")
