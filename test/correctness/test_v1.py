@@ -25,16 +25,16 @@ class Table():
   def __enter__(self):
     create_table = "CREATE TABLE {} {}".format(self.name, self.values)
     if self.key:
-      self.redis.client.execute_command("REDISQL.EXEC", self.key, create_table) 
+      self.redis.client.execute_command("REDISQL.V1.EXEC", self.key, create_table) 
     else:
-      self.redis.client.execute_command("REDISQL.EXEC", create_table)
+      self.redis.client.execute_command("REDISQL.V1.EXEC", create_table)
 
   def __exit__(self, type, value, traceback):
     drop_table = "DROP TABLE {}".format(self.name)
     if self.key:
-      self.redis.client.execute_command("REDISQL.EXEC", self.key, drop_table)
+      self.redis.client.execute_command("REDISQL.V1.EXEC", self.key, drop_table)
     else:
-      self.redis.client.execute_command("REDISQL.EXEC", drop_table)
+      self.redis.client.execute_command("REDISQL.V1.EXEC", drop_table)
 
 class DB():
   def __init__(self, redis, key):
@@ -42,7 +42,7 @@ class DB():
     self.key = key
 
   def __enter__(self):
-    self.redis.client.execute_command("REDISQL.CREATE_DB", self.key)
+    self.redis.client.execute_command("REDISQL.V1.CREATE_DB", self.key)
 
   def __exit__(self, type, value, traceback):
     self.redis.client.execute_command("DEL", self.key)
@@ -59,10 +59,10 @@ class TestRediSQLWithExec(ModuleTestCase('')):
     return self.client.execute_command(*command)
 
   def exec_cmd(self, *command):
-    return self.client.execute_command("REDISQL.EXEC", *command)
+    return self.client.execute_command("REDISQL.V1.EXEC", *command)
 
   def create_db(self, key):
-    return self.client.execute_command("REDISQL.CREATE_DB", key)
+    return self.client.execute_command("REDISQL.V1.CREATE_DB", key)
 
   def delete_db(self, key):
     return self.client.execute_command("DEL", key)
@@ -119,7 +119,7 @@ class TestRediSQLExec(TestRediSQLWithExec):
       with Table(self, "test5", "(A INTERGER)", key = "E"):
         pipe = self.client.pipeline(transaction=False)
         for i in xrange(elements):
-          pipe.execute_command("REDISQL.EXEC", "E", 
+          pipe.execute_command("REDISQL.V1.EXEC", "E", 
               "INSERT INTO test5 VALUES({})".format(i))
         pipe.execute()
         result = self.exec_cmd("E", "SELECT * FROM test5 ORDER BY A")
@@ -190,25 +190,25 @@ class TestMultipleInserts(TestRediSQLWithExec):
   def test_insert_two_rows(self):
     with DB(self, "M"):
       with Table(self, "t1", "(A INTEGER, B INTEGER)", key = "M"):
-        done = self.exec_naked("REDISQL.EXEC", "M", "INSERT INTO t1 values(1, 2);")
+        done = self.exec_naked("REDISQL.V1.EXEC", "M", "INSERT INTO t1 values(1, 2);")
         self.assertEquals(done, ["DONE", 1])
-        done = self.exec_naked("REDISQL.EXEC", "M", "INSERT INTO t1 values(3, 4),(5, 6);")
+        done = self.exec_naked("REDISQL.V1.EXEC", "M", "INSERT INTO t1 values(3, 4),(5, 6);")
         self.assertEquals(done, ["DONE", 2])
-        done = self.exec_naked("REDISQL.EXEC", "M", "INSERT INTO t1 values(7, 8);")
+        done = self.exec_naked("REDISQL.V1.EXEC", "M", "INSERT INTO t1 values(7, 8);")
         self.assertEquals(done, ["DONE", 1])
 
   def test_multi_insert_same_statement(self):
     with DB(self, "N"):
       with Table(self, "t1", "(A INTEGER, B INTEGER)", key = "N"):
-        done = self.exec_naked("REDISQL.EXEC", "N", "INSERT INTO t1 values(1, 2); INSERT INTO t1 values(3, 4);")
+        done = self.exec_naked("REDISQL.V1.EXEC", "N", "INSERT INTO t1 values(1, 2); INSERT INTO t1 values(3, 4);")
         self.assertEquals(done, ["DONE", 2])
-        done = self.exec_naked("REDISQL.EXEC", "N", """BEGIN; 
+        done = self.exec_naked("REDISQL.V1.EXEC", "N", """BEGIN; 
               INSERT INTO t1 values(3, 4);
               INSERT INTO t1 values(5, 6);
               INSERT INTO t1 values(7, 8);
               COMMIT;""")
         self.assertEquals(done, ["DONE", 3])
-        done = self.exec_naked("REDISQL.EXEC", "N", """BEGIN; 
+        done = self.exec_naked("REDISQL.V1.EXEC", "N", """BEGIN; 
               INSERT INTO t1 values(3, 4);
               INSERT INTO t1 values(5, 6);
               INSERT INTO t1 values(7, 8);
@@ -222,14 +222,14 @@ class TestJSON(TestRediSQLWithExec):
   def test_multiple_insert_on_different_types(self):
     with DB(self, "H"):
       with Table(self, "j1", "(A text, B int)", key = "H"):
-        done = self.exec_naked("REDISQL.EXEC", "H", """BEGIN;
+        done = self.exec_naked("REDISQL.V1.EXEC", "H", """BEGIN;
               INSERT INTO j1 VALUES ('{\"foo\" : \"bar\"}', 1);
               INSERT INTO j1 VALUES ('{\"foo\" : 3}', 2);
               INSERT INTO j1 VALUES ('{\"foo\" : [1, 2, 3]}', 3);
               INSERT INTO j1 VALUES ('{\"foo\" : {\"baz\" : [1, 2, 3]}}', 4);
               COMMIT;""")
         self.assertEquals(done, ["DONE", 4])
-        result = self.exec_naked("REDISQL.EXEC", "H", "SELECT json_extract(A, '$.foo') FROM j1 ORDER BY B;")
+        result = self.exec_naked("REDISQL.V1.EXEC", "H", "SELECT json_extract(A, '$.foo') FROM j1 ORDER BY B;")
         self.assertEquals(result, [["bar"], [3], ["[1,2,3]"], ['{"baz":[1,2,3]}']])
 
 
@@ -237,11 +237,11 @@ class TestStatements(TestRediSQLWithExec):
   def test_create_statement(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
         self.assertEquals(ok, "OK")
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 1])
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "4")
         self.assertEquals(done, ["DONE", 1])
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4]])
@@ -249,11 +249,11 @@ class TestStatements(TestRediSQLWithExec):
   def test_multi_statement_single_bind(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t1 values(?1 + 1);")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t1 values(?1 + 1);")
         self.assertEquals(ok, "OK")
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 2])
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "5")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "5")
         self.assertEquals(done, ["DONE", 2])
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4], [5], [6]])
@@ -262,11 +262,11 @@ class TestStatements(TestRediSQLWithExec):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
         with Table(self, "t2", "(A INTEGER)", key = "A"):
-          ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t2 values(?1 - 1);")
+          ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t2 values(?1 - 1);")
           self.assertEquals(ok, "OK")
-          done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+          done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "3")
           self.assertEquals(done, ["DONE", 2])
-          done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "5")
+          done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "5")
           self.assertEquals(done, ["DONE", 2])
 
           result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
@@ -278,22 +278,22 @@ class TestStatements(TestRediSQLWithExec):
   def test_multi_statement_different_bindings(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t1 values(?2 + 1); select * from t1;")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1); insert into t1 values(?2 + 1); select * from t1;")
         self.assertEquals(ok, "OK")
-        result = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3", "8")
+        result = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "3", "8")
         self.assertEquals(result, [[3], [9]])
 
 
   def test_update_statement(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
         self.assertEquals(ok, "OK")
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 1])
-        ok = self.exec_naked("REDISQL.UPDATE_STATEMENT", "A", "insert", "insert into t1 values(?1 + 10001);")
+        ok = self.exec_naked("REDISQL.V1.UPDATE_STATEMENT", "A", "insert", "insert into t1 values(?1 + 10001);")
         self.assertEquals(ok, "OK")
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "4")
         self.assertEquals(done, ["DONE", 1])
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [10005]])
@@ -301,15 +301,15 @@ class TestStatements(TestRediSQLWithExec):
   def test_rdb_persistency(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
         self.assertEquals(ok, "OK")
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 1])
         for _ in self.retry_with_reload():
           pass
         time.sleep(0.5)
 
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "4")
         self.assertEquals(done, ["DONE", 1])
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
         self.assertEquals(result, [[3], [4]])
@@ -334,23 +334,23 @@ class TestStatements(TestRediSQLWithExec):
   def test_rdb_persistency_multiple_statements(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "insert", "insert into t1 values(?1);")
         self.assertEquals(ok, "OK")
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "insert più cento", "insert into t1 values(?1 + 100);")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "insert più cento", "insert into t1 values(?1 + 100);")
         self.assertEquals(ok, "OK")
 
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "3")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "3")
         self.assertEquals(done, ["DONE", 1])
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert più cento", "3")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert più cento", "3")
         self.assertEquals(done, ["DONE", 1])
 
         for _ in self.retry_with_reload():
           pass
         time.sleep(0.5)
 
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert", "4")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert", "4")
         self.assertEquals(done, ["DONE", 1])
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert più cento", "4")
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert più cento", "4")
         self.assertEquals(done, ["DONE", 1])
 
         result = self.exec_cmd("A", "SELECT * FROM t1 ORDER BY A;")
@@ -359,177 +359,177 @@ class TestStatements(TestRediSQLWithExec):
 class TestSynchronous(TestRediSQLWithExec):
   def test_exec(self):
     with DB(self, "A"):
-      done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE TABLE test(a INT, b TEXT);")
+      done = self.exec_naked("REDISQL.V1.EXEC.NOW", "A", "CREATE TABLE test(a INT, b TEXT);")
       self.assertEquals(done, ["DONE", 0])
-      done = self.exec_naked("REDISQL.EXEC.NOW", "A", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
+      done = self.exec_naked("REDISQL.V1.EXEC.NOW", "A", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
       self.assertEquals(done, ["DONE", 3])
-      result = self.exec_naked("REDISQL.EXEC.NOW", "A", "SELECT * FROM test ORDER BY a ASC")
+      result = self.exec_naked("REDISQL.V1.EXEC.NOW", "A", "SELECT * FROM test ORDER BY a ASC")
       self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
 
   def test_statements(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT.NOW", "A", "insert+100", "INSERT INTO t1 VALUES(100 + ?1);")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT.NOW", "A", "insert+100", "INSERT INTO t1 VALUES(100 + ?1);")
         self.assertEquals(ok, "OK")
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "insert+100", 1)
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "insert+100", 1)
         self.assertEquals(done, ["DONE", 1])
-        done = self.exec_naked("REDISQL.EXEC_STATEMENT.NOW", "A", "insert+100", 9)
+        done = self.exec_naked("REDISQL.V1.EXEC_STATEMENT.NOW", "A", "insert+100", 9)
         self.assertEquals(done, ["DONE", 1])
-        ok = self.exec_naked("REDISQL.CREATE_STATEMENT", "A", "query-100", "SELECT A-100 FROM t1 ORDER BY A ASC;")
+        ok = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "A", "query-100", "SELECT A-100 FROM t1 ORDER BY A ASC;")
         self.assertEquals(ok, "OK")
-        result = self.exec_naked("REDISQL.EXEC_STATEMENT", "A", "query-100")
+        result = self.exec_naked("REDISQL.V1.EXEC_STATEMENT", "A", "query-100")
         self.assertEquals(result, [[1], [9]])
-        result = self.exec_naked("REDISQL.EXEC_STATEMENT.NOW", "A", "query-100")
+        result = self.exec_naked("REDISQL.V1.EXEC_STATEMENT.NOW", "A", "query-100")
         self.assertEquals(result, [[1], [9]])
 
 class TestRead(TestRediSQLWithExec):
   def test_read(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
-        done = self.exec_naked("REDISQL.EXEC", "A", "INSERT INTO t1 VALUES(4);")
-        result = self.exec_naked("REDISQL.QUERY", "A", "SELECT A FROM t1 LIMIT 1;")
+        done = self.exec_naked("REDISQL.V1.EXEC", "A", "INSERT INTO t1 VALUES(4);")
+        result = self.exec_naked("REDISQL.V1.QUERY", "A", "SELECT A FROM t1 LIMIT 1;")
         self.assertEquals(result, [[4]])
 
   def test_not_insert(self):
     with DB(self, "B"):
       with Table(self, "t1", "(A INTEGER)", key = "B"):
         with self.assertRaises(redis.exceptions.ResponseError):
-          self.exec_naked("REDISQL.QUERY", "B", "INSERT INTO t1 VALUES(5);")
-        done = self.exec_naked("REDISQL.EXEC", "B", "CREATE TABLE test(a INT, b TEXT);")
+          self.exec_naked("REDISQL.V1.QUERY", "B", "INSERT INTO t1 VALUES(5);")
+        done = self.exec_naked("REDISQL.V1.EXEC", "B", "CREATE TABLE test(a INT, b TEXT);")
         self.assertEquals(done, ["DONE", 0])
-        done = self.exec_naked("REDISQL.EXEC", "B", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
+        done = self.exec_naked("REDISQL.V1.EXEC", "B", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
         self.assertEquals(done, ["DONE", 3])
-        result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM test ORDER BY a ASC")
+        result = self.exec_naked("REDISQL.V1.QUERY", "B", "SELECT * FROM test ORDER BY a ASC")
         self.assertEquals(result, [[1, 'ciao'], [2, 'foo'], [100, 'baz']])
 
 class TestCopy(TestRediSQLWithExec):
     def test_copy_mem_from_mem(self):
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2A")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB2A")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.EXEC", "DB1", "CREATE TABLE foo(a INT);")
+        done = self.exec_naked("REDISQL.V1.EXEC", "DB1", "CREATE TABLE foo(a INT);")
         self.assertEquals(done, ["DONE", 0])
 
         for i in xrange(10):
-            done = self.exec_naked("REDISQL.EXEC", "DB1", "INSERT INTO foo VALUES({})".format(i))
+            done = self.exec_naked("REDISQL.V1.EXEC", "DB1", "INSERT INTO foo VALUES({})".format(i))
             self.assertEquals(done, ["DONE", 1])
 
-        done = self.exec_naked("REDISQL.COPY", "DB1", "DB2A")
+        done = self.exec_naked("REDISQL.V1.COPY", "DB1", "DB2A")
 
-        result = self.exec_naked("REDISQL.QUERY", "DB1", "SELECT a FROM foo ORDER BY a")
+        result = self.exec_naked("REDISQL.V1.QUERY", "DB1", "SELECT a FROM foo ORDER BY a")
         self.assertEquals(result, [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]])
 
-        result = self.exec_naked("REDISQL.QUERY", "DB2A", "SELECT a FROM foo ORDER BY a")
+        result = self.exec_naked("REDISQL.V1.QUERY", "DB2A", "SELECT a FROM foo ORDER BY a")
         self.assertEquals(result, [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]])
 
     def test_statements_copy_mem_from_mem(self):
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2B")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB2B")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
-        self.assertEquals(done, "OK")
-
-        done = self.exec_naked("REDISQL.COPY", "DB1", "DB2B")
+        done = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
         self.assertEquals(done, "OK")
 
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
+        done = self.exec_naked("REDISQL.V1.COPY", "DB1", "DB2B")
+        self.assertEquals(done, "OK")
+
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1]])
 
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2B", "select1")
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB2B", "select1")
         self.assertEquals(result, [[1]])
 
     def test_double_copy(self):
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2C")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB2C")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
+        done = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
         self.assertEquals(done, "OK")
 
-        first_copy = self.exec_naked("REDISQL.COPY", "DB1", "DB2C")
+        first_copy = self.exec_naked("REDISQL.V1.COPY", "DB1", "DB2C")
         self.assertEquals(first_copy, "OK")
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1]])
 
-        second_copy = self.exec_naked("REDISQL.COPY", "DB1", "DB2C")
+        second_copy = self.exec_naked("REDISQL.V1.COPY", "DB1", "DB2C")
         self.assertEquals(second_copy, "OK")
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1]])
 
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2C", "select1")
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB2C", "select1")
         self.assertEquals(result, [[1]])
 
 class TestCopySyncronous(TestRediSQLWithExec):
     def test_copy_now_mem_from_mem(self):
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB2")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.EXEC", "DB1", "CREATE TABLE foo(a INT);")
+        done = self.exec_naked("REDISQL.V1.EXEC", "DB1", "CREATE TABLE foo(a INT);")
         self.assertEquals(done, ["DONE", 0])
 
         for i in xrange(10):
-            done = self.exec_naked("REDISQL.EXEC", "DB1", "INSERT INTO foo VALUES({})".format(i))
+            done = self.exec_naked("REDISQL.V1.EXEC", "DB1", "INSERT INTO foo VALUES({})".format(i))
             self.assertEquals(done, ["DONE", 1])
 
-        done = self.exec_naked("REDISQL.COPY.NOW", "DB1", "DB2")
+        done = self.exec_naked("REDISQL.V1.COPY.NOW", "DB1", "DB2")
 
-        result = self.exec_naked("REDISQL.QUERY", "DB1", "SELECT a FROM foo ORDER BY a")
+        result = self.exec_naked("REDISQL.V1.QUERY", "DB1", "SELECT a FROM foo ORDER BY a")
         self.assertEquals(result, [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]])
 
-        result = self.exec_naked("REDISQL.QUERY", "DB2", "SELECT a FROM foo ORDER BY a")
+        result = self.exec_naked("REDISQL.V1.QUERY", "DB2", "SELECT a FROM foo ORDER BY a")
         elf.assertEquals(result, [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]])
 
     def test_statements_copy_now_mem_from_mem(self):
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB2")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
-        self.assertEquals(done, "OK")
-
-        done = self.exec_naked("REDISQL.COPY.NOW", "DB1", "DB2")
+        done = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
         self.assertEquals(done, "OK")
 
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
+        done = self.exec_naked("REDISQL.V1.COPY.NOW", "DB1", "DB2")
+        self.assertEquals(done, "OK")
+
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1]])
 
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB2", "select1")
         self.assertEquals(result, [[1]])
 
     def test_double_copy_now(self):
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB1")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB1")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_DB", "DB2")
+        done = self.exec_naked("REDISQL.V1.CREATE_DB", "DB2")
         self.assertEquals(done, "OK")
-        done = self.exec_naked("REDISQL.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
+        done = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "DB1", "select1", "SELECT 1;")
         self.assertEquals(done, "OK")
 
-        first_copy = self.exec_naked("REDISQL.COPY.NOW", "DB1", "DB2")
+        first_copy = self.exec_naked("REDISQL.V1.COPY.NOW", "DB1", "DB2")
         self.assertEquals(first_copy, "OK")
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1]])
 
-        second_copy = self.exec_naked("REDISQL.COPY.NOW", "DB1", "DB2")
+        second_copy = self.exec_naked("REDISQL.V1.COPY.NOW", "DB1", "DB2")
         self.assertEquals(second_copy, "OK")
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB1", "select1")
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB1", "select1")
         self.assertEquals(result, [[1]])
 
-        result = self.exec_naked("REDISQL.QUERY_STATEMENT", "DB2", "select1")
+        result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT", "DB2", "select1")
         self.assertEquals(result, [[1]])
 
 class TestBigInt(TestRediSQLWithExec):
     def test_big_int(self):
         with DB(self, "A"):
-            done = self.exec_naked("REDISQL.EXEC", "A", "CREATE TABLE ip_to_asn(start INT8, end INT8, asn int, hosts int8)")
+            done = self.exec_naked("REDISQL.V1.EXEC", "A", "CREATE TABLE ip_to_asn(start INT8, end INT8, asn int, hosts int8)")
             self.assertEquals(done, ["DONE", 0])
 
-            done = self.exec_naked("REDISQL.EXEC", "A", "insert into ip_to_asn values (2883484276228096000, 2883484280523063295, 265030, 4294967295)")
+            done = self.exec_naked("REDISQL.V1.EXEC", "A", "insert into ip_to_asn values (2883484276228096000, 2883484280523063295, 265030, 4294967295)")
             self.assertEquals(done, ["DONE", 1])
 
-            result = self.exec_naked("REDISQL.EXEC", "A", "SELECT * FROM ip_to_asn;")
+            result = self.exec_naked("REDISQL.V1.EXEC", "A", "SELECT * FROM ip_to_asn;")
             self.assertEquals(result, [
                 [
                     2883484276228096000,
@@ -542,15 +542,15 @@ class TestStreams(TestRediSQLWithExec):
     def test_stream_query(self):
         with DB(self, "A"):
             total_len = 513
-            done = self.exec_naked("REDISQL.EXEC", "A", "CREATE TABLE foo(a int, b string, c int);")
+            done = self.exec_naked("REDISQL.V1.EXEC", "A", "CREATE TABLE foo(a int, b string, c int);")
             self.assertEquals(done, ["DONE", 0])
 
             for i in xrange(total_len):
                 insert_stmt = "INSERT INTO foo VALUES({}, '{}', {})".format(i, "bar", i+1)
-                done = self.exec_naked("REDISQL.EXEC", "A", insert_stmt)
+                done = self.exec_naked("REDISQL.V1.EXEC", "A", insert_stmt)
                 self.assertEquals(done, ["DONE", 1])
 
-            result = self.exec_naked("REDISQL.QUERY.INTO", "{A}:1", "A", "SELECT * FROM foo")
+            result = self.exec_naked("REDISQL.V1.QUERY.INTO", "{A}:1", "A", "SELECT * FROM foo")
             self.assertEquals(result[0][0], "{A}:1")
             self.assertEquals(result[0][3], 513)
 
@@ -563,18 +563,18 @@ class TestStreams(TestRediSQLWithExec):
     def test_stream_query_statement(self):
         with DB(self, "B"):
             total_len = 513
-            done = self.exec_naked("REDISQL.EXEC", "B", "CREATE TABLE foo(a int, b string, c int);")
+            done = self.exec_naked("REDISQL.V1.EXEC", "B", "CREATE TABLE foo(a int, b string, c int);")
             self.assertEquals(done, ["DONE", 0])
 
             for i in xrange(total_len):
                 insert_stmt = "INSERT INTO foo VALUES({}, '{}', {})".format(i, "bar", i-1)
-                done = self.exec_naked("REDISQL.EXEC", "B", insert_stmt)
+                done = self.exec_naked("REDISQL.V1.EXEC", "B", insert_stmt)
                 self.assertEquals(done, ["DONE", 1])
 
-            done = self.exec_naked("REDISQL.CREATE_STATEMENT", "B", "select_all", "SELECT * FROM foo;")
+            done = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "B", "select_all", "SELECT * FROM foo;")
             self.assertEquals(done, "OK")
 
-            result = self.exec_naked("REDISQL.QUERY_STATEMENT.INTO",
+            result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT.INTO",
                     "{B}:1", "B", "select_all")
             self.assertEquals(result[0][0], "{B}:1")
             self.assertEquals(result[0][3], 513)
@@ -589,15 +589,15 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
     def test_stream_query(self):
         with DB(self, "A"):
             total_len = 513
-            done = self.exec_naked("REDISQL.EXEC.NOW", "A", "CREATE TABLE foo(a int, b string, c int);")
+            done = self.exec_naked("REDISQL.V1.EXEC.NOW", "A", "CREATE TABLE foo(a int, b string, c int);")
             self.assertEquals(done, ["DONE", 0])
 
             for i in xrange(total_len):
                 insert_stmt = "INSERT INTO foo VALUES({}, '{}', {})".format(i, "bar", i+1)
-                done = self.exec_naked("REDISQL.EXEC.NOW", "A", insert_stmt)
+                done = self.exec_naked("REDISQL.V1.EXEC.NOW", "A", insert_stmt)
                 self.assertEquals(done, ["DONE", 1])
 
-            result = self.exec_naked("REDISQL.QUERY.INTO.NOW", "{A}:1", "A", "SELECT * FROM foo")
+            result = self.exec_naked("REDISQL.V1.QUERY.INTO.NOW", "{A}:1", "A", "SELECT * FROM foo")
             self.assertEquals(result[0][0], "{A}:1")
             self.assertEquals(result[0][3], 513)
 
@@ -610,18 +610,18 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
     def test_stream_query_statement(self):
         with DB(self, "B"):
             total_len = 513
-            done = self.exec_naked("REDISQL.EXEC.NOW", "B", "CREATE TABLE foo(a int, b string, c int);")
+            done = self.exec_naked("REDISQL.V1.EXEC.NOW", "B", "CREATE TABLE foo(a int, b string, c int);")
             self.assertEquals(done, ["DONE", 0])
 
             for i in xrange(total_len):
                 insert_stmt = "INSERT INTO foo VALUES({}, '{}', {})".format(i, "bar", i-1)
-                done = self.exec_naked("REDISQL.EXEC.NOW", "B", insert_stmt)
+                done = self.exec_naked("REDISQL.V1.EXEC.NOW", "B", insert_stmt)
                 self.assertEquals(done, ["DONE", 1])
 
-            done = self.exec_naked("REDISQL.CREATE_STATEMENT.NOW", "B", "select_all", "SELECT * FROM foo;")
+            done = self.exec_naked("REDISQL.V1.CREATE_STATEMENT.NOW", "B", "select_all", "SELECT * FROM foo;")
             self.assertEquals(done, "OK")
 
-            result = self.exec_naked("REDISQL.QUERY_STATEMENT.INTO.NOW",
+            result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT.INTO.NOW",
                     "{B}:1", "B", "select_all")
             self.assertEquals(result[0][0], "{B}:1")
             self.assertEquals(result[0][3], 513)
@@ -636,7 +636,7 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
 class TestFilePersistency(TestRediSQLWithExec):
   def test_creation_rdb_file(self):
     path = tempfile.mkdtemp()
-    ok = self.exec_naked("REDISQL.CREATE_DB", "A", path + "/foo.sqlite")
+    ok = self.exec_naked("REDISQL.V1.CREATE_DB", "A", path + "/foo.sqlite")
     self.assertEquals(ok, "OK")
     for _ in self.retry_with_reload():
       pass
@@ -647,28 +647,28 @@ class TestFilePersistency(TestRediSQLWithExec):
 
   def test_storage_of_data(self):
     path = tempfile.mkdtemp()
-    ok = self.exec_naked("REDISQL.CREATE_DB", "B", path + "/foo.sqlite")
+    ok = self.exec_naked("REDISQL.V1.CREATE_DB", "B", path + "/foo.sqlite")
     self.assertEquals(ok, "OK")
-    done = self.exec_naked("REDISQL.EXEC", "B", "CREATE TABLE bar(a,b);")
+    done = self.exec_naked("REDISQL.V1.EXEC", "B", "CREATE TABLE bar(a,b);")
     self.assertEquals(done, ["DONE", 0])
-    done = self.exec_naked("REDISQL.EXEC", "B", "INSERT INTO bar VALUES(1,2);")
+    done = self.exec_naked("REDISQL.V1.EXEC", "B", "INSERT INTO bar VALUES(1,2);")
     self.assertEquals(done, ["DONE", 1])
     for _ in self.retry_with_reload():
       pass
     time.sleep(0.5)
 
-    result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM bar;")
+    result = self.exec_naked("REDISQL.V1.QUERY", "B", "SELECT * FROM bar;")
     self.assertEquals(result, [[1, 2]])
     shutil.rmtree(path)
     self.assertTrue(True)
 
   def test_without_file(self):
     path = tempfile.mkdtemp()
-    ok = self.exec_naked("REDISQL.CREATE_DB", "B", path + "/foo.sqlite")
+    ok = self.exec_naked("REDISQL.V1.CREATE_DB", "B", path + "/foo.sqlite")
     self.assertEquals(ok, "OK")
-    done = self.exec_naked("REDISQL.EXEC", "B", "CREATE TABLE bar(a,b);")
+    done = self.exec_naked("REDISQL.V1.EXEC", "B", "CREATE TABLE bar(a,b);")
     self.assertEquals(done, ["DONE", 0])
-    done = self.exec_naked("REDISQL.EXEC", "B", "INSERT INTO bar VALUES(1,2);")
+    done = self.exec_naked("REDISQL.V1.EXEC", "B", "INSERT INTO bar VALUES(1,2);")
     self.assertEquals(done, ["DONE", 1])
     os.remove(path + "/foo.sqlite")
     self.assertFalse(os.path.isfile(path + "/foo.sqlite"))
@@ -676,7 +676,7 @@ class TestFilePersistency(TestRediSQLWithExec):
       pass
     time.sleep(0.5)
 
-    result = self.exec_naked("REDISQL.QUERY", "B", "SELECT * FROM bar;")
+    result = self.exec_naked("REDISQL.V1.QUERY", "B", "SELECT * FROM bar;")
     self.assertEquals(result, [[1, 2]])
     self.assertTrue(os.path.isfile(path + "/foo.sqlite"))
     shutil.rmtree(path)
@@ -685,41 +685,41 @@ class TestFilePersistency(TestRediSQLWithExec):
 class TestNullTerminatedStrings(TestRediSQLWithExec):
   def test_null_terminated(self):
       with DB(self, "NULL"):
-          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1" + b'\x00')
+          one = self.exec_naked("REDISQL.V1.EXEC", "NULL", "SELECT 1" + b'\x00')
           self.assertEquals(one, [[1]])
 
 class TestBlankAfterSemicolon(TestRediSQLWithExec):
   def test_whitespace_after_semicolon(self):
       with DB(self, "NULL"):
-          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;  ")
+          one = self.exec_naked("REDISQL.V1.EXEC", "NULL", "SELECT 1;  ")
           self.assertEquals(one, [[1]])
 
   def test_newline_after_semicolon(self):
       with DB(self, "NULL"):
-          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;\n")
+          one = self.exec_naked("REDISQL.V1.EXEC", "NULL", "SELECT 1;\n")
           self.assertEquals(one, [[1]])
 
   def test_mix_after_semicolon(self):
       with DB(self, "NULL"):
-          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;  \n  ")
+          one = self.exec_naked("REDISQL.V1.EXEC", "NULL", "SELECT 1;  \n  ")
           self.assertEquals(one, [[1]])
   
   def test_whitespace_after_semicolon_then_query(self):
       with DB(self, "NULL"):
-          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;    SELECT 2;")
+          one = self.exec_naked("REDISQL.V1.EXEC", "NULL", "SELECT 1;    SELECT 2;")
           self.assertEquals(one, [[2]])
 
   def test_newline_after_semicolon_then_query(self):
       with DB(self, "NULL"):
-          one = self.exec_naked("REDISQL.EXEC", "NULL", "SELECT 1;\nSELECT 2;")
+          one = self.exec_naked("REDISQL.V1.EXEC", "NULL", "SELECT 1;\nSELECT 2;")
           self.assertEquals(one, [[2]])
 
 class TestWithNullChars(TestRediSQLWithExec):
     def test_with_null_at_the_end(self):
         with DB(self, 'A'):
-            self.assertRaises(redis.ResponseError, self.exec_naked, "REDISQL.EXEC", "A", "SELECT \0 1;")
+            self.assertRaises(redis.ResponseError, self.exec_naked, "REDISQL.V1.EXEC", "A", "SELECT \0 1;")
         with DB(self, 'B'):
-            self.assertRaises(redis.ResponseError, self.exec_naked, "REDISQL.EXEC", "A", "SELECT 1;\0")
+            self.assertRaises(redis.ResponseError, self.exec_naked, "REDISQL.V1.EXEC", "A", "SELECT 1;\0")
 
 if __name__ == '__main__':
    unittest.main()
