@@ -115,12 +115,18 @@ pub unsafe extern "C" fn WriteAOF(
 
     let db = dbkey.loop_data.get_db();
 
-    r::rm::EmitAOF(&aof, "REDISQL.CREATE_DB", "s", key, "");
+    r::rm::EmitAOF(&aof, "REDISQL.V1.CREATE_DB", "s", key, "");
 
     let iter = DumpIterator::new(&db);
     for s in iter {
         for line in s.split('\n').filter(|l| !l.is_empty()) {
-            r::rm::EmitAOF(&aof, "REDISQL.EXEC.NOW", "sc", key, line);
+            r::rm::EmitAOF(
+                &aof,
+                "REDISQL.V1.EXEC.NOW",
+                "sc",
+                key,
+                line,
+            );
         }
     }
 }
@@ -721,11 +727,11 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         std::process::exit(1);
     });
 
-    register_write_function(&ctx, "REDISQL.EXEC.NOW", ExecNow)
+    register_write_function(&ctx, "REDISQL.V1.EXEC.NOW", ExecNow)
         .and_then(|_| {
             register_function(
                 &ctx,
-                "REDISQL.QUERY.NOW",
+                "REDISQL.V1.QUERY.NOW",
                 "readonly",
                 QueryNow,
             )
@@ -733,35 +739,35 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.CREATE_STATEMENT.NOW",
+                "REDISQL.V1.CREATE_STATEMENT.NOW",
                 CreateStatementNow,
             )
         })
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.EXEC_STATEMENT.NOW",
+                "REDISQL.V1.EXEC_STATEMENT.NOW",
                 ExecStatementNow,
             )
         })
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.UPDATE_STATEMENT.NOW",
+                "REDISQL.V1.UPDATE_STATEMENT.NOW",
                 UpdateStatementNow,
             )
         })
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.DELETE_STATEMENT.NOW",
+                "REDISQL.V1.DELETE_STATEMENT.NOW",
                 DeleteStatementNow,
             )
         })
         .and_then(|_| {
             register_function(
                 &ctx,
-                "REDISQL.QUERY_STATEMENT.NOW",
+                "REDISQL.V1.QUERY_STATEMENT.NOW",
                 "readonly",
                 QueryStatementNow,
             )
@@ -769,7 +775,7 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         .and_then(|_| {
             register_function_with_keys(
                 &ctx,
-                "REDISQL.QUERY.INTO.NOW",
+                "REDISQL.V1.QUERY.INTO.NOW",
                 "readonly",
                 1,
                 2,
@@ -780,7 +786,7 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         .and_then(|_| {
             register_function_with_keys(
                 &ctx,
-                "REDISQL.QUERY_STATEMENT.INTO.NOW",
+                "REDISQL.V1.QUERY_STATEMENT.INTO.NOW",
                 "readonly",
                 1,
                 2,
@@ -791,7 +797,7 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.COPY.NOW",
+                "REDISQL.V1.COPY.NOW",
                 MakeCopyNow,
             )
         })
