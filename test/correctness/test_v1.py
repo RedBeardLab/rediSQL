@@ -551,14 +551,14 @@ class TestStreams(TestRediSQLWithExec):
                 self.assertEqual(done, [b'DONE', 1])
 
             result = self.exec_naked("REDISQL.V1.QUERY.INTO", "{A}:1", "A", "SELECT * FROM foo")
-            self.assertEqual(result[0][0], "{A}:1")
+            self.assertEqual(result[0][0], b'{A}:1')
             self.assertEqual(result[0][3], 513)
 
             result = self.exec_naked("XRANGE", "{A}:1", "-", "+")
             self.assertEqual(len(result), total_len)
 
             for i, row in enumerate(result):
-                self.assertEqual(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i+1)])
+                self.assertEqual(row[1], [b'int:a', str(i).encode('utf-8'), b'text:b', b'bar', b'int:c', str(i+1).encode('utf-8')])
 
     def test_stream_query_statement(self):
         with DB(self, "B"):
@@ -576,14 +576,14 @@ class TestStreams(TestRediSQLWithExec):
 
             result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT.INTO",
                     "{B}:1", "B", "select_all")
-            self.assertEqual(result[0][0], "{B}:1")
+            self.assertEqual(result[0][0], b'{B}:1')
             self.assertEqual(result[0][3], 513)
 
             result = self.exec_naked("XRANGE", "{B}:1", "-", "+")
             self.assertEqual(len(result), total_len)
 
             for i, row in enumerate(result):
-                self.assertEqual(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i-1)])
+                self.assertEqual(row[1], [b'int:a', str(i).encode('utf-8'), b'text:b', b'bar', b'int:c', str(i-1).encode('utf-8')])
 
 class TestStreamsSynchronous(TestRediSQLWithExec):
     def test_stream_query(self):
@@ -598,14 +598,14 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
                 self.assertEqual(done, [b'DONE', 1])
 
             result = self.exec_naked("REDISQL.V1.QUERY.INTO.NOW", "{A}:1", "A", "SELECT * FROM foo")
-            self.assertEqual(result[0][0], "{A}:1")
+            self.assertEqual(result[0][0], b'{A}:1')
             self.assertEqual(result[0][3], 513)
 
             result = self.exec_naked("XRANGE", "{A}:1", "-", "+")
             self.assertEqual(len(result), total_len)
 
             for i, row in enumerate(result):
-                self.assertEqual(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i+1)])
+                self.assertEqual(row[1], [b'int:a', str(i).encode('utf-8'), b'text:b', b'bar', b'int:c', str(i+1).encode('utf-8')])
 
     def test_stream_query_statement(self):
         with DB(self, "B"):
@@ -623,14 +623,14 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
 
             result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT.INTO.NOW",
                     "{B}:1", "B", "select_all")
-            self.assertEqual(result[0][0], "{B}:1")
+            self.assertEqual(result[0][0], b'{B}:1')
             self.assertEqual(result[0][3], 513)
 
             result = self.exec_naked("XRANGE", "{B}:1", "-", "+")
             self.assertEqual(len(result), total_len)
 
             for i, row in enumerate(result):
-                self.assertEqual(row[1], ['int:a', str(i), 'text:b', "bar", 'int:c', str(i-1)])
+                self.assertEqual(row[1], [b'int:a', str(i).encode('utf-8'), b'text:b', b'bar', b'int:c', str(i-1).encode('utf-8')])
 
 
 class TestFilePersistency(TestRediSQLWithExec):
