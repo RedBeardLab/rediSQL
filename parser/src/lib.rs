@@ -16,7 +16,7 @@ impl<'s> CreateDB<'s> {
         args_iter.next();
         let name = match args_iter.next() {
             Some(name) => name,
-            None => unimplemented!(),
+            None => return Err(RediSQLError::no_database_name()),
         };
         let mut createdb = CreateDB {
             name: name,
@@ -31,7 +31,12 @@ impl<'s> CreateDB<'s> {
                 "PATH" => {
                     let path = match args_iter.next() {
                         Some(path) => path,
-                        None => unimplemented!(),
+                        None => return Err(RediSQLError::with_code(
+                            2,
+                            "Provide PATH option but no PATH to use"
+                                .to_string(),
+                            "No PATH provided".to_string(),
+                        )),
                     };
                     createdb.path = Some(path);
                 }
@@ -44,7 +49,11 @@ impl<'s> CreateDB<'s> {
                 _ => {}
             }
         }
-        if createdb.can_exists && createdb.must_create {}
+        if createdb.can_exists && createdb.must_create {
+            return Err(RediSQLError::with_code(3, 
+                    "Provide both CAN_EXISTS and MUST_CREATE flags, they can't work together".to_string(), 
+                    "Provide both CAN_EXISTS and MUST_CREATE".to_string()));
+        }
         if !createdb.can_exists && !createdb.must_create {
             createdb.can_exists = true;
         }
