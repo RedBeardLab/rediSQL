@@ -40,10 +40,14 @@ jobs:
       - name: Build redis-4
         if: steps.cache-redis-4.outputs.cache-hit != 'true'
         run: |
-          wget http://download.redis.io/releases/redis-4.0.14.tar.gz | tar xzf -
+          wget http://download.redis.io/releases/redis-4.0.14.tar.gz
+          echo "pwd: "
           pwd
+          echo "ls"
           ls
+          echo "ls HOME"
           ls $HOME
+          tar xzf redis-4.0.14.tar.gz
           mv "$HOME/redis-4.0.17" redis-4
           cd redis-4
           make
