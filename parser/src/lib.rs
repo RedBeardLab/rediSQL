@@ -1,4 +1,6 @@
-use redisql_lib;
+use redisql_lib::redis as r;
+use redisql_lib::redis::RedisKey;
+use redisql_lib::redis_type::Context;
 
 use redisql_lib::redisql_error::RediSQLError;
 
@@ -58,6 +60,17 @@ impl<'s> CreateDB<'s> {
             createdb.can_exists = true;
         }
         Ok(createdb)
+    }
+    pub fn key(self, ctx: &Context) -> RedisKey {
+        let key_name = r::rm::RMString::new(ctx, self.name);
+        let key = unsafe {
+        r::rm::ffi::Export_RedisModule_OpenKey(
+                    ctx.as_ptr(),
+                    key_name.as_ptr(),
+                    r::rm::ffi::REDISMODULE_WRITE,
+                )
+        };
+        RedisKey { key }
     }
 }
 
