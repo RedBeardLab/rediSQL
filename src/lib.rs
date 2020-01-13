@@ -1,6 +1,6 @@
 #![warn(unused_extern_crates)]
 
-mod commands;
+mod commands_v1;
 
 #[macro_use]
 extern crate log;
@@ -23,11 +23,10 @@ use uuid::Uuid;
 
 use sync_engine::{register, WriteAOF};
 
-use commands::{
-    CreateDB, CreateStatement, DeleteStatement,
-    Exec, ExecStatement, GetStatistics, MakeCopy, Query, QueryInto,
-    QueryStatement, QueryStatementInto, RediSQLVersion,
-    UpdateStatement,
+use commands_v1::{
+    CreateDB, CreateStatement, DeleteStatement, Exec, ExecStatement,
+    GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
+    QueryStatementInto, RediSQLVersion, UpdateStatement,
 };
 
 #[cfg(not(feature = "pro"))]
@@ -108,7 +107,7 @@ unsafe extern "C" fn rdb_load(
 
     let on_disk = Arc::new(Mutex::new(on_disk));
     let previous_path = match get_path_from_db(on_disk.clone()) {
-        Ok(path) => path.clone(),
+        Ok(path) => path,
         Err(e) => {
             println!("Warning trying to load from RDB: {}", e);
             ":memory:".to_string()
@@ -222,26 +221,33 @@ pub extern "C" fn RedisModule_OnLoad(
         return r::rm::ffi::REDISMODULE_ERR;
     }
 
-    match register_write_function(&ctx, "REDISQL.CREATE_DB", CreateDB)
-    {
+    match register_write_function(
+        &ctx,
+        "REDISQL.V1.CREATE_DB",
+        CreateDB,
+    ) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
-    match register_write_function(&ctx, "REDISQL.EXEC", Exec) {
+    match register_write_function(&ctx, "REDISQL.V1.EXEC", Exec) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
-    match register_function(&ctx, "REDISQL.QUERY", "readonly", Query)
-    {
+    match register_function(
+        &ctx,
+        "REDISQL.V1.QUERY",
+        "readonly",
+        Query,
+    ) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
     match register_function_with_keys(
         &ctx,
-        "REDISQL.QUERY.INTO",
+        "REDISQL.V1.QUERY.INTO",
         "readonly",
         1,
         2,
@@ -254,7 +260,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        "REDISQL.CREATE_STATEMENT",
+        "REDISQL.V1.CREATE_STATEMENT",
         CreateStatement,
     ) {
         Ok(()) => (),
@@ -263,7 +269,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        "REDISQL.EXEC_STATEMENT",
+        "REDISQL.V1.EXEC_STATEMENT",
         ExecStatement,
     ) {
         Ok(()) => (),
@@ -272,7 +278,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        "REDISQL.UPDATE_STATEMENT",
+        "REDISQL.V1.UPDATE_STATEMENT",
         UpdateStatement,
     ) {
         Ok(()) => (),
@@ -281,7 +287,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        "REDISQL.DELETE_STATEMENT",
+        "REDISQL.V1.DELETE_STATEMENT",
         DeleteStatement,
     ) {
         Ok(()) => (),
@@ -290,7 +296,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function(
         &ctx,
-        "REDISQL.QUERY_STATEMENT",
+        "REDISQL.V1.QUERY_STATEMENT",
         "readonly",
         QueryStatement,
     ) {
@@ -300,7 +306,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function_with_keys(
         &ctx,
-        "REDISQL.QUERY_STATEMENT.INTO",
+        "REDISQL.V1.QUERY_STATEMENT.INTO",
         "readonly",
         1,
         2,
@@ -311,14 +317,14 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
-    match register_write_function(&ctx, "REDISQL.COPY", MakeCopy) {
+    match register_write_function(&ctx, "REDISQL.V1.COPY", MakeCopy) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
     match register_function(
         &ctx,
-        "REDISQL.STATISTICS",
+        "REDISQL.V1.STATISTICS",
         "readonly",
         GetStatistics,
     ) {
@@ -328,7 +334,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function(
         &ctx,
-        "REDISQL.VERSION",
+        "REDISQL.V1.VERSION",
         "readonly",
         RediSQLVersion,
     ) {

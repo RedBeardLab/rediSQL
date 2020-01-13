@@ -777,6 +777,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "parser"
+version = "0.1.0"
+dependencies = [
+ "redisql_lib 1.0.0",
+]
+
+[[package]]
 name = "peeking_take_while"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1014,6 +1021,7 @@ version = "2.0.0"
 dependencies = [
  "env_logger 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "parser 0.1.0",
  "redisql_lib 1.0.0",
  "sync_engine 1.0.0",
  "telemetrics 0.1.0",

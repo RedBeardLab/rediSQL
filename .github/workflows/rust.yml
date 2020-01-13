@@ -1,0 +1,37 @@
+name: Rust
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+  
+  release-build:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --release
+      - name: Setup Python for integration tests
+        uses: actions/setup-python@v1.1.1
+        with:
+          python-version: 3.8
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r test/correctness/requirements.txt
+      - name: Install redis
+        run: |
+          sudo apt-get install redis 
+      - name: Run the tests
+        run: python3 test/correctness/test_v1.py
+        env:
+          REDIS_MODULE_PATH: target/release/libredis_sql.so

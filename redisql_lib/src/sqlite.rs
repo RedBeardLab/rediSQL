@@ -78,21 +78,20 @@ impl RawConnection {
         Self::new(path, Self::nomutex_flags())
     }
     fn new(path: &str, flags: i32) -> Result<Self, SQLite3Error> {
-        let mut conn: *mut ffi::sqlite3 =
-            unsafe { mem::uninitialized() };
+        let mut conn = std::mem::MaybeUninit::uninit();
         let c_path = CString::new(path).unwrap();
         let r = unsafe {
             let ptr_path = c_path.as_ptr();
             ffi::sqlite3_open_v2(
                 ptr_path,
-                &mut conn,
+                conn.as_mut_ptr(),
                 flags,
                 ptr::null(),
             )
         };
-        let rc = RawConnection { conn, flags };
+        let conn = unsafe { conn.assume_init() };
         match r {
-            ffi::SQLITE_OK => Ok(rc),
+            ffi::SQLITE_OK => Ok(RawConnection { conn, flags }),
             _ => Err(get_last_error_from_db_connection(conn)),
         }
     }
@@ -161,7 +160,6 @@ pub fn get_last_error_from_db_connection(
 
 pub struct Connection {
     db: RawConnection,
-    modified_rows: i32,
     pub path: String,
 }
 
@@ -174,7 +172,6 @@ impl Connection {
         Ok(Connection {
             db,
             path: String::from(path),
-            modified_rows: 0,
         })
     }
     pub fn duplicate_connection(
@@ -184,7 +181,6 @@ impl Connection {
         let cn1 = Connection {
             db: cn1,
             path: String::from(&self.path),
-            modified_rows: 0,
         };
 
         Ok(cn1)

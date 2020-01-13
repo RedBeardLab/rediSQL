@@ -48,7 +48,9 @@ impl ReplicationBook {
         let mut new = ReplicationBook::new(db);
         let data = self.data.read().unwrap();
         for (name, (statement, _)) in data.iter() {
-            new.insert_new_statement(name, &statement.to_string());
+            // this could fail in theory, but panic would be too much
+            let _ = new
+                .insert_new_statement(name, &statement.to_string());
         }
         new
     }
@@ -1301,13 +1303,14 @@ impl DBKey {
                         new_replication_book,
                     );
                 let (new_tx, new_rx) = channel();
-                self.tx.send(Command::Stop);
+                if self.tx.send(Command::Stop).is_err() {
+                    return Err(());
+                }
                 self.tx = new_tx;
                 self.loop_data = new_loop.clone();
                 thread::spawn(move || {
                     listen_and_execute(&mut new_loop, &new_rx);
                 });
-                self.tx.send(Command::Ping);
             }
         }
 
@@ -1671,12 +1674,10 @@ impl RedisDBKey {
     ) -> &Sender<Command> {
         unsafe {
             match connection {
-                None => &(*self.dbkey).tx ,
+                None => &(*self.dbkey).tx,
                 Some(connection) => {
                     match (*self.dbkey).connections.get(connection) {
-                        None => {
-                            &(*self.dbkey).tx
-                        }
+                        None => &(*self.dbkey).tx,
                         Some(s) => s,
                     }
                 }

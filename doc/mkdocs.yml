@@ -28,3 +28,5 @@ pages:
       - 'Using RediSQL with Python': 'blog/python/using-redisql-with-python.md'
       - 'Using RediSQL with Go(lang)': 'blog/golang/using-redisql-with-golang.md'
       - 'Using RediSQL with Node.js': 'blog/node/using-redisql-with-node.md'
+  -
+    FAQs: faqs.md
