@@ -1,5 +1,8 @@
 use parser;
 use redisql_lib::redis as r;
+use redisql_lib::redis::RedisReply;
+use redisql_lib::redis_type::ReplicateVerbatim;
+use redisql_lib::sqlite::QueryResult;
 
 #[allow(non_snake_case)]
 pub extern "C" fn CreateDB_v2(
@@ -16,7 +19,8 @@ pub extern "C" fn CreateDB_v2(
     };
     let command = match parser::CreateDB::parse(argvector) {
         Ok(comm) => comm,
-        Err(e) => return e.reply(e),
-    }
-    0
+        Err(mut e) => return e.reply(&context),
+    };
+    ReplicateVerbatim(&context);
+    (QueryResult::OK {}).reply(&context)
 }

@@ -1,6 +1,7 @@
 #![warn(unused_extern_crates)]
 
 mod commands_v1;
+mod commands_v2;
 
 #[macro_use]
 extern crate log;
@@ -28,6 +29,7 @@ use commands_v1::{
     GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
     QueryStatementInto, RediSQLVersion, UpdateStatement,
 };
+use commands_v2::CreateDB_v2;
 
 #[cfg(not(feature = "pro"))]
 extern crate telemetrics;
@@ -352,6 +354,24 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
     */
+
+    match register_write_function(
+        &ctx,
+        "REDISQL.V2.CREATE_DB",
+        CreateDB_v2,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(
+        &ctx,
+        "REDISQL.CREATE_DB",
+        CreateDB_v2,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
 
     match register(ctx) {
         Ok(()) => (),
