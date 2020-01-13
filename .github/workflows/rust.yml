@@ -3,8 +3,7 @@ name: Rust
 on: [push]
 
 jobs:
-  build:
-
+  build-debug:
     runs-on: ubuntu-18.04
 
     steps:
@@ -13,13 +12,30 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
-  
-  release-build:
+
+  build-release:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
       - name: Build
         run: cargo build --release
+      - name: Rename artifact
+        run: |
+          cp target/release/libredis_sql.so target/release/redisql.so
+      - name: Upload resulting build
+        uses: actions/upload-artifact@v1
+        with:
+          name: redisql.so
+          path: target/release/
+
+  test-redis4:
+    needs: build-release
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@v1
+        with:
+          name: redisql.so
+          path: build
       - name: Setup Python for integration tests
         uses: actions/setup-python@v1.1.1
         with:
@@ -30,8 +46,40 @@ jobs:
           pip install -r test/correctness/requirements.txt
       - name: Install redis
         run: |
-          sudo apt-get install redis 
+          wget -o redis-4.tar.gz http://download.redis.io/releases/redis-4.0.14.tar.gz
+          tar xzf redis-4.tar.gz
+          cd redis-4
+          make
       - name: Run the tests
         run: python3 test/correctness/test_v1.py
         env:
-          REDIS_MODULE_PATH: target/release/libredis_sql.so
+          REDIS_MODULE_PATH: build/redisql.so
+          REDIS_PATH: redis-4/src/redis-server
+
+  test-redis5:
+    needs: build-release
+    steps:
+      - name: Download build
+        uses: actions/download-artifact@v1
+        with:
+          name: redisql.so
+          path: build
+      - name: Setup Python for integration tests
+        uses: actions/setup-python@v1.1.1
+        with:
+          python-version: 3.8
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r test/correctness/requirements.txt
+      - name: Install redis
+        run: |
+          wget -o redis-5.tar.gz http://download.redis.io/releases/redis-5.0.7.tar.gz
+          tar xzf redis-5.tar.gz
+          cd redis-5
+          make
+      - name: Run the tests
+        run: python3 test/correctness/test_v1.py
+        env:
+          REDIS_MODULE_PATH: build/redisql.so
+          REDIS_PATH: redis-5/src/redis-server
