@@ -49,7 +49,7 @@ jobs:
           echo "ls - after tar"
           ls
           mkdir redis-4 ;
-          mv ./redis-4.0.17 redis-4/ ;
+          mv ./redis-4.0.14 redis-4/ ;
           cd redis-4
           make
 
