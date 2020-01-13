@@ -129,8 +129,13 @@ jobs:
           mv ./$REDIS redis-5
           cd ./redis-5
           make
-      - name: Run the tests
+      - name: Run the tests v1
         run: python3 test/correctness/test_v1.py
+        env:
+          REDIS_MODULE_PATH: build/redisql.so
+          REDIS_PATH: redis-4/src/redis-server
+      - name: Run the tests v2
+        run: python3 test/correctness/test_v2.py
         env:
           REDIS_MODULE_PATH: build/redisql.so
           REDIS_PATH: redis-4/src/redis-server
@@ -168,8 +173,13 @@ jobs:
           mv ./$REDIS redis-5
           cd ./redis-5
           make
-      - name: Run the tests
+      - name: Run the tests v1
         run: python3 test/correctness/test_v1.py
+        env:
+          REDIS_MODULE_PATH: build/redisql.so
+          REDIS_PATH: redis-5/src/redis-server
+      - name: Run the tests v2
+        run: python3 test/correctness/test_v2.py
         env:
           REDIS_MODULE_PATH: build/redisql.so
           REDIS_PATH: redis-5/src/redis-server
