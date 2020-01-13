@@ -29,6 +29,7 @@ jobs:
           path: target/release/
 
   test-redis4:
+    runs-on: ubuntu-18.04
     needs: build-release
     steps:
       - name: Download build
@@ -57,6 +58,7 @@ jobs:
           REDIS_PATH: redis-4/src/redis-server
 
   test-redis5:
+    runs-on: ubuntu-18.04
     needs: build-release
     steps:
       - name: Download build
