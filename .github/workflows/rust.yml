@@ -60,7 +60,7 @@ jobs:
 
   test-redis4:
     runs-on: ubuntu-18.04
-    needs: [build-release, build-redis-4]
+    needs: build-release
     steps:
       - uses: actions/checkout@v2
       - name: Download build
@@ -104,7 +104,7 @@ jobs:
 
   test-redis5:
     runs-on: ubuntu-18.04
-    needs: [build-release, build-redis-5]
+    needs: build-release
     steps:
       - uses: actions/checkout@v2
       - name: Download build
