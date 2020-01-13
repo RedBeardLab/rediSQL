@@ -45,10 +45,11 @@ jobs:
           pwd
           echo "ls"
           ls
-          echo "ls HOME"
-          ls $HOME
-          tar xzf redis-4.0.14.tar.gz
-          mv "$HOME/redis-4.0.17" redis-4
+          tar xzf ./redis-4.0.14.tar.gz
+          echo "ls - after tar"
+          ls
+          mkdir redis-4
+          mv ./redis-4.0.17 redis-4/
           cd redis-4
           make
 
