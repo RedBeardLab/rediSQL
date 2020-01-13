@@ -13,6 +13,12 @@ pub struct RediSQLError {
     error_description: String,
 }
 
+/**
+ * Codes list:
+ * 1 - The name of the database to use was not provide in the command
+ * 2 - Provide the PATH option but not the PATH to use
+ * 3 - Provide as input both CAN_EXISTS and MUST_CREATE, this is a contradiction
+ */
 impl RediSQLError {
     pub fn new(debug: String, error_description: String) -> Self {
         RediSQLError {
@@ -26,6 +32,24 @@ impl RediSQLError {
             "Timeout expired.".to_string(),
             "It was impossible to return the whole result before the timeout expired.".to_string(),
             )
+    }
+    pub fn with_code(
+        code: u32,
+        debug: String,
+        error_description: String,
+    ) -> Self {
+        RediSQLError {
+            code,
+            debug,
+            error_description,
+        }
+    }
+    pub fn no_database_name() -> Self {
+        RediSQLError::with_code(
+            1,
+            "You didn't provide a database name".to_string(),
+            "No database name provide".to_string(),
+        )
     }
 }
 
