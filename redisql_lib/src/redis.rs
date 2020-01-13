@@ -1001,11 +1001,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
     loop {
         debug!("Loop iteration");
         match rx.recv() {
-            Ok(Command::Ping {}) => {
-                let db = loopdata.get_db();
-                let db = db.lock().unwrap();
-                debug!("Received PING!")
-            }
+            Ok(Command::Ping {}) => debug!("Received PING!"),
             Ok(Command::Exec {
                 query,
                 client,
