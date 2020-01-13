@@ -28,10 +28,28 @@ jobs:
           name: redisql.so
           path: target/release/
 
+  build-redis-4:
+    runs-on: ubuntu-18.04
+    steps:
+     - name: Cache redis-4
+        id: cache-redis-4
+        uses: actions/cache@v1
+        with:
+          path: redis-4
+          key: redis-4
+      - name: Build redis-4
+        if: steps.cache-redis-4.outputs.cache-hit != 'true'
+        run: |
+          wget -o redis-4.tar.gz http://download.redis.io/releases/redis-4.0.14.tar.gz
+          tar xzf redis-4.tar.gz
+          cd redis-4
+          make
+
   test-redis4:
     runs-on: ubuntu-18.04
-    needs: build-release
+    needs: build-release, build-redis-4
     steps:
+      - uses: actions/checkout@v2
       - name: Download build
         uses: actions/download-artifact@v1
         with:
@@ -45,7 +63,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r test/correctness/requirements.txt
-      - name: Install redis
+      - name: Cache redis-4
+        id: cache-redis-4
+        uses: actions/cache@v1
+        with:
+          path: redis-4
+          key: redis-4
+      - name: Build redis-4
+        if: steps.cache-redis-4.outputs.cache-hit != 'true'
         run: |
           wget -o redis-4.tar.gz http://download.redis.io/releases/redis-4.0.14.tar.gz
           tar xzf redis-4.tar.gz
@@ -61,6 +86,7 @@ jobs:
     runs-on: ubuntu-18.04
     needs: build-release
     steps:
+      - uses: actions/checkout@v2
       - name: Download build
         uses: actions/download-artifact@v1
         with:
@@ -74,7 +100,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r test/correctness/requirements.txt
-      - name: Install redis
+      - name: Cache redis-5
+        id: cache-redis-5
+        uses: actions/cache@v1
+        with:
+          path: redis-5
+          key: redis-5
+      - name: Build redis-5
+        if: steps.cache-redis-5.outputs.cache-hit != 'true'
         run: |
           wget -o redis-5.tar.gz http://download.redis.io/releases/redis-5.0.7.tar.gz
           tar xzf redis-5.tar.gz
