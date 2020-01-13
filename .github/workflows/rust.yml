@@ -65,6 +65,7 @@ jobs:
           mv ./$REDIS redis-5
           cd ./redis-5
           make
+
   test-redis4:
     runs-on: ubuntu-18.04
     needs: [build-release, build-redis-4]
@@ -92,10 +93,11 @@ jobs:
       - name: Build redis-4
         if: steps.cache-redis-4.outputs.cache-hit != 'true'
         run: |
-          wget -O redis.tar.gz http://download.redis.io/releases/redis-4.0.14.tar.gz
-          tar xzf redis.tar.gz
-          mv redis-4.0.17 redis-4
-          cd redis-4
+          REDIS="redis-4.0.14"
+          wget http://download.redis.io/releases/$REDIS.tar.gz
+          tar xzf ./$REDIS.tar.gz
+          mv ./$REDIS redis-5
+          cd ./redis-5
           make
       - name: Run the tests
         run: python3 test/correctness/test_v1.py
@@ -105,7 +107,7 @@ jobs:
 
   test-redis5:
     runs-on: ubuntu-18.04
-    needs: build-release
+    needs: [build-release, build-redis-5]
     steps:
       - uses: actions/checkout@v2
       - name: Download build
@@ -130,10 +132,11 @@ jobs:
       - name: Build redis-5
         if: steps.cache-redis-5.outputs.cache-hit != 'true'
         run: |
-          wget http://download.redis.io/releases/redis-5.0.7.tar.gz
-          tar xzf redis-5.0.7.tar.gz
-          mv redis-5.0.7 redis-5
-          cd redis-5
+          REDIS="redis-5.0.7"
+          wget http://download.redis.io/releases/$REDIS.tar.gz
+          tar xzf ./$REDIS.tar.gz
+          mv ./$REDIS redis-5
+          cd ./redis-5
           make
       - name: Run the tests
         run: python3 test/correctness/test_v1.py
