@@ -527,8 +527,11 @@ impl CallReply {
 
 impl Drop for CallReply {
     fn drop(&mut self) {
-        unsafe {
-            ffi::RedisModule_FreeCallReply.unwrap()(self.as_ptr())
+        match self {
+            CallReply::RNull { .. } => {}
+            _ => unsafe {
+                ffi::RedisModule_FreeCallReply.unwrap()(self.as_ptr())
+            },
         }
     }
 }

@@ -959,8 +959,11 @@ where
                 // return an error and unlock
             }
             _ => {
-                debug!("XADD result: {:?}", xadd_result);
-                panic!();
+                context.release(lock);
+                return Err(RediSQLError::new(
+                        "Stream not supported".to_string(),
+                            "Stream seems to don't be supported, it is a version of Redis > 5?".to_string(),
+                        ));
             }
         };
         i += 1;

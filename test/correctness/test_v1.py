@@ -67,6 +67,13 @@ class TestRediSQLWithExec(ModuleTestCase('')):
   def delete_db(self, key):
     return self.client.execute_command("DEL", key)
 
+  def get_redis_server_major_version(self):
+    result = self.exec_naked("INFO", "SERVER")
+    major_version = result['redis_version'].split(':')[0].split('.')[0]
+    return int(major_version)
+
+
+
 class TestRediSQLExec(TestRediSQLWithExec):
   def test_ping(self):
     self.assertTrue(self.client.ping())
@@ -539,6 +546,7 @@ class TestBigInt(TestRediSQLWithExec):
                 ])
 
 class TestStreams(TestRediSQLWithExec):
+    ### BEAWARE, redis stream where introduce in redis 5
     def test_stream_query(self):
         with DB(self, "A"):
             total_len = 513
@@ -550,7 +558,13 @@ class TestStreams(TestRediSQLWithExec):
                 done = self.exec_naked("REDISQL.V1.EXEC", "A", insert_stmt)
                 self.assertEqual(done, [b'DONE', 1])
 
+            if self.get_redis_server_major_version() < 5:
+                with self.assertRaises(redis.exceptions.ResponseError):
+                    self.exec_naked("REDISQL.V1.QUERY.INTO", "{A}:1", "A", "SELECT * FROM foo")
+                return
+
             result = self.exec_naked("REDISQL.V1.QUERY.INTO", "{A}:1", "A", "SELECT * FROM foo")
+
             self.assertEqual(result[0][0], b'{A}:1')
             self.assertEqual(result[0][3], 513)
 
@@ -573,6 +587,12 @@ class TestStreams(TestRediSQLWithExec):
 
             done = self.exec_naked("REDISQL.V1.CREATE_STATEMENT", "B", "select_all", "SELECT * FROM foo;")
             self.assertEqual(done, b'OK')
+
+            if self.get_redis_server_major_version() < 5:
+                with self.assertRaises(redis.exceptions.ResponseError):
+                    self.exec_naked("REDISQL.V1.QUERY_STATEMENT.INTO",
+                        "{B}:1", "B", "select_all")
+                return
 
             result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT.INTO",
                     "{B}:1", "B", "select_all")
@@ -597,6 +617,11 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
                 done = self.exec_naked("REDISQL.V1.EXEC.NOW", "A", insert_stmt)
                 self.assertEqual(done, [b'DONE', 1])
 
+            if self.get_redis_server_major_version() < 5:
+                with self.assertRaises(redis.exceptions.ResponseError):
+                    self.exec_naked("REDISQL.V1.QUERY.INTO.NOW", "{A}:1", "A", "SELECT * FROM foo")
+                return
+
             result = self.exec_naked("REDISQL.V1.QUERY.INTO.NOW", "{A}:1", "A", "SELECT * FROM foo")
             self.assertEqual(result[0][0], b'{A}:1')
             self.assertEqual(result[0][3], 513)
@@ -620,6 +645,11 @@ class TestStreamsSynchronous(TestRediSQLWithExec):
 
             done = self.exec_naked("REDISQL.V1.CREATE_STATEMENT.NOW", "B", "select_all", "SELECT * FROM foo;")
             self.assertEqual(done, b'OK')
+
+            if self.get_redis_server_major_version() < 5:
+                with self.assertRaises(redis.exceptions.ResponseError):
+                    self.exec_naked("REDISQL.V1.QUERY_STATEMENT.INTO.NOW", "{B}:1", "B", "select_all")
+                return
 
             result = self.exec_naked("REDISQL.V1.QUERY_STATEMENT.INTO.NOW",
                     "{B}:1", "B", "select_all")
