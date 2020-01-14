@@ -63,13 +63,11 @@ impl<'s> CreateDB<'s> {
     }
     pub fn key(self, ctx: &Context) -> RedisKey {
         let key_name = r::rm::RMString::new(ctx, self.name);
-        let key = unsafe {
-        r::rm::ffi::Export_RedisModule_OpenKey(
-                    ctx.as_ptr(),
-                    key_name.as_ptr(),
+        let key =         r::rm::OpenKey(
+                    ctx,
+                    &key_name,
                     r::rm::ffi::REDISMODULE_WRITE,
-                )
-        };
+                );
         RedisKey { key }
     }
 }
