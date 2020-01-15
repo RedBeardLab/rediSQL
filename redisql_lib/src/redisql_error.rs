@@ -18,6 +18,10 @@ pub struct RediSQLError {
  * 1 - The name of the database to use was not provide in the command
  * 2 - Provide the PATH option but not the PATH to use
  * 3 - Provide as input both CAN_EXISTS and MUST_CREATE, this is a contradiction
+ * 4 - Request to create a new database (using MUST_CREATE flag) but one database with the same
+ *   name already exists.
+ * 5 - Trying to work with a Key that does not belong to RediSQL, it could be a standard redis type
+ *   or a type from another redis module
  */
 impl RediSQLError {
     pub fn new(debug: String, error_description: String) -> Self {

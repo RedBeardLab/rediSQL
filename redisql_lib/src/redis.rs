@@ -437,7 +437,8 @@ pub enum KeyTypes {
     Hash,
     Set,
     Zset,
-    Module,
+    ExternalModule,
+    RediSQL,
     Stream,
     Unknow,
 }
@@ -448,17 +449,27 @@ pub struct RedisKey {
 }
 
 impl RedisKey {
-    pub fn key_type(self) -> KeyTypes {
+    pub fn key_type(&self) -> KeyTypes {
         match unsafe {
             rm::ffi::RedisModule_KeyType.unwrap()(self.key)
         } {
+            rm::ffi::REDISMODULE_KEYTYPE_MODULE => {
+                if unsafe {
+                    rm::ffi::RedisModule_ModuleTypeGetType.unwrap()(
+                        self.key,
+                    ) == rm::ffi::DBType
+                } {
+                    KeyTypes::RediSQL
+                } else {
+                    KeyTypes::ExternalModule
+                }
+            }
             rm::ffi::REDISMODULE_KEYTYPE_EMPTY => KeyTypes::Empty,
             rm::ffi::REDISMODULE_KEYTYPE_STRING => KeyTypes::String,
             rm::ffi::REDISMODULE_KEYTYPE_LIST => KeyTypes::List,
             rm::ffi::REDISMODULE_KEYTYPE_HASH => KeyTypes::Hash,
             rm::ffi::REDISMODULE_KEYTYPE_SET => KeyTypes::Set,
             rm::ffi::REDISMODULE_KEYTYPE_ZSET => KeyTypes::Zset,
-            rm::ffi::REDISMODULE_KEYTYPE_MODULE => KeyTypes::Module,
             //rm::ffi::REDISMODULE_KEYTYPE_STREAM => KeyTypes::Stream,
             _ => KeyTypes::Unknow,
         }

@@ -7,9 +7,9 @@ use redisql_lib::redisql_error::RediSQLError;
 #[derive(Debug, PartialEq, Clone)]
 pub struct CreateDB<'s> {
     name: &'s str,
-    path: Option<&'s str>,
-    can_exists: bool,
-    must_create: bool,
+    pub path: Option<&'s str>,
+    pub can_exists: bool,
+    pub must_create: bool,
 }
 
 impl<'s> CreateDB<'s> {
@@ -52,8 +52,8 @@ impl<'s> CreateDB<'s> {
             }
         }
         if createdb.can_exists && createdb.must_create {
-            return Err(RediSQLError::with_code(3, 
-                    "Provide both CAN_EXISTS and MUST_CREATE flags, they can't work together".to_string(), 
+            return Err(RediSQLError::with_code(3,
+                    "Provide both CAN_EXISTS and MUST_CREATE flags, they can't work together".to_string(),
                     "Provide both CAN_EXISTS and MUST_CREATE".to_string()));
         }
         if !createdb.can_exists && !createdb.must_create {
@@ -61,13 +61,19 @@ impl<'s> CreateDB<'s> {
         }
         Ok(createdb)
     }
-    pub fn key(self, ctx: &Context) -> RedisKey {
-        let key_name = r::rm::RMString::new(ctx, self.name);
-        let key =         r::rm::OpenKey(
-                    ctx,
-                    &key_name,
-                    r::rm::ffi::REDISMODULE_WRITE,
-                );
+
+    pub fn database(&self) -> &str {
+        self.name
+    }
+
+    pub fn key(&self, ctx: &Context) -> RedisKey {
+        let key_name = self.database();
+        let key_name = r::rm::RMString::new(ctx, key_name);
+        let key = r::rm::OpenKey(
+            ctx,
+            &key_name,
+            r::rm::ffi::REDISMODULE_WRITE,
+        );
         RedisKey { key }
     }
 }
