@@ -89,7 +89,8 @@ fn create_db_from_path(
         Err(e) => Err(e.into()),
         Ok(rc) => {
             let (tx, rx) = channel();
-            let db = r::DBKey::new_from_arc(tx, rc, true);
+            let in_memory = truefalse?;
+            let db = r::DBKey::new_from_arc(tx, rc, in_memory);
             let mut loop_data = db.loop_data.clone();
             thread::spawn(move || {
                 r::listen_and_execute(&mut loop_data, &rx)
