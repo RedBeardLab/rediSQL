@@ -22,6 +22,9 @@ pub struct RediSQLError {
  *   name already exists.
  * 5 - Trying to work with a Key that does not belong to RediSQL, it could be a standard redis type
  *   or a type from another redis module
+ * 6 - Error in opening the database connection
+ * 7 - Error to store the key into redis
+ * 8 - Unknow error in saving the key
  */
 impl RediSQLError {
     pub fn new(debug: String, error_description: String) -> Self {

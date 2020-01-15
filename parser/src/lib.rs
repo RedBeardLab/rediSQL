@@ -9,7 +9,6 @@ pub struct CreateDB<'s> {
     name: &'s str,
     pub path: Option<&'s str>,
     pub can_exists: bool,
-    pub must_create: bool,
 }
 
 impl<'s> CreateDB<'s> {
@@ -23,9 +22,10 @@ impl<'s> CreateDB<'s> {
         let mut createdb = CreateDB {
             name: name,
             path: None,
-            can_exists: false,
-            must_create: false,
+            can_exists: true,
         };
+        let mut can_exists_flag = false;
+        let mut must_create_flag = false;
         while let Some(arg) = args_iter.next() {
             let mut arg_string = String::from(*arg);
             arg_string.make_ascii_uppercase();
@@ -43,21 +43,20 @@ impl<'s> CreateDB<'s> {
                     createdb.path = Some(path);
                 }
                 "CAN_EXIST" => {
+                    can_exists_flag = true;
                     createdb.can_exists = true;
                 }
                 "MUST_CREATE" => {
-                    createdb.must_create = true;
+                    must_create_flag = true;
+                    createdb.can_exists = false;
                 }
                 _ => {}
             }
         }
-        if createdb.can_exists && createdb.must_create {
+        if can_exists_flag && must_create_flag {
             return Err(RediSQLError::with_code(3,
                     "Provide both CAN_EXISTS and MUST_CREATE flags, they can't work together".to_string(),
                     "Provide both CAN_EXISTS and MUST_CREATE".to_string()));
-        }
-        if !createdb.can_exists && !createdb.must_create {
-            createdb.can_exists = true;
         }
         Ok(createdb)
     }

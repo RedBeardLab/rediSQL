@@ -832,17 +832,12 @@ pub extern "C" fn CreateDB(
                     match get_arc_connection(path) {
                         Ok(rc) => {
                             match r::create_metadata_table(rc.clone())
-                                .and_then(|_| {
-                                    r::enable_foreign_key(rc.clone())
-                                })
-                                .and_then(|_| {
-                                    r::insert_path_metadata(
-                                        rc.clone(),
-                                        path,
-                                    )
+                                .and_then(r::enable_foreign_key)
+                                .and_then(|rc| {
+                                    r::insert_path_metadata(rc, path)
                                 }) {
                                 Err(mut e) => e.reply(&context),
-                                Ok(()) => {
+                                Ok(rc) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(
                                         tx, rc, in_memory,

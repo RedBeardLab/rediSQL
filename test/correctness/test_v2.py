@@ -75,8 +75,26 @@ class TestRediSQLWithExec(ModuleTestCase('')):
 
 class TestRediSQLCreateDB(TestRediSQLWithExec):
   def test_create_db(self):
-    ok = self.exec_naked("REDISQL.V2.CREATE_DB", "DB")
+    ok = self.exec_naked("REDISQL.V2.CREATE_DB", "DB1")
     self.assertEqual(ok, b'OK')
+
+  def test_can_exists_flag(self):
+    ok = self.exec_naked("REDISQL.V2.CREATE_DB", "DB2")
+    self.assertEqual(ok, b'OK')
+    ok = self.exec_naked("REDISQL.V2.CREATE_DB", "DB2", "CAN_EXISTS")
+    self.assertEqual(ok, b'OK')
+
+  def test_can_exists_default(self):
+    ok = self.exec_naked("REDISQL.V2.CREATE_DB", "DB3")
+    self.assertEqual(ok, b'OK')
+    ok = self.exec_naked("REDISQL.V2.CREATE_DB", "DB3",)
+    self.assertEqual(ok, b'OK')
+
+  def test_must_create_flag(self):
+    ok = self.exec_naked("REDISQL.V2.CREATE_DB", "DB4")
+    self.assertEqual(ok, b'OK')
+    with self.assertRaises(redis.exceptions.ResponseError):
+      self.exec_naked("REDISQL.V2.CREATE_DB", "DB4", "MUST_CREATE")
 
 if __name__ == '__main__':
    unittest.main()

@@ -1385,12 +1385,12 @@ impl Drop for DBKey {
 
 pub fn create_metadata_table(
     db: Arc<Mutex<Connection>>,
-) -> Result<(), SQLite3Error> {
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
     let statement = "CREATE TABLE IF NOT EXISTS RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
-    let stmt = MultiStatement::new(db, statement)?;
+    let stmt = MultiStatement::new(db.clone(), statement)?;
     stmt.execute()?;
-    Ok(())
+    Ok(db)
 }
 
 pub fn insert_metadata(
@@ -1398,26 +1398,38 @@ pub fn insert_metadata(
     data_type: &str,
     key: &str,
     value: &str,
-) -> Result<(), SQLite3Error> {
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
     let statement = "INSERT INTO RediSQLMetadata VALUES(?1, ?2, ?3);";
 
-    let stmt = MultiStatement::new(db, statement)?;
+    let stmt = MultiStatement::new(db.clone(), statement)?;
     stmt.bind_index(1, data_type)?;
     stmt.bind_index(2, key)?;
     stmt.bind_index(3, value)?;
     stmt.execute()?;
-    Ok(())
+    Ok(db)
 }
 
-pub fn enable_foreign_key(
-    db: Arc<Mutex<Connection>>,
+pub fn enable_foreign_key_v2(
+    db: Result<Arc<Mutex<Connection>>, SQLite3Error>,
 ) -> Result<(), SQLite3Error> {
     let enable_foreign_key = "PRAGMA foreign_keys = ON;";
-    match MultiStatement::new(db, enable_foreign_key) {
+    match MultiStatement::new(db.expect("cve"), enable_foreign_key) {
         Err(e) => Err(e),
         Ok(stmt) => match stmt.execute() {
             Err(e) => Err(e),
             Ok(_) => Ok(()),
+        },
+    }
+}
+pub fn enable_foreign_key(
+    db: Arc<Mutex<Connection>>,
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
+    let enable_foreign_key = "PRAGMA foreign_keys = ON;";
+    match MultiStatement::new(db.clone(), enable_foreign_key) {
+        Err(e) => Err(e),
+        Ok(stmt) => match stmt.execute() {
+            Err(e) => Err(e),
+            Ok(_) => Ok(db),
         },
     }
 }
@@ -1524,7 +1536,7 @@ pub fn get_path_from_db(
 pub fn insert_path_metadata(
     db: Arc<Mutex<Connection>>,
     path: &str,
-) -> Result<(), SQLite3Error> {
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
     insert_metadata(db, "path", "path", path)
 }
 
