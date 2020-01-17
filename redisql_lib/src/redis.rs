@@ -1299,7 +1299,6 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData>(
 
 pub struct DBKey {
     pub tx: Sender<Command>,
-    pub in_memory: bool,
     pub loop_data: Loop,
     pub connections: HashMap<String, Sender<Command>>,
 }
@@ -1308,12 +1307,10 @@ impl DBKey {
     pub fn new_from_arc(
         tx: Sender<Command>,
         db: Arc<Mutex<Connection>>,
-        in_memory: bool,
     ) -> DBKey {
         let loop_data = Loop::new_from_arc(db);
         DBKey {
             tx,
-            in_memory,
             loop_data,
             connections: HashMap::new(),
         }

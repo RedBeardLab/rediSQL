@@ -142,7 +142,7 @@ unsafe extern "C" fn rdb_load(
     }
 
     let (tx, rx) = channel();
-    let db = r::DBKey::new_from_arc(tx, conn, true);
+    let db = r::DBKey::new_from_arc(tx, conn);
     let mut loop_data = db.loop_data.clone();
 
     thread::spawn(move || r::listen_and_execute(&mut loop_data, &rx));

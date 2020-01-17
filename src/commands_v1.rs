@@ -824,11 +824,10 @@ pub extern "C" fn CreateDB(
                         "file:{}?mode=memory&cache=shared",
                         Uuid::new_v4().to_simple()
                     );
-                    let (path, in_memory): (&str, bool) =
-                        match argvector.len() {
-                            3 => (argvector[2], false),
-                            _ => (&db_name, true),
-                        };
+                    let path: &str = match argvector.len() {
+                        3 => argvector[2],
+                        _ => &db_name,
+                    };
                     match get_arc_connection(path) {
                         Ok(rc) => {
                             match r::create_metadata_table(rc.clone())
@@ -840,7 +839,7 @@ pub extern "C" fn CreateDB(
                                 Ok(rc) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(
-                                        tx, rc, in_memory,
+                                        tx, rc,
                                     );
                                     let mut loop_data =
                                         db.loop_data.clone();
