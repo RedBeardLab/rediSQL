@@ -8,7 +8,7 @@ use std::os::raw;
 use std::sync::{Arc, Mutex};
 
 use redisql_lib::sqlite::ffi;
-use redisql_lib::sqlite::RawConnection;
+use redisql_lib::sqlite::Connection;
 use redisql_lib::sqlite::SQLiteConnection;
 
 use redisql_lib::redis as r;
@@ -31,7 +31,7 @@ struct DumpIterator {
 }
 
 impl<'b> DumpIterator {
-    fn new(conn: &Arc<Mutex<RawConnection>>) -> DumpIterator {
+    fn new(conn: &Arc<Mutex<Connection>>) -> DumpIterator {
         let db = conn.lock().unwrap();
         let buffer: [u8; 4096] = unsafe { zeroed() };
         let fd = unsafe { ffi::start((*db).get_db()) };
@@ -113,14 +113,20 @@ pub unsafe extern "C" fn WriteAOF(
     let aof = r::rm::AOF::new(aof);
     let dbkey: Box<r::DBKey> = Box::from_raw(value as *mut r::DBKey);
 
-    let db = dbkey.loop_data.get_db().clone();
+    let db = dbkey.loop_data.get_db();
 
-    r::rm::EmitAOF(&aof, "REDISQL.CREATE_DB", "s", key, "");
+    r::rm::EmitAOF(&aof, "REDISQL.V1.CREATE_DB", "s", key, "");
 
     let iter = DumpIterator::new(&db);
     for s in iter {
         for line in s.split('\n').filter(|l| !l.is_empty()) {
-            r::rm::EmitAOF(&aof, "REDISQL.EXEC.NOW", "sc", key, line);
+            r::rm::EmitAOF(
+                &aof,
+                "REDISQL.V1.EXEC.NOW",
+                "sc",
+                key,
+                line,
+            );
         }
     }
 }
@@ -169,8 +175,6 @@ pub extern "C" fn ExecNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let db = dbkey.loop_data.get_db();
                     let result = do_execute(&db, args[2]);
                     let t = std::time::Instant::now()
@@ -228,8 +232,6 @@ pub extern "C" fn QueryNow(
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = do_query(&db, args[2]);
                     let t = std::time::Instant::now()
                         + std::time::Duration::from_secs(10);
@@ -282,8 +284,6 @@ pub extern "C" fn QueryNowInto(
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = do_query(&db, args[3]);
                     let return_method =
                         ReturnMethod::Stream { name: args[1] };
@@ -323,7 +323,7 @@ pub extern "C" fn ExecStatementNow(
     };
 
     match argvector.len() {
-        0...2 => {
+        0..=2 => {
             let str_error = format!("Wrong number of arguments, it needs at least more than 2, you provide only {}",
                                     argvector.len());
             r::rm::ReplyWithError(&context, &str_error)
@@ -340,8 +340,6 @@ pub extern "C" fn ExecStatementNow(
                     // _rc must be
                     // 1. Define befor the call to exec_statement() and .reply(&context)
                     // 2. Dropped before we forget the `dbkey`
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -391,8 +389,6 @@ pub extern "C" fn CreateStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -440,8 +436,6 @@ pub extern "C" fn UpdateStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -489,8 +483,6 @@ pub extern "C" fn DeleteStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -523,7 +515,7 @@ pub extern "C" fn QueryStatementNow(
     };
 
     match argvector.len() {
-        0...2 => {
+        0..=2 => {
             let str_error = format!("Wrong number of arguments, it needs at least more than 2, you provide only {}",
                                     argvector.len());
             r::rm::ReplyWithError(&context, &str_error)
@@ -537,8 +529,6 @@ pub extern "C" fn QueryStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -588,8 +578,6 @@ pub extern "C" fn QueryStatementNowInto(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
-                    let _rc =
-                        dbkey.loop_data.set_rc(Context::no_client());
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -739,11 +727,11 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         std::process::exit(1);
     });
 
-    register_write_function(&ctx, "REDISQL.EXEC.NOW", ExecNow)
+    register_write_function(&ctx, "REDISQL.V1.EXEC.NOW", ExecNow)
         .and_then(|_| {
             register_function(
                 &ctx,
-                "REDISQL.QUERY.NOW",
+                "REDISQL.V1.QUERY.NOW",
                 "readonly",
                 QueryNow,
             )
@@ -751,35 +739,35 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.CREATE_STATEMENT.NOW",
+                "REDISQL.V1.CREATE_STATEMENT.NOW",
                 CreateStatementNow,
             )
         })
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.EXEC_STATEMENT.NOW",
+                "REDISQL.V1.EXEC_STATEMENT.NOW",
                 ExecStatementNow,
             )
         })
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.UPDATE_STATEMENT.NOW",
+                "REDISQL.V1.UPDATE_STATEMENT.NOW",
                 UpdateStatementNow,
             )
         })
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.DELETE_STATEMENT.NOW",
+                "REDISQL.V1.DELETE_STATEMENT.NOW",
                 DeleteStatementNow,
             )
         })
         .and_then(|_| {
             register_function(
                 &ctx,
-                "REDISQL.QUERY_STATEMENT.NOW",
+                "REDISQL.V1.QUERY_STATEMENT.NOW",
                 "readonly",
                 QueryStatementNow,
             )
@@ -787,7 +775,7 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         .and_then(|_| {
             register_function_with_keys(
                 &ctx,
-                "REDISQL.QUERY.INTO.NOW",
+                "REDISQL.V1.QUERY.INTO.NOW",
                 "readonly",
                 1,
                 2,
@@ -798,7 +786,7 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         .and_then(|_| {
             register_function_with_keys(
                 &ctx,
-                "REDISQL.QUERY_STATEMENT.INTO.NOW",
+                "REDISQL.V1.QUERY_STATEMENT.INTO.NOW",
                 "readonly",
                 1,
                 2,
@@ -809,7 +797,7 @@ pub fn register(ctx: Context) -> Result<(), i32> {
         .and_then(|_| {
             register_write_function(
                 &ctx,
-                "REDISQL.COPY.NOW",
+                "REDISQL.V1.COPY.NOW",
                 MakeCopyNow,
             )
         })

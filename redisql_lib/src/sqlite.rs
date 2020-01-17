@@ -65,18 +65,60 @@ impl error::Error for SQLite3Error {
 
 impl err::RediSQLErrorTrait for SQLite3Error {}
 
-#[derive(Clone)]
-pub struct RawConnection {
-    db: *mut ffi::sqlite3,
-    modified_rows: i32,
+struct RawConnection {
+    conn: *mut ffi::sqlite3,
+    flags: i32,
 }
 
-unsafe impl Send for RawConnection {}
+impl RawConnection {
+    pub fn new_serialize(path: &str) -> Result<Self, SQLite3Error> {
+        Self::new(path, Self::fullmutex_flags())
+    }
+    pub fn new_multithread(path: &str) -> Result<Self, SQLite3Error> {
+        Self::new(path, Self::nomutex_flags())
+    }
+    fn new(path: &str, flags: i32) -> Result<Self, SQLite3Error> {
+        let mut conn = std::mem::MaybeUninit::uninit();
+        let c_path = CString::new(path).unwrap();
+        let r = unsafe {
+            let ptr_path = c_path.as_ptr();
+            ffi::sqlite3_open_v2(
+                ptr_path,
+                conn.as_mut_ptr(),
+                flags,
+                ptr::null(),
+            )
+        };
+        let conn = unsafe { conn.assume_init() };
+        match r {
+            ffi::SQLITE_OK => Ok(RawConnection { conn, flags }),
+            _ => Err(get_last_error_from_db_connection(conn)),
+        }
+    }
+    fn nomutex_flags() -> i32 {
+        ffi::SQLITE_OPEN_URI
+            | ffi::SQLITE_OPEN_CREATE
+            | ffi::SQLITE_OPEN_READWRITE
+            | ffi::SQLITE_OPEN_NOMUTEX
+    }
+    fn fullmutex_flags() -> i32 {
+        ffi::SQLITE_OPEN_URI
+            | ffi::SQLITE_OPEN_CREATE
+            | ffi::SQLITE_OPEN_READWRITE
+            | ffi::SQLITE_OPEN_FULLMUTEX
+    }
+    pub fn is_multithread(&self) -> bool {
+        (self.flags & ffi::SQLITE_OPEN_NOMUTEX) != 0
+    }
+    pub fn is_serialized(&self) -> bool {
+        (self.flags & ffi::SQLITE_OPEN_FULLMUTEX) != 0
+    }
+}
 
 impl Drop for RawConnection {
     fn drop(&mut self) {
         unsafe {
-            ffi::sqlite3_close(self.db);
+            ffi::sqlite3_close(self.conn);
         }
     }
 }
@@ -86,74 +128,81 @@ pub trait SQLiteConnection {
     fn get_last_error(&self) -> SQLite3Error;
 }
 
-impl SQLiteConnection for RawConnection {
+impl SQLiteConnection for Connection {
     fn get_db(&self) -> *mut ffi::sqlite3 {
-        self.db
+        self.db.conn
     }
     fn get_last_error(&self) -> SQLite3Error {
-        let error_code =
-            unsafe { ffi::sqlite3_extended_errcode(self.get_db()) };
-        let error_message = unsafe {
-            CStr::from_ptr(ffi::sqlite3_errmsg(self.get_db()))
-                .to_string_lossy()
-                .into_owned()
-        };
-        let error_string = unsafe {
-            CStr::from_ptr(ffi::sqlite3_errstr(error_code))
-                .to_string_lossy()
-                .into_owned()
-        };
-        SQLite3Error {
-            code: error_code,
-            error_message,
-            error_string,
-        }
+        get_last_error_from_db_connection(self.get_db())
     }
 }
 
-impl RawConnection {
+pub fn get_last_error_from_db_connection(
+    conn: *mut ffi::sqlite3,
+) -> SQLite3Error {
+    let error_code = unsafe { ffi::sqlite3_extended_errcode(conn) };
+    let error_message = unsafe {
+        CStr::from_ptr(ffi::sqlite3_errmsg(conn))
+            .to_string_lossy()
+            .into_owned()
+    };
+    let error_string = unsafe {
+        CStr::from_ptr(ffi::sqlite3_errstr(error_code))
+            .to_string_lossy()
+            .into_owned()
+    };
+    SQLite3Error {
+        code: error_code,
+        error_message,
+        error_string,
+    }
+}
+
+pub struct Connection {
+    db: RawConnection,
+    pub path: String,
+}
+
+impl Connection {
     pub fn open_connection(
         path: &str,
-    ) -> Result<RawConnection, SQLite3Error> {
-        let mut db: *mut ffi::sqlite3 =
-            unsafe { mem::uninitialized() };
-        let c_path = CString::new(path).unwrap();
-        let r = unsafe {
-            let ptr_path = c_path.as_ptr();
-            ffi::sqlite3_open_v2(
-                ptr_path,
-                &mut db,
-                ffi::SQLITE_OPEN_CREATE | ffi::SQLITE_OPEN_READWRITE,
-                ptr::null(),
-            )
-        };
-        let rc = RawConnection {
+    ) -> Result<Connection, SQLite3Error> {
+        let db = RawConnection::new_multithread(path)?;
+
+        Ok(Connection {
             db,
-            modified_rows: 0,
-        };
-        match r {
-            ffi::SQLITE_OK => Ok(rc),
-            _ => Err(rc.get_last_error()),
-        }
+            path: String::from(path),
+        })
     }
-    pub fn from_db_handler(db: *mut ffi::sqlite3) -> RawConnection {
-        RawConnection {
-            db,
-            modified_rows: 0,
-        }
+    pub fn duplicate_connection(
+        &self,
+    ) -> Result<Connection, SQLite3Error> {
+        let cn1 = RawConnection::new_serialize(&self.path)?;
+        let cn1 = Connection {
+            db: cn1,
+            path: String::from(&self.path),
+        };
+
+        Ok(cn1)
+    }
+    pub fn is_serialized(&self) -> bool {
+        self.db.is_serialized()
+    }
+    pub fn is_multithread(&self) -> bool {
+        self.db.is_multithread()
     }
 }
 
 pub fn get_arc_connection(
     path: &str,
-) -> Result<Arc<Mutex<RawConnection>>, SQLite3Error> {
-    let raw = RawConnection::open_connection(path)?;
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
+    let raw = Connection::open_connection(path)?;
     Ok(Arc::new(Mutex::new(raw)))
 }
 
 pub trait StatementTrait<'a>: Sized {
     fn new(
-        conn: Arc<Mutex<RawConnection>>,
+        conn: Arc<Mutex<Connection>>,
         query: &str,
     ) -> Result<Self, SQLite3Error>;
     fn reset(&self);
@@ -438,16 +487,16 @@ impl Backup {
 }
 
 pub fn create_backup(
-    src: &RawConnection,
-    dest: &RawConnection,
+    src: &Connection,
+    dest: &Connection,
 ) -> Result<Backup, SQLite3Error> {
     let dest_name = CString::new("main").unwrap();
     let src_name = CString::new("main").unwrap();
     let result = unsafe {
         ffi::sqlite3_backup_init(
-            dest.db,
+            dest.get_db(),
             dest_name.as_ptr(),
-            src.db,
+            src.get_db(),
             src_name.as_ptr(),
         )
     };

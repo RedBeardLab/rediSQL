@@ -6,17 +6,18 @@ use std::thread;
 use redisql_lib::redis::{
     get_ch_from_dbkeyptr, get_dbkey_from_name,
     get_dbkeyptr_from_name, reply_with_error_from_key_type,
-    RedisReply,
+    RedisDBKey, RedisReply,
 };
 use redisql_lib::redis_type::ReplicateVerbatim;
 use redisql_lib::sqlite::{get_arc_connection, QueryResult};
-use redisql_lib::virtual_tables as vtab;
 
 use redisql_lib::redis as r;
 
 use sync_engine::Replicate;
 
 use redisql_lib::statistics::STATISTICS;
+
+use uuid::Uuid;
 
 const REDISQL_VERSION: Option<&'static str> =
     option_env!("CARGO_PKG_VERSION");
@@ -30,11 +31,11 @@ extern "C" fn reply(
     let result = unsafe {
         r::rm::ffi::RedisModule_GetBlockedClientPrivateData.unwrap()(
             context.as_ptr(),
-        ) as *mut *mut RedisReply
+        ) as *mut *mut dyn RedisReply
     };
-    let result_wrap: Box<*mut r::RedisReply> =
+    let result_wrap: Box<*mut dyn r::RedisReply> =
         unsafe { Box::from_raw(result) };
-    let mut result: Box<r::RedisReply> =
+    let mut result: Box<dyn r::RedisReply> =
         unsafe { Box::from_raw(*result_wrap) };
     result.reply(&context)
 }
@@ -67,7 +68,7 @@ pub extern "C" fn ExecStatement(
     };
 
     match argvector.len() {
-        0...2 => {
+        0..=2 => {
             let error = CString::new(
                 "Wrong number of arguments, it \
                  needs at least 3",
@@ -154,7 +155,7 @@ pub extern "C" fn QueryStatement(
     };
 
     match argvector.len() {
-        0...2 => {
+        0..=2 => {
             let error = CString::new(
                 "Wrong number of arguments, it \
                  needs at least 3",
@@ -232,7 +233,7 @@ pub extern "C" fn QueryStatementInto(
     };
 
     match argvector.len() {
-        0...3 => {
+        0..=3 => {
             let error = CString::new(
                 "Wrong number of arguments, it \
                  needs at least 4",
@@ -314,11 +315,8 @@ pub extern "C" fn Exec(
     };
 
     match argvector.len() {
-        3 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+        len if len == 3 || len == 5 => {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -328,7 +326,15 @@ pub extern "C" fn Exec(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let connection = match len {
+                3 => None,
+                5 => match argvector[3] {
+                    "using" => Some(argvector[4]),
+                    _ => None,
+                },
+                _ => unreachable!(),
+            };
+            let ch = db.get_channel(connection);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -406,10 +412,7 @@ pub extern "C" fn Query(
 
     match argvector.len() {
         3 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -419,7 +422,7 @@ pub extern "C" fn Query(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -485,10 +488,7 @@ pub extern "C" fn QueryInto(
         4 => {
             let stream_name = argvector[1];
 
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[2],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[2]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -498,7 +498,7 @@ pub extern "C" fn QueryInto(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -565,10 +565,7 @@ pub extern "C" fn CreateStatement(
 
     match argvector.len() {
         4 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -578,7 +575,7 @@ pub extern "C" fn CreateStatement(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -649,10 +646,7 @@ pub extern "C" fn UpdateStatement(
 
     match argvector.len() {
         4 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -662,7 +656,7 @@ pub extern "C" fn UpdateStatement(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -734,10 +728,7 @@ pub extern "C" fn DeleteStatement(
 
     match argvector.len() {
         3 => {
-            let db = match get_dbkeyptr_from_name(
-                context.as_ptr(),
-                argvector[1],
-            ) {
+            let db = match RedisDBKey::new(&context, argvector[1]) {
                 Ok(db) => db,
                 Err(e) => {
                     STATISTICS.exec_err();
@@ -747,7 +738,7 @@ pub extern "C" fn DeleteStatement(
                     );
                 }
             };
-            let ch = unsafe { get_ch_from_dbkeyptr(db) };
+            let ch = db.get_channel(None);
 
             let blocked_client = r::rm::BlockedClient {
                 client: unsafe {
@@ -829,34 +820,27 @@ pub extern "C" fn CreateDB(
                 r::rm::ffi::RedisModule_KeyType.unwrap()(safe_key.key)
             } {
                 r::rm::ffi::REDISMODULE_KEYTYPE_EMPTY => {
+                    let db_name = format!(
+                        "file:{}?mode=memory&cache=shared",
+                        Uuid::new_v4().to_simple()
+                    );
                     let (path, in_memory): (&str, bool) =
                         match argvector.len() {
                             3 => (argvector[2], false),
-                            _ => (":memory:", true),
+                            _ => (&db_name, true),
                         };
                     match get_arc_connection(path) {
                         Ok(rc) => {
                             match r::create_metadata_table(rc.clone())
-                                .and_then(|_| {
-                                    r::enable_foreign_key(rc.clone())
-                                })
-                                .and_then(|_| {
-                                    r::insert_path_metadata(
-                                        rc.clone(),
-                                        path,
-                                    )
-                                })
-                                .and_then(|_| {
-                                    vtab::register_modules(&rc)
+                                .and_then(r::enable_foreign_key)
+                                .and_then(|rc| {
+                                    r::insert_path_metadata(rc, path)
                                 }) {
                                 Err(mut e) => e.reply(&context),
-                                Ok(vtab_context) => {
+                                Ok(rc) => {
                                     let (tx, rx) = channel();
                                     let db = r::DBKey::new_from_arc(
-                                        tx,
-                                        rc,
-                                        in_memory,
-                                        vtab_context,
+                                        tx, rc, in_memory,
                                     );
                                     let mut loop_data =
                                         db.loop_data.clone();
@@ -1102,3 +1086,56 @@ pub extern "C" fn RediSQLVersion(
 
     r::rm::ffi::REDISMODULE_OK
 }
+
+/*
+ * WORK IN PROGRESS
+#[allow(non_snake_case)]
+pub extern "C" fn AddRediSQLConnection(
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32 {
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(mut error) => {
+            STATISTICS.exec_statement_err();
+            return error.reply(&context);
+        }
+    };
+
+    dbg!(argvector.clone());
+
+    if argvector.len() != 3 {
+        let error = CString::new(
+            "Wrong number of arguments, it requires exactly 3",
+        )
+        .unwrap();
+        return unsafe {
+            r::rm::ffi::RedisModule_ReplyWithError.unwrap()(
+                context.as_ptr(),
+                error.as_ptr(),
+            )
+        };
+    }
+
+    let db = match RedisDBKey::new(&context, argvector[1]) {
+        Ok(db) => db,
+        Err(e) => {
+            return reply_with_error_from_key_type(
+                context.as_ptr(),
+                e,
+            );
+        }
+    };
+    {
+        let connection_name = argvector[2];
+
+        unsafe { (*db.dbkey).add_connection(connection_name) };
+        println!("Done add_connection");
+    }
+    r::rm::ReplyWithOk(&context);
+    r::rm::ffi::REDISMODULE_OK
+}
+
+*/

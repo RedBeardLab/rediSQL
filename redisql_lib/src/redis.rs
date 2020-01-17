@@ -1,8 +1,8 @@
 use fnv::FnvHashMap;
 use std;
-use std::cell::RefCell;
 use std::clone::Clone;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{CStr, CString};
 use std::fs::File;
@@ -10,8 +10,10 @@ use std::io::{BufReader, Read, Write};
 use std::os::raw::{c_char, c_long};
 use std::slice;
 use std::str;
+use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, RecvError, Sender};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
 
 pub use crate::redis_type as rm;
 use crate::redis_type::{
@@ -22,7 +24,7 @@ use crate::redisql_error as err;
 use crate::redisql_error::RediSQLError;
 
 use crate::sqlite::{
-    Cursor, Entity, QueryResult, RawConnection, SQLite3Error,
+    Connection, Cursor, Entity, QueryResult, SQLite3Error,
     StatementTrait,
 };
 
@@ -35,11 +37,27 @@ use crate::statistics::STATISTICS;
 #[derive(Clone)]
 pub struct ReplicationBook {
     data: Arc<RwLock<FnvHashMap<String, (MultiStatement, bool)>>>,
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
+}
+
+impl ReplicationBook {
+    fn clone_replication_book(
+        &self,
+        db: &Arc<Mutex<Connection>>,
+    ) -> Self {
+        let mut new = ReplicationBook::new(db);
+        let data = self.data.read().unwrap();
+        for (name, (statement, _)) in data.iter() {
+            // this could fail in theory, but panic would be too much
+            let _ = new
+                .insert_new_statement(name, &statement.to_string());
+        }
+        new
+    }
 }
 
 pub trait StatementCache<'a> {
-    fn new(db: &Arc<Mutex<RawConnection>>) -> Self;
+    fn new(db: &Arc<Mutex<Connection>>) -> Self;
     fn is_statement_present(&self, identifier: &str) -> bool;
     fn insert_new_statement(
         &mut self,
@@ -68,13 +86,12 @@ pub trait StatementCache<'a> {
 }
 
 impl<'a> StatementCache<'a> for ReplicationBook {
-    fn new(db: &Arc<Mutex<RawConnection>>) -> Self {
+    fn new(db: &Arc<Mutex<Connection>>) -> Self {
         ReplicationBook {
             data: Arc::new(RwLock::new(FnvHashMap::default())),
             db: Arc::clone(db),
         }
     }
-
     fn is_statement_present(&self, identifier: &str) -> bool {
         self.data.read().unwrap().contains_key(identifier)
     }
@@ -203,46 +220,10 @@ impl<'a> StatementCache<'a> for ReplicationBook {
     }
 }
 
-type ProtectedRedisContext =
-    Arc<Mutex<Arc<Mutex<RefCell<Option<Context>>>>>>;
-
-pub struct RedisContextSet<'external>(
-    MutexGuard<'external, Arc<Mutex<RefCell<Option<Context>>>>>,
-);
-
-impl<'a> RedisContextSet<'a> {
-    fn new(
-        ctx: Context,
-        redis_ctx: &'a ProtectedRedisContext,
-    ) -> RedisContextSet<'a> {
-        let wrap = redis_ctx.lock().unwrap();
-        {
-            let locked = wrap.lock().unwrap();
-            *locked.borrow_mut() = Some(ctx);
-        }
-        RedisContextSet(wrap)
-    }
-    pub fn release(&self) -> Context {
-        let locked = self.0.lock().unwrap();
-        let none_to_ctx = RefCell::new(None);
-        locked.swap(&none_to_ctx);
-        none_to_ctx.into_inner().unwrap()
-    }
-}
-
-impl<'a> Drop for RedisContextSet<'a> {
-    fn drop(&mut self) {
-        let locked = self.0.lock().unwrap();
-        *locked.borrow_mut() = None;
-        debug!("RedisContextSet | Drop");
-    }
-}
-
 #[derive(Clone)]
 pub struct Loop {
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     replication_book: ReplicationBook,
-    redis_context: ProtectedRedisContext,
 }
 
 impl Drop for Loop {
@@ -255,54 +236,33 @@ unsafe impl Send for Loop {}
 
 pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
-    fn get_db(&self) -> Arc<Mutex<RawConnection>>;
-    fn set_rc(&self, ctx: Context) -> RedisContextSet;
-    fn with_contex_set<F>(&self, ctx: Context, f: F)
-    where
-        F: Fn(RedisContextSet) -> ();
+    fn get_db(&self) -> Arc<Mutex<Connection>>;
 }
 
 impl LoopData for Loop {
     fn get_replication_book(&self) -> ReplicationBook {
         self.replication_book.clone()
     }
-    fn get_db(&self) -> Arc<Mutex<RawConnection>> {
+    fn get_db(&self) -> Arc<Mutex<Connection>> {
         Arc::clone(&self.db)
-    }
-    fn set_rc(&self, ctx: Context) -> RedisContextSet {
-        debug!("set_rc | enter");
-        let wrap = self.redis_context.lock().unwrap();
-
-        {
-            let locked = wrap.lock().unwrap();
-            *locked.borrow_mut() = Some(ctx);
-        }
-
-        debug!("set_rc | exit");
-        RedisContextSet(wrap)
-    }
-    fn with_contex_set<F>(&self, ctx: Context, f: F)
-    where
-        F: Fn(RedisContextSet) -> (),
-    {
-        let redis_context =
-            RedisContextSet::new(ctx, &self.redis_context);
-        f(redis_context);
-        debug!("with_contex_set | exit");
     }
 }
 
 impl Loop {
-    fn new_from_arc(
-        db: Arc<Mutex<RawConnection>>,
-        redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
-    ) -> Loop {
+    fn new_from_arc(db: Arc<Mutex<Connection>>) -> Self {
         let replication_book = ReplicationBook::new(&db);
-        let redis_context = Arc::new(Mutex::new(redis_context));
         Loop {
             db,
             replication_book,
-            redis_context,
+        }
+    }
+    fn new_from_db_and_replication_book(
+        db: Arc<Mutex<Connection>>,
+        replication_book: ReplicationBook,
+    ) -> Self {
+        Loop {
+            db,
+            replication_book,
         }
     }
 }
@@ -470,9 +430,50 @@ unsafe fn string_ptr_len(
     Ok(s.trim_end_matches(char::from(0)))
 }
 
+pub enum KeyTypes {
+    Empty,
+    String,
+    List,
+    Hash,
+    Set,
+    Zset,
+    ExternalModule,
+    RediSQL,
+    Stream,
+    Unknow,
+}
+
 #[repr(C)]
 pub struct RedisKey {
     pub key: *mut rm::ffi::RedisModuleKey,
+}
+
+impl RedisKey {
+    pub fn key_type(&self) -> KeyTypes {
+        match unsafe {
+            rm::ffi::RedisModule_KeyType.unwrap()(self.key)
+        } {
+            rm::ffi::REDISMODULE_KEYTYPE_MODULE => {
+                if unsafe {
+                    rm::ffi::RedisModule_ModuleTypeGetType.unwrap()(
+                        self.key,
+                    ) == rm::ffi::DBType
+                } {
+                    KeyTypes::RediSQL
+                } else {
+                    KeyTypes::ExternalModule
+                }
+            }
+            rm::ffi::REDISMODULE_KEYTYPE_EMPTY => KeyTypes::Empty,
+            rm::ffi::REDISMODULE_KEYTYPE_STRING => KeyTypes::String,
+            rm::ffi::REDISMODULE_KEYTYPE_LIST => KeyTypes::List,
+            rm::ffi::REDISMODULE_KEYTYPE_HASH => KeyTypes::Hash,
+            rm::ffi::REDISMODULE_KEYTYPE_SET => KeyTypes::Set,
+            rm::ffi::REDISMODULE_KEYTYPE_ZSET => KeyTypes::Zset,
+            //rm::ffi::REDISMODULE_KEYTYPE_STREAM => KeyTypes::Stream,
+            _ => KeyTypes::Unknow,
+        }
+    }
 }
 
 impl Drop for RedisKey {
@@ -489,6 +490,7 @@ pub enum ReturnMethod {
 }
 
 pub enum Command {
+    Ping,
     Stop,
     Exec {
         query: &'static str,
@@ -767,7 +769,7 @@ impl RedisReply for QueryResult {
 }
 
 pub fn do_execute(
-    db: &Arc<Mutex<RawConnection>>,
+    db: &Arc<Mutex<Connection>>,
     query: &str,
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -778,7 +780,7 @@ pub fn do_execute(
 }
 
 pub fn do_query(
-    db: &Arc<Mutex<RawConnection>>,
+    db: &Arc<Mutex<Connection>>,
     query: &str,
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -794,7 +796,7 @@ pub fn do_query(
 /// implements the copy of the source database into the destination one
 /// it also leak the two DBKeys
 pub fn do_copy<L: LoopData>(
-    source_db: &Arc<Mutex<RawConnection>>,
+    source_db: &Arc<Mutex<Connection>>,
     destination_loopdata: &L,
 ) -> Result<impl Returner, err::RediSQLError> {
     debug!("DoCopy | Start");
@@ -837,7 +839,7 @@ fn bind_statement<'a>(
     }
 }
 
-/// restore_previous_statements wread the statements written in the database and add them to the
+/// restore_previous_statements read the statements written in the database and add them to the
 /// loopdata datastructure.
 /// At the moment this function returns `()` no matter if there are errors or not.
 /// Errors are pretty unlikely, especially if nobody touched manually the metadata database, but
@@ -998,8 +1000,11 @@ where
                 // return an error and unlock
             }
             _ => {
-                debug!("XADD result: {:?}", xadd_result);
-                panic!();
+                context.release(lock);
+                return Err(RediSQLError::new(
+                        "Stream not supported".to_string(),
+                            "Stream seems to don't be supported, it is a version of Redis > 5?".to_string(),
+                        ));
             }
         };
         i += 1;
@@ -1033,31 +1038,27 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
 ) {
     debug!("Start thread execution");
     restore_previous_statements(loopdata);
+    debug!("Done restoring statements");
     loop {
         debug!("Loop iteration");
         match rx.recv() {
+            Ok(Command::Ping {}) => debug!("Received PING!"),
             Ok(Command::Exec {
                 query,
                 client,
                 timeout,
             }) => {
                 debug!("Exec | Query = {:?}", query);
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        let result =
-                            do_execute(&loopdata.get_db(), query);
-                        match result {
-                            Ok(_) => STATISTICS.exec_ok(),
-                            Err(_) => STATISTICS.exec_err(),
-                        }
-                        return_value(
-                            &client,
-                            &ReturnMethod::Reply,
-                            result,
-                            timeout,
-                        );
-                    },
+                let result = do_execute(&loopdata.get_db(), query);
+                match result {
+                    Ok(_) => STATISTICS.exec_ok(),
+                    Err(_) => STATISTICS.exec_err(),
+                }
+                return_value(
+                    &client,
+                    &ReturnMethod::Reply,
+                    result,
+                    timeout,
                 );
                 debug!("Exec | DONE, returning result");
             }
@@ -1068,33 +1069,27 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 client,
             }) => {
                 debug!("Query | Query = {:?}", query);
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        let result =
-                            do_query(&loopdata.get_db(), query);
+                let result = do_query(&loopdata.get_db(), query);
 
-                        match (&return_method, &result) {
-                            (ReturnMethod::Reply, Ok(_)) => {
-                                STATISTICS.query_ok()
-                            }
-                            (ReturnMethod::Reply, Err(_)) => {
-                                STATISTICS.query_err()
-                            }
-                            (ReturnMethod::Stream { .. }, Ok(_)) => {
-                                STATISTICS.query_into_ok()
-                            }
-                            (ReturnMethod::Stream { .. }, Err(_)) => {
-                                STATISTICS.query_into_err()
-                            }
-                        };
-                        return_value(
-                            &client,
-                            &return_method,
-                            result,
-                            timeout,
-                        );
-                    },
+                match (&return_method, &result) {
+                    (ReturnMethod::Reply, Ok(_)) => {
+                        STATISTICS.query_ok()
+                    }
+                    (ReturnMethod::Reply, Err(_)) => {
+                        STATISTICS.query_err()
+                    }
+                    (ReturnMethod::Stream { .. }, Ok(_)) => {
+                        STATISTICS.query_into_ok()
+                    }
+                    (ReturnMethod::Stream { .. }, Err(_)) => {
+                        STATISTICS.query_into_err()
+                    }
+                };
+                return_value(
+                    &client,
+                    &return_method,
+                    result,
+                    timeout,
                 );
             }
             Ok(Command::UpdateStatement {
@@ -1177,24 +1172,19 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     "ExecStatement | Identifier = {:?} Arguments = {:?}",
                     identifier, arguments
                 );
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        let result = loopdata
-                            .get_replication_book()
-                            .exec_statement(identifier, &arguments);
-                        match result {
-                            Ok(_) => STATISTICS.exec_statement_ok(),
-                            Err(_) => STATISTICS.exec_statement_err(),
-                        }
+                let result = loopdata
+                    .get_replication_book()
+                    .exec_statement(identifier, &arguments);
+                match result {
+                    Ok(_) => STATISTICS.exec_statement_ok(),
+                    Err(_) => STATISTICS.exec_statement_err(),
+                }
 
-                        return_value(
-                            &client,
-                            &ReturnMethod::Reply,
-                            result,
-                            timeout,
-                        );
-                    },
+                return_value(
+                    &client,
+                    &ReturnMethod::Reply,
+                    result,
+                    timeout,
                 );
             }
             Ok(Command::QueryStatement {
@@ -1204,67 +1194,53 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 timeout,
                 client,
             }) => {
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        let result = loopdata
-                            .get_replication_book()
-                            .query_statement(
-                                identifier,
-                                arguments.as_slice(),
-                            );
-                        match (&return_method, &result) {
-                            (ReturnMethod::Reply, Ok(_)) => {
-                                STATISTICS.query_statement_ok()
-                            }
-                            (ReturnMethod::Reply, Err(_)) => {
-                                STATISTICS.query_statement_err()
-                            }
-                            (ReturnMethod::Stream { .. }, Ok(_)) => {
-                                STATISTICS.query_statement_into_ok()
-                            }
-                            (ReturnMethod::Stream { .. }, Err(_)) => {
-                                STATISTICS.query_statement_into_err()
-                            }
-                        };
+                let result =
+                    loopdata.get_replication_book().query_statement(
+                        identifier,
+                        arguments.as_slice(),
+                    );
+                match (&return_method, &result) {
+                    (ReturnMethod::Reply, Ok(_)) => {
+                        STATISTICS.query_statement_ok()
+                    }
+                    (ReturnMethod::Reply, Err(_)) => {
+                        STATISTICS.query_statement_err()
+                    }
+                    (ReturnMethod::Stream { .. }, Ok(_)) => {
+                        STATISTICS.query_statement_into_ok()
+                    }
+                    (ReturnMethod::Stream { .. }, Err(_)) => {
+                        STATISTICS.query_statement_into_err()
+                    }
+                };
 
-                        return_value(
-                            &client,
-                            &return_method,
-                            result,
-                            timeout,
-                        );
-                    },
+                return_value(
+                    &client,
+                    &return_method,
+                    result,
+                    timeout,
                 );
             }
             Ok(Command::MakeCopy {
                 destination,
                 client,
             }) => {
-                loopdata.with_contex_set(
-                    Context::no_client(),
-                    |_| {
-                        debug!("MakeCopy | Doing do_copy");
-                        let destination_loopdata =
-                            &destination.loop_data;
-                        let result = do_copy(
-                            &loopdata.get_db(),
-                            destination_loopdata,
-                        );
-                        match result {
-                            Ok(_) => STATISTICS.copy_ok(),
-                            Err(_) => STATISTICS.copy_err(),
-                        };
-                        let t = std::time::Instant::now()
-                            + std::time::Duration::from_secs(10);
+                debug!("MakeCopy | Doing do_copy");
+                let destination_loopdata = &destination.loop_data;
+                let result =
+                    do_copy(&loopdata.get_db(), destination_loopdata);
+                match result {
+                    Ok(_) => STATISTICS.copy_ok(),
+                    Err(_) => STATISTICS.copy_err(),
+                };
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
 
-                        return_value(
-                            &client,
-                            &ReturnMethod::Reply,
-                            result,
-                            t,
-                        );
-                    },
+                return_value(
+                    &client,
+                    &ReturnMethod::Reply,
+                    result,
+                    t,
                 );
                 std::mem::forget(destination);
             }
@@ -1325,21 +1301,79 @@ pub struct DBKey {
     pub tx: Sender<Command>,
     pub in_memory: bool,
     pub loop_data: Loop,
+    pub connections: HashMap<String, Sender<Command>>,
 }
 
 impl DBKey {
     pub fn new_from_arc(
         tx: Sender<Command>,
-        db: Arc<Mutex<RawConnection>>,
+        db: Arc<Mutex<Connection>>,
         in_memory: bool,
-        redis_context: Arc<Mutex<RefCell<Option<Context>>>>,
     ) -> DBKey {
-        let loop_data = Loop::new_from_arc(db, redis_context);
+        let loop_data = Loop::new_from_arc(db);
         DBKey {
             tx,
             in_memory,
             loop_data,
+            connections: HashMap::new(),
         }
+    }
+    pub fn add_connection(
+        &mut self,
+        clone_name: &str,
+    ) -> Result<(), ()> {
+        if self.connections.get(clone_name).is_some() {
+            return Err(());
+        }
+        {
+            let replication_book =
+                self.loop_data.get_replication_book();
+            let db = self.loop_data.get_db();
+            let db = db.lock().unwrap();
+            if db.is_multithread() {
+                let serialized_db = match db.duplicate_connection() {
+                    Ok(db) => Arc::new(Mutex::new(db)),
+                    Err(_) => return Err(()),
+                };
+                let new_replication_book = replication_book
+                    .clone_replication_book(&serialized_db);
+                let mut new_loop =
+                    Loop::new_from_db_and_replication_book(
+                        serialized_db,
+                        new_replication_book,
+                    );
+                let (new_tx, new_rx) = channel();
+                if self.tx.send(Command::Stop).is_err() {
+                    return Err(());
+                }
+                self.tx = new_tx;
+                self.loop_data = new_loop.clone();
+                thread::spawn(move || {
+                    listen_and_execute(&mut new_loop, &new_rx);
+                });
+            }
+        }
+
+        let db = self.loop_data.get_db();
+        let db = db.lock().unwrap();
+        let new_db = match db.duplicate_connection() {
+            Ok(db) => Arc::new(Mutex::new(db)),
+            Err(_) => return Err(()),
+        };
+        let new_replication_book = self
+            .loop_data
+            .get_replication_book()
+            .clone_replication_book(&new_db);
+        let mut new_loop = Loop::new_from_db_and_replication_book(
+            new_db,
+            new_replication_book,
+        );
+        let (tx, rx) = channel();
+        thread::spawn(move || {
+            listen_and_execute(&mut new_loop, &rx);
+        });
+        self.connections.insert(clone_name.to_string(), tx);
+        Ok(())
     }
 }
 
@@ -1350,36 +1384,36 @@ impl Drop for DBKey {
 }
 
 pub fn create_metadata_table(
-    db: Arc<Mutex<RawConnection>>,
-) -> Result<(), SQLite3Error> {
+    db: Arc<Mutex<Connection>>,
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
     let statement = "CREATE TABLE IF NOT EXISTS RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
-    let stmt = MultiStatement::new(db, statement)?;
+    let stmt = MultiStatement::new(db.clone(), statement)?;
     stmt.execute()?;
-    Ok(())
+    Ok(db)
 }
 
 pub fn insert_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     data_type: &str,
     key: &str,
     value: &str,
-) -> Result<(), SQLite3Error> {
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
     let statement = "INSERT INTO RediSQLMetadata VALUES(?1, ?2, ?3);";
 
-    let stmt = MultiStatement::new(db, statement)?;
+    let stmt = MultiStatement::new(db.clone(), statement)?;
     stmt.bind_index(1, data_type)?;
     stmt.bind_index(2, key)?;
     stmt.bind_index(3, value)?;
     stmt.execute()?;
-    Ok(())
+    Ok(db)
 }
 
-pub fn enable_foreign_key(
-    db: Arc<Mutex<RawConnection>>,
+pub fn enable_foreign_key_v2(
+    db: Result<Arc<Mutex<Connection>>, SQLite3Error>,
 ) -> Result<(), SQLite3Error> {
     let enable_foreign_key = "PRAGMA foreign_keys = ON;";
-    match MultiStatement::new(db, enable_foreign_key) {
+    match MultiStatement::new(db.expect("cve"), enable_foreign_key) {
         Err(e) => Err(e),
         Ok(stmt) => match stmt.execute() {
             Err(e) => Err(e),
@@ -1387,9 +1421,21 @@ pub fn enable_foreign_key(
         },
     }
 }
+pub fn enable_foreign_key(
+    db: Arc<Mutex<Connection>>,
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
+    let enable_foreign_key = "PRAGMA foreign_keys = ON;";
+    match MultiStatement::new(db.clone(), enable_foreign_key) {
+        Err(e) => Err(e),
+        Ok(stmt) => match stmt.execute() {
+            Err(e) => Err(e),
+            Ok(_) => Ok(db),
+        },
+    }
+}
 
 fn update_statement_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     key: &str,
     value: &str,
 ) -> Result<(), SQLite3Error> {
@@ -1404,7 +1450,7 @@ fn update_statement_metadata(
 }
 
 fn remove_statement_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     key: &str,
 ) -> Result<(), SQLite3Error> {
     let statement = "DELETE FROM RediSQLMetadata WHERE data_type = 'statement' AND key = ?1";
@@ -1416,7 +1462,7 @@ fn remove_statement_metadata(
 }
 
 fn get_statement_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 ) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT * FROM RediSQLMetadata WHERE data_type = 'statement';";
 
@@ -1426,7 +1472,7 @@ fn get_statement_metadata(
 }
 
 fn get_path_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 ) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT value FROM RediSQLMetadata WHERE data_type = 'path' AND key = 'path';";
 
@@ -1435,7 +1481,7 @@ fn get_path_metadata(
     QueryResult::try_from(cursor)
 }
 
-pub fn is_redisql_database(db: Arc<Mutex<RawConnection>>) -> bool {
+pub fn is_redisql_database(db: Arc<Mutex<Connection>>) -> bool {
     let query = "SELECT name FROM sqlite_master WHERE type='table' AND name='RediSQLMetadata;";
 
     let query = MultiStatement::new(db, query);
@@ -1457,7 +1503,7 @@ pub fn is_redisql_database(db: Arc<Mutex<RawConnection>>) -> bool {
 }
 
 pub fn get_path_from_db(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
 ) -> Result<String, RediSQLError> {
     match get_path_metadata(db) {
         Err(e) => Err(e),
@@ -1488,14 +1534,14 @@ pub fn get_path_from_db(
 }
 
 pub fn insert_path_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     path: &str,
-) -> Result<(), SQLite3Error> {
+) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
     insert_metadata(db, "path", "path", path)
 }
 
 fn update_path_metadata(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     value: &str,
 ) -> Result<(), SQLite3Error> {
     let statement =
@@ -1508,8 +1554,8 @@ fn update_path_metadata(
 }
 
 pub fn make_backup(
-    conn1: &RawConnection,
-    conn2: &RawConnection,
+    conn1: &Connection,
+    conn2: &Connection,
 ) -> Result<i32, SQLite3Error> {
     match sql::create_backup(conn1, conn2) {
         Err(e) => Err(e),
@@ -1525,10 +1571,10 @@ pub fn make_backup(
 }
 
 pub fn create_backup(
-    conn: &RawConnection,
+    conn: &Connection,
     path: &str,
 ) -> Result<i32, SQLite3Error> {
-    match RawConnection::open_connection(path) {
+    match Connection::open_connection(path) {
         Err(e) => Err(e),
         Ok(new_db) => make_backup(conn, &new_db),
     }
@@ -1638,6 +1684,60 @@ pub fn get_dbkeyptr_from_name(
     }
 }
 
+pub struct RedisDBKey {
+    key: *mut rm::ffi::RedisModuleKey,
+    pub dbkey: *mut DBKey,
+}
+
+impl Drop for RedisDBKey {
+    fn drop(&mut self) {
+        debug!("***Closing the key.***");
+        unsafe {
+            rm::ffi::RedisModule_CloseKey.unwrap()(self.key);
+        }
+    }
+}
+
+impl RedisDBKey {
+    pub fn new(context: &Context, name: &str) -> Result<Self, i32> {
+        let key_name = rm::RMString::new(&context, name);
+        let key =
+            OpenKey(context, &key_name, rm::ffi::REDISMODULE_WRITE);
+        let key_type =
+            unsafe { rm::ffi::RedisModule_KeyType.unwrap()(key) };
+        if unsafe {
+            rm::ffi::DBType
+                == rm::ffi::RedisModule_ModuleTypeGetType.unwrap()(
+                    key,
+                )
+        } {
+            let dbkey = unsafe {
+                rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(key)
+                    as *mut DBKey
+            };
+            Ok(RedisDBKey { key, dbkey })
+        } else {
+            Err(key_type)
+        }
+    }
+    pub fn get_channel(
+        &self,
+        connection: Option<&str>,
+    ) -> &Sender<Command> {
+        unsafe {
+            match connection {
+                None => &(*self.dbkey).tx,
+                Some(connection) => {
+                    match (*self.dbkey).connections.get(connection) {
+                        None => &(*self.dbkey).tx,
+                        Some(s) => s,
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn get_dbkey_from_name(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,
@@ -1650,7 +1750,8 @@ pub fn get_dbkey_from_name(
 pub unsafe fn get_ch_from_dbkeyptr(
     db: *mut DBKey,
 ) -> Sender<Command> {
-    (*db).tx.clone()
+    let tx = (*db).tx.clone();
+    tx.clone()
 }
 
 pub fn reply_with_error_from_key_type(
@@ -1673,7 +1774,7 @@ pub fn reply_with_error_from_key_type(
 }
 
 fn create_statement(
-    db: Arc<Mutex<RawConnection>>,
+    db: Arc<Mutex<Connection>>,
     identifier: &str,
     statement: &str,
 ) -> Result<MultiStatement, err::RediSQLError> {
@@ -1683,7 +1784,7 @@ fn create_statement(
 }
 
 fn update_statement(
-    db: &Arc<Mutex<RawConnection>>,
+    db: &Arc<Mutex<Connection>>,
     identifier: &str,
     statement: &str,
 ) -> Result<MultiStatement, err::RediSQLError> {
@@ -1693,7 +1794,7 @@ fn update_statement(
 }
 
 fn remove_statement(
-    db: &Arc<Mutex<RawConnection>>,
+    db: &Arc<Mutex<Connection>>,
     identifier: &str,
 ) -> Result<(), err::RediSQLError> {
     remove_statement_metadata(Arc::clone(db), identifier)

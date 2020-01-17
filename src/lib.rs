@@ -1,6 +1,7 @@
 #![warn(unused_extern_crates)]
 
-mod commands;
+mod commands_v1;
+mod commands_v2;
 
 #[macro_use]
 extern crate log;
@@ -13,7 +14,6 @@ use redisql_lib::redis::{
 };
 use redisql_lib::redis_type::Context;
 use redisql_lib::sqlite as sql;
-use redisql_lib::virtual_tables as vtab;
 use std::ffi::CString;
 use std::fs::{remove_file, File};
 use std::ptr;
@@ -24,11 +24,12 @@ use uuid::Uuid;
 
 use sync_engine::{register, WriteAOF};
 
-use commands::{
+use commands_v1::{
     CreateDB, CreateStatement, DeleteStatement, Exec, ExecStatement,
     GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
     QueryStatementInto, RediSQLVersion, UpdateStatement,
 };
+use commands_v2::CreateDB_v2;
 
 #[cfg(not(feature = "pro"))]
 extern crate telemetrics;
@@ -98,7 +99,7 @@ unsafe extern "C" fn rdb_load(
         return ptr::null_mut();
     }
 
-    let on_disk = match sql::RawConnection::open_connection(&path) {
+    let on_disk = match sql::Connection::open_connection(&path) {
         Err(_) => {
             println!("Error in opening the rdb database");
             return ptr::null_mut();
@@ -108,18 +109,17 @@ unsafe extern "C" fn rdb_load(
 
     let on_disk = Arc::new(Mutex::new(on_disk));
     let previous_path = match get_path_from_db(on_disk.clone()) {
-        Ok(path) => path.clone(),
+        Ok(path) => path,
         Err(e) => {
             println!("Warning trying to load from RDB: {}", e);
             ":memory:".to_string()
         }
     };
 
-    let db = match sql::RawConnection::open_connection(&previous_path)
-    {
+    let db = match sql::Connection::open_connection(&previous_path) {
         Err(_) => {
             println!("WARN: Was impossible to open the database {}, using an in-memory database!", previous_path);
-            match sql::RawConnection::open_connection(":memory:") {
+            match sql::Connection::open_connection(":memory:") {
                 Err(_) => {
                     println!("ERROR: Was impossible to open also an in-memory database, fail!");
                     return ptr::null_mut();
@@ -142,14 +142,7 @@ unsafe extern "C" fn rdb_load(
     }
 
     let (tx, rx) = channel();
-    let redis_context = match vtab::register_modules(&conn) {
-        Err(e) => {
-            println!("{}", e);
-            return ptr::null_mut();
-        }
-        Ok(redis_context) => redis_context,
-    };
-    let db = r::DBKey::new_from_arc(tx, conn, true, redis_context);
+    let db = r::DBKey::new_from_arc(tx, conn, true);
     let mut loop_data = db.loop_data.clone();
 
     thread::spawn(move || r::listen_and_execute(&mut loop_data, &rx));
@@ -230,26 +223,33 @@ pub extern "C" fn RedisModule_OnLoad(
         return r::rm::ffi::REDISMODULE_ERR;
     }
 
-    match register_write_function(&ctx, "REDISQL.CREATE_DB", CreateDB)
-    {
+    match register_write_function(
+        &ctx,
+        "REDISQL.V1.CREATE_DB",
+        CreateDB,
+    ) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
-    match register_write_function(&ctx, "REDISQL.EXEC", Exec) {
+    match register_write_function(&ctx, "REDISQL.V1.EXEC", Exec) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
-    match register_function(&ctx, "REDISQL.QUERY", "readonly", Query)
-    {
+    match register_function(
+        &ctx,
+        "REDISQL.V1.QUERY",
+        "readonly",
+        Query,
+    ) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
     match register_function_with_keys(
         &ctx,
-        "REDISQL.QUERY.INTO",
+        "REDISQL.V1.QUERY.INTO",
         "readonly",
         1,
         2,
@@ -262,7 +262,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        "REDISQL.CREATE_STATEMENT",
+        "REDISQL.V1.CREATE_STATEMENT",
         CreateStatement,
     ) {
         Ok(()) => (),
@@ -271,7 +271,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        "REDISQL.EXEC_STATEMENT",
+        "REDISQL.V1.EXEC_STATEMENT",
         ExecStatement,
     ) {
         Ok(()) => (),
@@ -280,7 +280,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        "REDISQL.UPDATE_STATEMENT",
+        "REDISQL.V1.UPDATE_STATEMENT",
         UpdateStatement,
     ) {
         Ok(()) => (),
@@ -289,7 +289,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_write_function(
         &ctx,
-        "REDISQL.DELETE_STATEMENT",
+        "REDISQL.V1.DELETE_STATEMENT",
         DeleteStatement,
     ) {
         Ok(()) => (),
@@ -298,7 +298,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function(
         &ctx,
-        "REDISQL.QUERY_STATEMENT",
+        "REDISQL.V1.QUERY_STATEMENT",
         "readonly",
         QueryStatement,
     ) {
@@ -308,7 +308,7 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function_with_keys(
         &ctx,
-        "REDISQL.QUERY_STATEMENT.INTO",
+        "REDISQL.V1.QUERY_STATEMENT.INTO",
         "readonly",
         1,
         2,
@@ -319,14 +319,14 @@ pub extern "C" fn RedisModule_OnLoad(
         Err(e) => return e,
     }
 
-    match register_write_function(&ctx, "REDISQL.COPY", MakeCopy) {
+    match register_write_function(&ctx, "REDISQL.V1.COPY", MakeCopy) {
         Ok(()) => (),
         Err(e) => return e,
     }
 
     match register_function(
         &ctx,
-        "REDISQL.STATISTICS",
+        "REDISQL.V1.STATISTICS",
         "readonly",
         GetStatistics,
     ) {
@@ -336,9 +336,38 @@ pub extern "C" fn RedisModule_OnLoad(
 
     match register_function(
         &ctx,
-        "REDISQL.VERSION",
+        "REDISQL.V1.VERSION",
         "readonly",
         RediSQLVersion,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    /*
+    match register_write_function(
+        &ctx,
+        "REDISQL.ADD_CONNECTION",
+        AddRediSQLConnection,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+    */
+
+    match register_write_function(
+        &ctx,
+        "REDISQL.V2.CREATE_DB",
+        CreateDB_v2,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(
+        &ctx,
+        "REDISQL.CREATE_DB",
+        CreateDB_v2,
     ) {
         Ok(()) => (),
         Err(e) => return e,

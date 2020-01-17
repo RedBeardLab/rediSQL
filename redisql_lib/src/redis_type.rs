@@ -16,7 +16,7 @@ pub mod ffi {
 #[derive(Debug)]
 pub struct Context {
     ctx: *mut ffi::RedisModuleCtx,
-    need_destructor: bool,
+    thread_safe: bool,
 }
 
 pub struct ContextLock {}
@@ -25,19 +25,7 @@ impl Context {
     pub fn new(ctx: *mut ffi::RedisModuleCtx) -> Context {
         Context {
             ctx,
-            need_destructor: false,
-        }
-    }
-    pub fn no_client() -> Self {
-        debug!("New thread safe context");
-        let ctx = unsafe {
-            ffi::RedisModule_GetThreadSafeContext.unwrap()(
-                std::ptr::null_mut(),
-            )
-        };
-        Context {
-            ctx,
-            need_destructor: true,
+            thread_safe: false,
         }
     }
     pub fn as_ptr(&self) -> *mut ffi::RedisModuleCtx {
@@ -52,11 +40,11 @@ impl Context {
         };
         Context {
             ctx,
-            need_destructor: true,
+            thread_safe: true,
         }
     }
     pub fn lock(&self) -> ContextLock {
-        if self.need_destructor {
+        if self.thread_safe {
             unsafe {
                 ffi::RedisModule_ThreadSafeContextLock.unwrap()(
                     self.as_ptr(),
@@ -66,7 +54,7 @@ impl Context {
         ContextLock {}
     }
     pub fn release(&self, _lock: ContextLock) {
-        if self.need_destructor {
+        if self.thread_safe {
             unsafe {
                 ffi::RedisModule_ThreadSafeContextUnlock.unwrap()(
                     self.as_ptr(),
@@ -78,7 +66,7 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
-        if self.need_destructor {
+        if self.thread_safe {
             debug!("Free thread safe context");
             unsafe {
                 ffi::RedisModule_FreeThreadSafeContext.unwrap()(
@@ -350,6 +338,21 @@ pub fn ReplyWithStringBuffer(ctx: &Context, buffer: &[u8]) -> i32 {
     }
 }
 
+#[allow(non_snake_case)]
+pub fn ReplyWithSimpleString(ctx: &Context, s: &str) -> i32 {
+    unsafe {
+        ffi::RedisModule_ReplyWithSimpleString.unwrap()(
+            ctx.as_ptr(),
+            s.as_ptr() as *const c_char,
+        )
+    }
+}
+
+#[allow(non_snake_case)]
+pub fn ReplyWithOk(ctx: &Context) -> i32 {
+    ReplyWithSimpleString(ctx, "OK\0")
+}
+
 pub struct AOF {
     aof: *mut ffi::RedisModuleIO,
 }
@@ -524,8 +527,11 @@ impl CallReply {
 
 impl Drop for CallReply {
     fn drop(&mut self) {
-        unsafe {
-            ffi::RedisModule_FreeCallReply.unwrap()(self.as_ptr())
+        match self {
+            CallReply::RNull { .. } => {}
+            _ => unsafe {
+                ffi::RedisModule_FreeCallReply.unwrap()(self.as_ptr())
+            },
         }
     }
 }
