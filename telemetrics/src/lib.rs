@@ -77,27 +77,28 @@ fn send_telemetrics() -> Result<(), ()> {
             return Err(());
         }
     };
-    let client = reqwest::Client::new();
     for url in &[
         PRIMARY_TELEMETRICS_URL,
         SECONDARY_TELEMETRICS_URL,
         TERTIARY_TELEMETRICS_URL,
     ] {
-        let res =
-            client.post(*url).body(json_telemetrics.clone()).send();
-        match res {
-            Err(e) => {
+        let res = ureq::post(*url)
+            .timeout_connect(5_000)
+            .timeout_read(5_000)
+            .send_string(&json_telemetrics.clone());
+        match res.ok() {
+            false => {
+                let err = match res.into_string() {
+                    Ok(ok) => ok,
+                    Err(e) => e.to_string(),
+                };
                 warn!(
                     "Error in making the request to {}: {}",
-                    *url, e
+                    *url, err
                 );
             }
-            Ok(res) => {
-                if res.status().is_success() {
-                    return Ok(());
-                } else {
-                    warn!("Return error code from {}", *url);
-                }
+            true => {
+                return Ok(());
             }
         }
     }

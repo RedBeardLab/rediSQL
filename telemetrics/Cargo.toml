@@ -7,4 +7,8 @@ edition = "2018"
 [dependencies]
 redisql_lib = {path = "../redisql_lib"}
 log = {version = "0.4", features = ["release_max_level_warn"]}
-reqwest = {version = "0.9", features = ["default-tls-vendored"]}
+
+[dependencies.ureq]
+version = "0.11.3"
+default-features = false
+features = ["tls"]
