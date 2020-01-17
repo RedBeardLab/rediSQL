@@ -1,7 +1,7 @@
 #![warn(unused_extern_crates)]
 
 mod commands_v1;
-mod commands_v2;
+mod v2;
 
 #[macro_use]
 extern crate log;
@@ -29,7 +29,7 @@ use commands_v1::{
     GetStatistics, MakeCopy, Query, QueryInto, QueryStatement,
     QueryStatementInto, RediSQLVersion, UpdateStatement,
 };
-use commands_v2::CreateDB_v2;
+use v2::create_db::CreateDB_v2;
 
 #[cfg(not(feature = "pro"))]
 extern crate telemetrics;
