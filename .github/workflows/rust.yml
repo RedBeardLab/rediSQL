@@ -88,8 +88,8 @@ jobs:
           REDIS="redis-4.0.14"
           wget http://download.redis.io/releases/$REDIS.tar.gz
           tar xzf ./$REDIS.tar.gz
-          mv ./$REDIS redis-5
-          cd ./redis-5
+          mv ./$REDIS redis-4
+          cd ./redis-4
           make
       - name: Run the tests v1
         run: python3 test/correctness/test_v1.py
