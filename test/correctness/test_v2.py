@@ -62,7 +62,7 @@ class TestRediSQLWithExec(ModuleTestCase('')):
     return self.client.execute_command("REDISQL.V1.EXEC", *command)
 
   def create_db(self, key):
-    return self.client.execute_command("REDISQL.V1.CREATE_DB", key)
+    return self.client.execute_command("REDISQL.V2.CREATE_DB", key)
 
   def delete_db(self, key):
     return self.client.execute_command("DEL", key)
@@ -95,6 +95,16 @@ class TestRediSQLCreateDB(TestRediSQLWithExec):
     self.assertEqual(ok, b'OK')
     with self.assertRaises(redis.exceptions.ResponseError):
       self.exec_naked("REDISQL.V2.CREATE_DB", "DB4", "MUST_CREATE")
+
+class TestRediSQLExec(TestRediSQLWithExec):
+  def test_ping(self):
+    self.assertTrue(self.client.ping())
+
+  def test_create_table(self):
+    with DB(self, "A"):
+      result = self.exec_nake("REDISQL.V2.EXEC", "A", "QUERY", "SELECT 1;")
+      self.assertEqual(result, [[1]])
+
 
 if __name__ == '__main__':
    unittest.main()
