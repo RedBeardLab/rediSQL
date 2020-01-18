@@ -3,6 +3,7 @@ use parser::CommandV2;
 
 use redisql_lib::redis as r;
 use redisql_lib::redis::RedisReply;
+use redisql_lib::redis_type::BlockedClient;
 
 #[allow(non_snake_case)]
 pub extern "C" fn Exec_v2(
@@ -24,5 +25,11 @@ pub extern "C" fn Exec_v2(
         };
 
     let key = command.key(&context);
-    0
+    match key.get_channel() {
+        Err(mut e) => return e.reply(&context),
+        Ok(ch) => {
+            // let blocked_client = BlockedClient(&context, )
+            2
+        }
+    }
 }

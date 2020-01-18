@@ -1,6 +1,7 @@
 #![warn(unused_extern_crates)]
 
 mod commands_v1;
+mod common;
 mod v2;
 
 #[macro_use]
