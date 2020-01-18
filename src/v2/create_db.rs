@@ -52,11 +52,7 @@ pub extern "C" fn CreateDB_v2(
             }
         }
         _ => {
-            let mut err = RediSQLError::with_code(
-                5,
-                "Key does not belong to us".to_string(),
-                "You are trying to work with a key that does not contains RediSQL data.".to_string(),
-            );
+            let mut err = RediSQLError::no_redisql_key();
             return err.reply(&context);
         }
     }

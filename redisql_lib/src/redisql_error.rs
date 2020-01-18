@@ -31,6 +31,7 @@ pub struct RediSQLError {
  * 12  - Provided both QUERY and STATEMENT keywords
  * 13  - Provided QUERY twice
  * 14  - Provided STATEMENT twice
+ * 15  - Provided key does not exists
  */
 impl RediSQLError {
     pub fn new(debug: String, error_description: String) -> Self {
@@ -72,7 +73,18 @@ impl RediSQLError {
         )
     }
     pub fn no_redisql_key() -> Self {
-        RediSQLError::with_code(15, "The command takes as input a KEY, or DATABASE. The one that you provide is a RediSQL database".to_string(), "The KEY provided is not managed by RediSQL".to_string())
+        RediSQLError::with_code(
+                5,
+                "You are trying to work with a key that does not contains RediSQL data, but contains other data".to_string(),
+                "Key does not belong to us".to_string(),
+            )
+    }
+    pub fn empty_key() -> Self {
+        RediSQLError::with_code(
+                15,
+                "You are trying to work with a key that is empty, run REDISQL.CREATE_DB first".to_string(),
+                "Key does not exists".to_string(),
+            )
     }
 }
 

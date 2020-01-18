@@ -490,6 +490,7 @@ impl RedisKey {
                     as *mut DBKey;
                 Ok(&(*dbkey).tx)
             },
+            KeyTypes::Empty => Err(RediSQLError::empty_key()),
             _ => Err(RediSQLError::no_redisql_key()),
         }
     }
