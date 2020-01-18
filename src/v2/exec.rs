@@ -1,6 +1,8 @@
 use parser;
+use parser::CommandV2;
 
 use redisql_lib::redis as r;
+use redisql_lib::redis::RedisReply;
 
 #[allow(non_snake_case)]
 pub extern "C" fn Exec_v2(
@@ -15,9 +17,12 @@ pub extern "C" fn Exec_v2(
             return error.reply(&context);
         }
     };
-    let command = match parser::Exec::parse(argvector) {
-        Ok(comm) => comm,
-        Err(mut e) => return e.reply(&context),
-    };
+    let command: parser::Exec =
+        match parser::CommandV2::parse(argvector) {
+            Ok(comm) => comm,
+            Err(mut e) => return e.reply(&context),
+        };
+
+    let key = command.key(&context);
     0
 }

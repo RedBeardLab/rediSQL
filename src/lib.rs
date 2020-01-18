@@ -30,6 +30,7 @@ use commands_v1::{
     QueryStatementInto, RediSQLVersion, UpdateStatement,
 };
 use v2::create_db::CreateDB_v2;
+use v2::exec::Exec_v2;
 
 #[cfg(not(feature = "pro"))]
 extern crate telemetrics;
@@ -369,6 +370,16 @@ pub extern "C" fn RedisModule_OnLoad(
         "REDISQL.CREATE_DB",
         CreateDB_v2,
     ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(&ctx, "REDISQL.V2.EXEC", Exec_v2) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(&ctx, "REDISQL.EXEC", Exec_v2) {
         Ok(()) => (),
         Err(e) => return e,
     }

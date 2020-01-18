@@ -11,8 +11,8 @@ pub struct CreateDB<'s> {
     pub can_exists: bool,
 }
 
-impl<'s> CreateDB<'s> {
-    pub fn parse(args: Vec<&'s str>) -> Result<Self, RediSQLError> {
+impl<'s> CommandV2<'s> for CreateDB<'s> {
+    fn parse(args: Vec<&'s str>) -> Result<Self, RediSQLError> {
         let mut args_iter = args.iter();
         args_iter.next();
         let name = match args_iter.next() {
@@ -61,19 +61,8 @@ impl<'s> CreateDB<'s> {
         Ok(createdb)
     }
 
-    pub fn database(&self) -> &str {
+    fn database(&self) -> &str {
         self.name
-    }
-
-    pub fn key(&self, ctx: &Context) -> RedisKey {
-        let key_name = self.database();
-        let key_name = r::rm::RMString::new(ctx, key_name);
-        let key = r::rm::OpenKey(
-            ctx,
-            &key_name,
-            r::rm::ffi::REDISMODULE_WRITE,
-        );
-        RedisKey { key }
     }
 }
 
@@ -94,8 +83,8 @@ pub struct Exec<'s> {
     args: Option<Vec<&'s str>>,
 }
 
-impl<'s> Exec<'s> {
-    pub fn parse(args: Vec<&'s str>) -> Result<Self, RediSQLError> {
+impl<'s> CommandV2<'s> for Exec<'s> {
+    fn parse(args: Vec<&'s str>) -> Result<Self, RediSQLError> {
         let mut args_iter = args.iter();
         args_iter.next();
         let database = match args_iter.next() {
@@ -134,7 +123,7 @@ impl<'s> Exec<'s> {
                             None => {
                                 return Err(RediSQLError::with_code(
                                     9,
-                                    "Provided the QUERY keywork but not the query to execute".to_string(),
+                                    "Provided the QUERY keyword but not the query to execute".to_string(),
                                     "No query provided".to_string(),
                                 ))
                             }
@@ -162,7 +151,7 @@ impl<'s> Exec<'s> {
                             None => {
                                 return Err(RediSQLError::with_code(
                                     10,
-                                    "".to_string(),
+                                    "Provided the STATEMENT keyword but not the statement to execute".to_string(),
                                     "No statement provided"
                                         .to_string(),
                                 ))
@@ -180,7 +169,7 @@ impl<'s> Exec<'s> {
                         None => {
                             return Err(RediSQLError::with_code(
                                 11,
-                                "".to_string(),
+                                "Provided the INTO keyword without providing which stream we should use".to_string(),
                                 "No stream provided".to_string(),
                             ))
                         }
@@ -199,6 +188,26 @@ impl<'s> Exec<'s> {
             }
         }
         Ok(exec)
+    }
+    fn database(&self) -> &str {
+        self.database
+    }
+}
+
+pub trait CommandV2<'s> {
+    fn parse(args: Vec<&'s str>) -> Result<Self, RediSQLError>
+    where
+        Self: std::marker::Sized;
+    fn database(&self) -> &str;
+    fn key(&self, ctx: &Context) -> RedisKey {
+        let key_name = self.database();
+        let key_name = r::rm::RMString::new(ctx, key_name);
+        let key = r::rm::OpenKey(
+            ctx,
+            &key_name,
+            r::rm::ffi::REDISMODULE_WRITE,
+        );
+        RedisKey { key }
     }
 }
 

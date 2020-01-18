@@ -3,6 +3,7 @@ use std::thread;
 use uuid::Uuid;
 
 use parser;
+use parser::CommandV2;
 use redisql_lib::redis as r;
 use redisql_lib::redis::{KeyTypes, RedisKey, RedisReply};
 use redisql_lib::redis_type::ReplicateVerbatim;
@@ -22,10 +23,11 @@ pub extern "C" fn CreateDB_v2(
             return error.reply(&context);
         }
     };
-    let command = match parser::CreateDB::parse(argvector) {
-        Ok(comm) => comm,
-        Err(mut e) => return e.reply(&context),
-    };
+    let command: parser::CreateDB =
+        match parser::CommandV2::parse(argvector) {
+            Ok(comm) => comm,
+            Err(mut e) => return e.reply(&context),
+        };
     let key = command.key(&context);
     match key.key_type() {
         KeyTypes::Empty => {
