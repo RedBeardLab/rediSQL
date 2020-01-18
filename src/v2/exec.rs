@@ -1,7 +1,6 @@
 use parser::common::CommandV2;
 use parser::exec::Exec;
 use redisql_lib::redis as r;
-use redisql_lib::redis::Command;
 use redisql_lib::redis::RedisReply;
 use redisql_lib::redis_type::BlockedClient;
 

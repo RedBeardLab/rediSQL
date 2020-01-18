@@ -355,8 +355,20 @@ pub enum QueryResult {
     },
     Array {
         names: Vec<String>,
+        types: Vec<&'static str>,
         array: Vec<Entity>,
     },
+}
+
+fn type_to_string(t: i32) -> &'static str {
+    match t {
+        ffi::SQLITE_INTEGER => "INT",
+        ffi::SQLITE_FLOAT => "FLOAT",
+        ffi::SQLITE_TEXT => "TEXT",
+        ffi::SQLITE_BLOB => "BLOB",
+        ffi::SQLITE_NULL => "NULL",
+        _ => "NULL",
+    }
 }
 
 impl QueryResult {
@@ -364,6 +376,10 @@ impl QueryResult {
         mut cursor: Cursor,
         timeout: std::time::Instant,
     ) -> Result<Self, err::RediSQLError> {
+        let now = std::time::Instant::now();
+        if now > timeout {
+            return Err(err::RediSQLError::timeout());
+        }
         match cursor {
             Cursor::OKCursor {} => Ok(QueryResult::OK {}),
             Cursor::DONECursor { modified_rows } => {
@@ -382,6 +398,8 @@ impl QueryResult {
                 let mut result = vec![];
                 let mut names =
                     Vec::with_capacity(num_columns as usize);
+                let mut types =
+                    Vec::with_capacity(num_columns as usize);
                 for i in 0..num_columns {
                     let name = unsafe {
                         CStr::from_ptr(ffi::sqlite3_column_name(
@@ -392,6 +410,10 @@ impl QueryResult {
                         .into_owned()
                     };
                     names.push(name);
+                    let t = type_to_string(unsafe {
+                        ffi::sqlite3_column_type(stmt.as_ptr(), i)
+                    });
+                    types.push(t);
                 }
                 while *previous_status == ffi::SQLITE_ROW {
                     now = std::time::Instant::now();
@@ -414,6 +436,7 @@ impl QueryResult {
                     _ => Ok(QueryResult::Array {
                         names,
                         array: result,
+                        types,
                     }),
                 }
             }
@@ -441,6 +464,8 @@ impl TryFrom<Cursor> for QueryResult {
                 let mut result = vec![];
                 let mut names =
                     Vec::with_capacity(num_columns as usize);
+                let mut types =
+                    Vec::with_capacity(num_columns as usize);
                 for i in 0..num_columns {
                     let name = unsafe {
                         CStr::from_ptr(ffi::sqlite3_column_name(
@@ -451,6 +476,10 @@ impl TryFrom<Cursor> for QueryResult {
                         .into_owned()
                     };
                     names.push(name);
+                    let t = type_to_string(unsafe {
+                        ffi::sqlite3_column_type(stmt.as_ptr(), i)
+                    });
+                    types.push(t);
                 }
                 while *previous_status == ffi::SQLITE_ROW {
                     for i in 0..num_columns {
@@ -469,6 +498,7 @@ impl TryFrom<Cursor> for QueryResult {
                     _ => Ok(QueryResult::Array {
                         names,
                         array: result,
+                        types,
                     }),
                 }
             }

@@ -1,8 +1,5 @@
-use redisql_lib::redis as r;
 use redisql_lib::redis::Command;
-use redisql_lib::redis::RedisKey;
 use redisql_lib::redis_type::BlockedClient;
-use redisql_lib::redis_type::Context;
 use redisql_lib::redisql_error::RediSQLError;
 
 use crate::common::CommandV2;

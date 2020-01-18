@@ -664,6 +664,7 @@ impl Returner for QueryResult {
                     QueryResult::Array {
                         array,
                         names: columns_names,
+                        ..
                     } => {
                         match stream_query_result_array(
                             ctx,
@@ -780,7 +781,7 @@ impl RedisReply for QueryResult {
             QueryResult::DONE { modified_rows, .. } => {
                 reply_with_done(ctx.as_ptr(), *modified_rows)
             }
-            QueryResult::Array { array, names } => {
+            QueryResult::Array { array, names, .. } => {
                 debug!("QueryResult::Array");
                 reply_with_array(ctx, array.chunks(names.len()))
             }
@@ -869,7 +870,7 @@ fn bind_statement<'a>(
 fn restore_previous_statements<'a, L: 'a + LoopData>(loopdata: &L) {
     let saved_statements = get_statement_metadata(loopdata.get_db());
     match saved_statements {
-        Ok(QueryResult::Array { array, names }) => {
+        Ok(QueryResult::Array { array, names, .. }) => {
             for row in array.chunks(names.len()) {
                 let identifier = match row[1] {
                     Entity::Text { ref text } => text,
@@ -1048,6 +1049,7 @@ where
             String::from("last_id"),
             String::from("size"),
         ],
+        types: vec!["TEXT", "TEXT", "TEXT", "INT"],
         array: result,
     })
 }
