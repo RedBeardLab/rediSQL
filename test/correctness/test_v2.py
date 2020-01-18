@@ -102,7 +102,7 @@ class TestRediSQLExec(TestRediSQLWithExec):
 
   def test_create_table(self):
     with DB(self, "A"):
-      result = self.exec_nake("REDISQL.V2.EXEC", "A", "QUERY", "SELECT 1;")
+      result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT 1;")
       self.assertEqual(result, [[1]])
 
 
