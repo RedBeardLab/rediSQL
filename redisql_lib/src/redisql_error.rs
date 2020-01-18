@@ -71,6 +71,9 @@ impl RediSQLError {
             "Provided both STATEMENT and QUERY keywords".to_string(),
         )
     }
+    pub fn no_redisql_key() -> Self {
+        RediSQLError::with_code(15, "The command takes as input a KEY, or DATABASE. The one that you provide is a RediSQL database".to_string(), "The KEY provided is not managed by RediSQL".to_string())
+    }
 }
 
 impl fmt::Debug for RediSQLError {

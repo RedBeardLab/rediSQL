@@ -449,6 +449,12 @@ pub struct RedisKey {
 }
 
 impl RedisKey {
+    pub fn new(key_name: &str, ctx: &Context) -> Self {
+        let key_name = rm::RMString::new(ctx, key_name);
+        let key =
+            rm::OpenKey(ctx, &key_name, rm::ffi::REDISMODULE_WRITE);
+        RedisKey { key }
+    }
     pub fn key_type(&self) -> KeyTypes {
         match unsafe {
             rm::ffi::RedisModule_KeyType.unwrap()(self.key)
@@ -472,6 +478,19 @@ impl RedisKey {
             rm::ffi::REDISMODULE_KEYTYPE_ZSET => KeyTypes::Zset,
             //rm::ffi::REDISMODULE_KEYTYPE_STREAM => KeyTypes::Stream,
             _ => KeyTypes::Unknow,
+        }
+    }
+    pub fn get_channel(
+        &self,
+    ) -> Result<&Sender<Command>, RediSQLError> {
+        match self.key_type() {
+            KeyTypes::RediSQL => unsafe {
+                let dbkey = rm::ffi::RedisModule_ModuleTypeGetValue
+                    .unwrap()(self.key)
+                    as *mut DBKey;
+                Ok(&(*dbkey).tx)
+            },
+            _ => Err(RediSQLError::no_redisql_key()),
         }
     }
 }
