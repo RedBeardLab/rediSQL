@@ -99,17 +99,13 @@ pub extern "C" fn ExecStatement(
 
             let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
             let t = std::time::Instant::now()
                 + std::time::Duration::from_secs(10);
 
@@ -185,17 +181,13 @@ pub extern "C" fn QueryStatement(
             };
             let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
 
             let t = std::time::Instant::now()
                 + std::time::Duration::from_secs(10);
@@ -265,17 +257,13 @@ pub extern "C" fn QueryStatementInto(
             };
             let ch = unsafe { get_ch_from_dbkeyptr(db) };
 
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
 
             let t = std::time::Instant::now()
                 + std::time::Duration::from_secs(10);
@@ -325,17 +313,13 @@ pub extern "C" fn Exec(
                 }
             };
 
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
 
             let t = std::time::Instant::now()
                 + std::time::Duration::from_secs(10);
@@ -409,17 +393,13 @@ pub extern "C" fn Query(
                     return e.reply(&context);
                 }
             };
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
 
             let t = std::time::Instant::now()
                 + std::time::Duration::from_secs(10);
@@ -481,17 +461,13 @@ pub extern "C" fn QueryInto(
                 }
             };
 
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
 
             let t = std::time::Instant::now()
                 + std::time::Duration::from_secs(10);
@@ -555,17 +531,13 @@ pub extern "C" fn CreateStatement(
                 }
             };
 
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
 
             let cmd = r::Command::CompileStatement {
                 identifier: argvector[2],
@@ -632,17 +604,13 @@ pub extern "C" fn UpdateStatement(
                     return e.reply(&context);
                 }
             };
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
 
             let cmd = r::Command::UpdateStatement {
                 identifier: argvector[2],
@@ -710,17 +678,13 @@ pub extern "C" fn DeleteStatement(
                     return e.reply(&context);
                 }
             };
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
 
             let cmd = r::Command::DeleteStatement {
                 identifier: argvector[2],
@@ -965,17 +929,13 @@ pub extern "C" fn MakeCopy(
             }
             let dest_db = dest_db.unwrap();
 
-            let blocked_client = r::rm::BlockedClient {
-                client: unsafe {
-                    r::rm::ffi::RedisModule_BlockClient.unwrap()(
-                        context.as_ptr(),
-                        Some(reply),
-                        Some(timeout),
-                        Some(free_privdata),
-                        10000,
-                    )
-                },
-            };
+            let blocked_client = r::rm::BlockedClient::new(
+                &context,
+                reply,
+                timeout,
+                free_privdata,
+                10000,
+            );
             let cmd = r::Command::MakeCopy {
                 destination: dest_db,
                 client: blocked_client,

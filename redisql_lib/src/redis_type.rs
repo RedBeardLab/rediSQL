@@ -86,7 +86,32 @@ pub struct BlockedClient {
 
 unsafe impl Send for BlockedClient {}
 
+type RedisReplyCallback = unsafe extern "C" fn(
+    *mut ffi::RedisModuleCtx,
+    *mut *mut ffi::RedisModuleString,
+    ::std::os::raw::c_int,
+) -> i32;
+type RedisFreeDataCallback =
+    unsafe extern "C" fn(*mut ::std::os::raw::c_void);
 impl BlockedClient {
+    pub fn new(
+        ctx: &Context,
+        reply_fn: RedisReplyCallback,
+        timeout_fn: RedisReplyCallback,
+        free_data_fn: RedisFreeDataCallback,
+        timeout: i64,
+    ) -> Self {
+        let client = unsafe {
+            ffi::RedisModule_BlockClient.unwrap()(
+                ctx.as_ptr(),
+                Some(reply_fn),
+                Some(timeout_fn),
+                Some(free_data_fn),
+                timeout,
+            )
+        };
+        Self { client }
+    }
     pub fn as_ptr(&self) -> *mut ffi::RedisModuleBlockedClient {
         self.client
     }
