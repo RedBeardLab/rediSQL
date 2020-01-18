@@ -26,7 +26,7 @@ pub extern "C" fn Exec_v2(
 
     let key = command.key(&context);
     match key.get_channel() {
-        Err(mut e) => return e.reply(&context),
+        Err(mut e) => e.reply(&context),
         Ok(ch) => {
             let blocked_client = BlockedClient::new(
                 &context,

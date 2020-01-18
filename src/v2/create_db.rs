@@ -33,26 +33,26 @@ pub extern "C" fn CreateDB_v2(
             match create_db_from_path(key, command.path) {
                 Ok(mut ok) => {
                     ReplicateVerbatim(&context);
-                    return ok.reply(&context);
+                    ok.reply(&context)
                 }
-                Err(mut e) => return e.reply(&context),
+                Err(mut e) => e.reply(&context),
             }
         }
         KeyTypes::RediSQL => {
             if command.can_exists {
-                return (QueryResult::OK {}).reply(&context);
+                (QueryResult::OK {}).reply(&context)
             } else {
                 let mut err = RediSQLError::with_code(
                     4,
                     "Database already exists".to_string(),
                     "A database with the same name already exists but you explicitely asked to create one (using the MUST_CREATE flag).".to_string(),
                 );
-                return err.reply(&context);
+                err.reply(&context)
             }
         }
         _ => {
             let mut err = RediSQLError::no_redisql_key();
-            return err.reply(&context);
+            err.reply(&context)
         }
     }
 }

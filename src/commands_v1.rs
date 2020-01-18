@@ -738,7 +738,7 @@ pub extern "C" fn CreateDB(
                     };
                     match get_arc_connection(path) {
                         Ok(rc) => {
-                            match r::create_metadata_table(rc.clone())
+                            match r::create_metadata_table(rc)
                                 .and_then(r::enable_foreign_key)
                                 .and_then(|rc| {
                                     r::insert_path_metadata(rc, path)
