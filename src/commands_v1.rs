@@ -472,7 +472,7 @@ pub extern "C" fn QueryInto(
     match argvector.len() {
         4 => {
             let stream_name = argvector[1];
-            let db = RedisKey::new(argvector[1], &context);
+            let db = RedisKey::new(argvector[2], &context);
             let ch = match db.get_channel() {
                 Ok(ch) => ch,
                 Err(mut e) => {
