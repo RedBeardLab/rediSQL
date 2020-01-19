@@ -230,6 +230,17 @@ class TestRediSQLExec(TestRediSQLWithExec):
               [1, 2, 1, 2],
               [3, 4, 3, 4]])
 
+class TestSynchronous(TestRediSQLWithExec):
+  def test_exec(self):
+    with DB(self, "A"):
+      done = self.exec_query("A", "CREATE TABLE test(a INT, b TEXT);", "NOW")
+      self.assertEqual(done, [b'DONE', 0])
+      done = self.exec_query("A", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');", "NOW")
+      self.assertEqual(done, [b'DONE', 3])
+      result = self.exec_query("A", "SELECT * FROM test ORDER BY a ASC", "NOW", "NO_HEADER")
+      self.assertEqual(result, [[1, b'ciao'], [2, b'foo'], [100, b'baz']])
+
+
 
 if __name__ == '__main__':
    unittest.main()

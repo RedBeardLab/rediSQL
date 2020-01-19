@@ -443,7 +443,6 @@ pub enum KeyTypes {
     Unknow,
 }
 
-#[repr(C)]
 pub struct RedisKey {
     pub key: *mut rm::ffi::RedisModuleKey,
 }
@@ -493,9 +492,23 @@ impl RedisKey {
     }
     pub fn get_channel(
         &self,
-    ) -> Result<Sender<Command>, RediSQLError> {
+    ) -> Result<&Sender<Command>, RediSQLError> {
+        /*
         let dbkey = self.get_dbkey()?;
         Ok(dbkey.tx.clone())
+        */
+        match self.key_type() {
+            KeyTypes::RediSQL => unsafe {
+                let dbkey = {
+                    rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(
+                        self.key,
+                    ) as *mut DBKey
+                };
+                Ok(&(*dbkey).tx)
+            },
+            KeyTypes::Empty => Err(RediSQLError::empty_key()),
+            _ => Err(RediSQLError::no_redisql_key()),
+        }
     }
     pub fn get_dbkey(
         &self,
@@ -1047,7 +1060,7 @@ where
             rm::CallReply::RError { .. } => {
                 context.release(lock);
                 return Err(RediSQLError::new(
-                    xadd_result.access_error().unwrap().to_string(),
+                    xadd_result.access_error().unwrap(),
                     format!("Error in XADD to {}", stream_name),
                 ));
                 // return an error and unlock
@@ -1312,11 +1325,11 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 std::mem::forget(destination);
             }
             Ok(Command::Stop) => {
-                debug!("Stop, exiting from work loop");
+                dbg!("Stop, exiting from work loop");
                 return;
             }
             Err(RecvError) => {
-                debug!(
+                dbg!(
                     "RecvError {}, exiting from work loop",
                     RecvError
                 );
@@ -1815,7 +1828,7 @@ pub unsafe fn get_ch_from_dbkeyptr(
     db: *mut DBKey,
 ) -> Sender<Command> {
     let tx = (*db).tx.clone();
-    tx.clone()
+    tx
 }
 
 pub fn reply_with_error_from_key_type(

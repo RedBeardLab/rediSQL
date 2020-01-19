@@ -1,4 +1,3 @@
-use redisql_lib::redis as r;
 use redisql_lib::redis::RedisKey;
 use redisql_lib::redis_type::Context;
 
@@ -10,13 +9,6 @@ pub trait CommandV2<'s> {
         Self: std::marker::Sized;
     fn database(&self) -> &str;
     fn key(&self, ctx: &Context) -> RedisKey {
-        let key_name = self.database();
-        let key_name = r::rm::RMString::new(ctx, key_name);
-        let key = r::rm::OpenKey(
-            ctx,
-            &key_name,
-            r::rm::ffi::REDISMODULE_WRITE,
-        );
-        RedisKey { key }
+        RedisKey::new(self.database(), ctx)
     }
 }

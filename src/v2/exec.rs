@@ -29,7 +29,7 @@ pub extern "C" fn Exec_v2(
         Err(mut e) => return e.reply(&context),
     };
     let key = command.key(&context);
-    if command.is_now() {
+    if !command.is_now() {
         match key.get_channel() {
             Err(mut e) => e.reply(&context),
             Ok(ch) => {
@@ -45,6 +45,13 @@ pub extern "C" fn Exec_v2(
                 let command =
                     command.get_command(timeout, blocked_client);
                 match ch.send(command) {
+                    Err(e) => {
+                        dbg!(
+                            "Error in sending the command!",
+                            e.to_string()
+                        );
+                        r::rm::ffi::REDISMODULE_OK
+                    }
                     _ => r::rm::ffi::REDISMODULE_OK,
                 }
             }
