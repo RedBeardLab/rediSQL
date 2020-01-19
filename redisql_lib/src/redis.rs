@@ -37,13 +37,13 @@ use crate::statistics::STATISTICS;
 #[derive(Clone)]
 pub struct ReplicationBook {
     data: Arc<RwLock<FnvHashMap<String, (MultiStatement, bool)>>>,
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
 }
 
 impl ReplicationBook {
     fn clone_replication_book(
         &self,
-        db: &Arc<Mutex<Connection>>,
+        db: &ConcurrentConnection,
     ) -> Self {
         let mut new = ReplicationBook::new(db);
         let data = self.data.read().unwrap();
@@ -57,7 +57,7 @@ impl ReplicationBook {
 }
 
 pub trait StatementCache<'a> {
-    fn new(db: &Arc<Mutex<Connection>>) -> Self;
+    fn new(db: &ConcurrentConnection) -> Self;
     fn is_statement_present(&self, identifier: &str) -> bool;
     fn insert_new_statement(
         &mut self,
@@ -86,7 +86,7 @@ pub trait StatementCache<'a> {
 }
 
 impl<'a> StatementCache<'a> for ReplicationBook {
-    fn new(db: &Arc<Mutex<Connection>>) -> Self {
+    fn new(db: &ConcurrentConnection) -> Self {
         ReplicationBook {
             data: Arc::new(RwLock::new(FnvHashMap::default())),
             db: Arc::clone(db),
@@ -238,20 +238,20 @@ unsafe impl Send for Loop {}
 
 pub trait LoopData {
     fn get_replication_book(&self) -> ReplicationBook;
-    fn get_db(&self) -> Arc<Mutex<Connection>>;
+    fn get_db(&self) -> ConcurrentConnection;
 }
 
 impl LoopData for Loop {
     fn get_replication_book(&self) -> ReplicationBook {
         self.replication_book.clone()
     }
-    fn get_db(&self) -> Arc<Mutex<Connection>> {
+    fn get_db(&self) -> ConcurrentConnection {
         Arc::clone(&self.db)
     }
 }
 
 impl Loop {
-    fn new_from_arc(db: Arc<Mutex<Connection>>) -> Self {
+    fn new_from_arc(db: ConcurrentConnection) -> Self {
         let replication_book = ReplicationBook::new(&db);
         Loop {
             db,
@@ -259,7 +259,7 @@ impl Loop {
         }
     }
     fn new_from_db_and_replication_book(
-        db: Arc<Mutex<Connection>>,
+        db: ConcurrentConnection,
         replication_book: ReplicationBook,
     ) -> Self {
         Loop {
@@ -818,7 +818,7 @@ impl RedisReply for QueryResult {
 }
 
 pub fn do_execute(
-    db: &Arc<Mutex<Connection>>,
+    db: &ConcurrentConnection,
     query: &str,
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -829,7 +829,7 @@ pub fn do_execute(
 }
 
 pub fn do_query(
-    db: &Arc<Mutex<Connection>>,
+    db: &ConcurrentConnection,
     query: &str,
 ) -> Result<impl Returner, err::RediSQLError> {
     let stmt = MultiStatement::new(db.clone(), query)?;
@@ -845,7 +845,7 @@ pub fn do_query(
 /// implements the copy of the source database into the destination one
 /// it also leak the two DBKeys
 pub fn do_copy<L: LoopData>(
-    source_db: &Arc<Mutex<Connection>>,
+    source_db: &ConcurrentConnection,
     destination_loopdata: &L,
 ) -> Result<impl Returner, err::RediSQLError> {
     debug!("DoCopy | Start");
@@ -1369,7 +1369,7 @@ pub struct DBKey {
 impl DBKey {
     pub fn new_from_arc(
         tx: Sender<Command>,
-        db: Arc<Mutex<Connection>>,
+        db: ConcurrentConnection,
     ) -> DBKey {
         let loop_data = Loop::new_from_arc(db);
         DBKey {
@@ -1444,8 +1444,8 @@ impl Drop for DBKey {
 }
 
 pub fn create_metadata_table(
-    db: Arc<Mutex<Connection>>,
-) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
+    db: ConcurrentConnection,
+) -> Result<ConcurrentConnection, SQLite3Error> {
     let statement = "CREATE TABLE IF NOT EXISTS RediSQLMetadata(data_type TEXT, key TEXT, value TEXT);";
 
     let stmt = MultiStatement::new(db.clone(), statement)?;
@@ -1454,11 +1454,11 @@ pub fn create_metadata_table(
 }
 
 pub fn insert_metadata(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
     data_type: &str,
     key: &str,
     value: &str,
-) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
+) -> Result<ConcurrentConnection, SQLite3Error> {
     let statement = "INSERT INTO RediSQLMetadata VALUES(?1, ?2, ?3);";
 
     let stmt = MultiStatement::new(db.clone(), statement)?;
@@ -1470,7 +1470,7 @@ pub fn insert_metadata(
 }
 
 pub fn enable_foreign_key_v2(
-    db: Result<Arc<Mutex<Connection>>, SQLite3Error>,
+    db: Result<ConcurrentConnection, SQLite3Error>,
 ) -> Result<(), SQLite3Error> {
     let enable_foreign_key = "PRAGMA foreign_keys = ON;";
     match MultiStatement::new(db.expect("cve"), enable_foreign_key) {
@@ -1482,8 +1482,8 @@ pub fn enable_foreign_key_v2(
     }
 }
 pub fn enable_foreign_key(
-    db: Arc<Mutex<Connection>>,
-) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
+    db: ConcurrentConnection,
+) -> Result<ConcurrentConnection, SQLite3Error> {
     let enable_foreign_key = "PRAGMA foreign_keys = ON;";
     match MultiStatement::new(db.clone(), enable_foreign_key) {
         Err(e) => Err(e),
@@ -1495,7 +1495,7 @@ pub fn enable_foreign_key(
 }
 
 fn update_statement_metadata(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
     key: &str,
     value: &str,
 ) -> Result<(), SQLite3Error> {
@@ -1510,7 +1510,7 @@ fn update_statement_metadata(
 }
 
 fn remove_statement_metadata(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
     key: &str,
 ) -> Result<(), SQLite3Error> {
     let statement = "DELETE FROM RediSQLMetadata WHERE data_type = 'statement' AND key = ?1";
@@ -1522,7 +1522,7 @@ fn remove_statement_metadata(
 }
 
 fn get_statement_metadata(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
 ) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT * FROM RediSQLMetadata WHERE data_type = 'statement';";
 
@@ -1532,7 +1532,7 @@ fn get_statement_metadata(
 }
 
 fn get_path_metadata(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
 ) -> Result<QueryResult, err::RediSQLError> {
     let statement = "SELECT value FROM RediSQLMetadata WHERE data_type = 'path' AND key = 'path';";
 
@@ -1541,7 +1541,7 @@ fn get_path_metadata(
     QueryResult::try_from(cursor)
 }
 
-pub fn is_redisql_database(db: Arc<Mutex<Connection>>) -> bool {
+pub fn is_redisql_database(db: ConcurrentConnection) -> bool {
     let query = "SELECT name FROM sqlite_master WHERE type='table' AND name='RediSQLMetadata;";
 
     let query = MultiStatement::new(db, query);
@@ -1563,7 +1563,7 @@ pub fn is_redisql_database(db: Arc<Mutex<Connection>>) -> bool {
 }
 
 pub fn get_path_from_db(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
 ) -> Result<String, RediSQLError> {
     match get_path_metadata(db) {
         Err(e) => Err(e),
@@ -1594,14 +1594,14 @@ pub fn get_path_from_db(
 }
 
 pub fn insert_path_metadata(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
     path: &str,
-) -> Result<Arc<Mutex<Connection>>, SQLite3Error> {
+) -> Result<ConcurrentConnection, SQLite3Error> {
     insert_metadata(db, "path", "path", path)
 }
 
 fn update_path_metadata(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
     value: &str,
 ) -> Result<(), SQLite3Error> {
     let statement =
@@ -1834,7 +1834,7 @@ pub fn reply_with_error_from_key_type(
 }
 
 fn create_statement(
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
     identifier: &str,
     statement: &str,
 ) -> Result<MultiStatement, err::RediSQLError> {
@@ -1844,7 +1844,7 @@ fn create_statement(
 }
 
 fn update_statement(
-    db: &Arc<Mutex<Connection>>,
+    db: &ConcurrentConnection,
     identifier: &str,
     statement: &str,
 ) -> Result<MultiStatement, err::RediSQLError> {
@@ -1854,7 +1854,7 @@ fn update_statement(
 }
 
 fn remove_statement(
-    db: &Arc<Mutex<Connection>>,
+    db: &ConcurrentConnection,
     identifier: &str,
 ) -> Result<(), err::RediSQLError> {
     remove_statement_metadata(Arc::clone(db), identifier)
