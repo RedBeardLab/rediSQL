@@ -220,9 +220,11 @@ impl<'a> StatementCache<'a> for ReplicationBook {
     }
 }
 
+type ConcurrentConnection = Arc<Mutex<Connection>>;
+
 #[derive(Clone)]
 pub struct Loop {
-    db: Arc<Mutex<Connection>>,
+    db: ConcurrentConnection,
     replication_book: ReplicationBook,
 }
 
@@ -493,10 +495,6 @@ impl RedisKey {
     pub fn get_channel(
         &self,
     ) -> Result<&Sender<Command>, RediSQLError> {
-        /*
-        let dbkey = self.get_dbkey()?;
-        Ok(dbkey.tx.clone())
-        */
         match self.key_type() {
             KeyTypes::RediSQL => unsafe {
                 let dbkey = {
@@ -510,9 +508,9 @@ impl RedisKey {
             _ => Err(RediSQLError::no_redisql_key()),
         }
     }
-    pub fn get_dbkey(
+    pub fn get_db(
         &self,
-    ) -> Result<UndroppableDBKey, RediSQLError> {
+    ) -> Result<ConcurrentConnection, RediSQLError> {
         match self.key_type() {
             KeyTypes::RediSQL => {
                 let dbkey = unsafe {
@@ -520,11 +518,7 @@ impl RedisKey {
                         self.key,
                     ) as *mut DBKey
                 };
-                Ok(UndroppableDBKey {
-                    dbkey: std::mem::ManuallyDrop::new(unsafe {
-                        dbkey.read()
-                    }),
-                })
+                Ok(unsafe { (*dbkey).loop_data.get_db() })
             }
             KeyTypes::Empty => Err(RediSQLError::empty_key()),
             _ => Err(RediSQLError::no_redisql_key()),

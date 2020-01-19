@@ -3,7 +3,6 @@ use parser::exec::Exec;
 
 use redisql_lib::redis as r;
 use redisql_lib::redis::do_execute;
-use redisql_lib::redis::LoopData;
 use redisql_lib::redis::RedisReply;
 use redisql_lib::redis::Returner;
 use redisql_lib::redis_type::BlockedClient;
@@ -57,11 +56,10 @@ pub extern "C" fn Exec_v2(
             }
         }
     } else {
-        let dbkey = match key.get_dbkey() {
+        let db = match key.get_db() {
             Ok(k) => k,
             Err(mut e) => return e.reply(&context),
         };
-        let db = dbkey.loop_data.get_db();
         let result = do_execute(
             &db,
             command.get_query().expect("todo if panic"),
