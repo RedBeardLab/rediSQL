@@ -506,7 +506,7 @@ impl Drop for RedisKey {
 
 pub enum ReturnMethod {
     Reply,
-    ReplyWithHeaders,
+    ReplyWithHeader,
     Stream { name: &'static str },
 }
 
@@ -516,6 +516,7 @@ pub enum Command {
     Exec {
         query: &'static str,
         timeout: std::time::Instant,
+        return_method: ReturnMethod,
         client: BlockedClient,
     },
     Query {
@@ -738,7 +739,7 @@ impl<'s> Returner for Cursor {
                         Err(e) => Box::new(Box::new(e)),
                     }
                 }
-                ReturnMethod::ReplyWithHeaders => {
+                ReturnMethod::ReplyWithHeader => {
                     let query_result =
                         QueryResult::from_cursor_before_with_header(
                             self, timeout,
@@ -1076,6 +1077,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             Ok(Command::Exec {
                 query,
                 client,
+                return_method,
                 timeout,
             }) => {
                 debug!("Exec | Query = {:?}", query);
@@ -1086,7 +1088,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 }
                 return_value(
                     &client,
-                    &ReturnMethod::Reply,
+                    &return_method,
                     result,
                     timeout,
                 );
@@ -1108,10 +1110,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     (ReturnMethod::Reply, Err(_)) => {
                         STATISTICS.query_err()
                     }
-                    (ReturnMethod::ReplyWithHeaders, Ok(_)) => {
+                    (ReturnMethod::ReplyWithHeader, Ok(_)) => {
                         STATISTICS.query_ok()
                     }
-                    (ReturnMethod::ReplyWithHeaders, Err(_)) => {
+                    (ReturnMethod::ReplyWithHeader, Err(_)) => {
                         STATISTICS.query_err()
                     }
                     (ReturnMethod::Stream { .. }, Ok(_)) => {
@@ -1242,10 +1244,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     (ReturnMethod::Reply, Err(_)) => {
                         STATISTICS.query_statement_err()
                     }
-                    (ReturnMethod::ReplyWithHeaders, Ok(_)) => {
+                    (ReturnMethod::ReplyWithHeader, Ok(_)) => {
                         STATISTICS.query_statement_ok()
                     }
-                    (ReturnMethod::ReplyWithHeaders, Err(_)) => {
+                    (ReturnMethod::ReplyWithHeader, Err(_)) => {
                         STATISTICS.query_statement_err()
                     }
                     (ReturnMethod::Stream { .. }, Ok(_)) => {

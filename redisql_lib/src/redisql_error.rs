@@ -33,6 +33,7 @@ pub struct RediSQLError {
  * 14  - Provided STATEMENT twice
  * 15  - Provided key does not exists
  * 16  - Ask stream without heading, which does not make sense
+ * 17  - Ask stream for not read_only query, not supported.
  */
 impl RediSQLError {
     pub fn new(debug: String, error_description: String) -> Self {

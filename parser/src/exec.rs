@@ -1,4 +1,5 @@
 use redisql_lib::redis::Command;
+use redisql_lib::redis::ReturnMethod;
 use redisql_lib::redis_type::BlockedClient;
 use redisql_lib::redisql_error::RediSQLError;
 
@@ -28,6 +29,15 @@ impl Exec<'static> {
         timeout: std::time::Instant,
         client: BlockedClient,
     ) -> Command {
+        let return_method =
+            match (self.read_only, self.into, self.no_header) {
+                (true, Some(s), false) => {
+                    ReturnMethod::Stream { name: s }
+                }
+                (_, Some(s), _) => ReturnMethod::Stream { name: s },
+                (_, _, true) => ReturnMethod::Reply,
+                (_, _, false) => ReturnMethod::ReplyWithHeader,
+            };
         match self.to_execute {
             Some(ToExecute::Query(q)) => match self.read_only {
                 true => todo!(),
@@ -35,6 +45,7 @@ impl Exec<'static> {
                     query: q,
                     timeout,
                     client,
+                    return_method,
                 },
             },
             Some(ToExecute::Statement(_)) => todo!(),
@@ -153,7 +164,10 @@ impl<'s> CommandV2<'s> for Exec<'s> {
             }
         }
         if exec.into.is_some() && exec.no_header {
-            return Err(RediSQLError::with_code(17, "Asked a STREAM without the header".to_string(), "The header is part of the stream, does not make sense to provide a stream without header".to_string()));
+            return Err(RediSQLError::with_code(16, "Asked a STREAM without the header".to_string(), "The header is part of the stream, does not make sense to provide a stream without header".to_string()));
+        }
+        if exec.into.is_some() && !exec.read_only {
+            return Err(RediSQLError::with_code(17, "STREAM for not READ_ONLY query not supported".to_string(), "Asked a STREAM, but the query is not `READ_ONLY` (flag not set), this is not supported.".to_string()));
         }
         Ok(exec)
     }

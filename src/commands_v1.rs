@@ -302,6 +302,7 @@ pub extern "C" fn Exec(
                 query: argvector[2],
                 client: blocked_client,
                 timeout: t,
+                return_method: r::ReturnMethod::Reply,
             };
 
             match ch.send(cmd) {
