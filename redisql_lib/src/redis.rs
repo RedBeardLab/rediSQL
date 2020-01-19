@@ -449,17 +449,6 @@ pub struct RedisKey {
     pub key: *mut rm::ffi::RedisModuleKey,
 }
 
-pub struct UndroppableDBKey {
-    dbkey: std::mem::ManuallyDrop<DBKey>,
-}
-
-impl std::ops::Deref for UndroppableDBKey {
-    type Target = DBKey;
-    fn deref(&self) -> &Self::Target {
-        &self.dbkey
-    }
-}
-
 impl RedisKey {
     pub fn new(key_name: &str, ctx: &Context) -> Self {
         let key_name = rm::RMString::new(ctx, key_name);
