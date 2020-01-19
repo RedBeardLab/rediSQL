@@ -17,6 +17,7 @@ pub struct Exec<'s> {
     into: Option<&'s str>,
     read_only: bool,
     now: bool,
+    no_header: bool,
     to_execute: Option<ToExecute<'s>>,
     args: Option<Vec<&'s str>>,
 }
@@ -59,6 +60,7 @@ impl<'s> CommandV2<'s> for Exec<'s> {
             into: None,
             read_only: false,
             now: false,
+            no_header: false,
             to_execute: None,
             args: None,
         };
@@ -138,6 +140,7 @@ impl<'s> CommandV2<'s> for Exec<'s> {
                     };
                     exec.into = Some(stream);
                 }
+                "NO_HEADER" => exec.no_header = true,
                 "ARGS" => {
                     let (size, _) = args_iter.size_hint();
                     let mut args = Vec::with_capacity(size);
@@ -148,6 +151,9 @@ impl<'s> CommandV2<'s> for Exec<'s> {
                 }
                 _ => {}
             }
+        }
+        if exec.into.is_some() && exec.no_header {
+            return Err(RediSQLError::with_code(17, "Asked a STREAM without the header".to_string(), "The header is part of the stream, does not make sense to provide a stream without header".to_string()));
         }
         Ok(exec)
     }
