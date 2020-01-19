@@ -29,15 +29,7 @@ impl Exec<'static> {
         timeout: std::time::Instant,
         client: BlockedClient,
     ) -> Command {
-        let return_method =
-            match (self.read_only, self.into, self.no_header) {
-                (true, Some(s), false) => {
-                    ReturnMethod::Stream { name: s }
-                }
-                (_, Some(s), _) => ReturnMethod::Stream { name: s },
-                (_, _, true) => ReturnMethod::Reply,
-                (_, _, false) => ReturnMethod::ReplyWithHeader,
-            };
+        let return_method = self.get_return_method();
         match self.to_execute {
             Some(ToExecute::Query(q)) => match self.read_only {
                 true => todo!(),
@@ -52,8 +44,24 @@ impl Exec<'static> {
             None => todo!(),
         }
     }
+    pub fn get_return_method(&self) -> ReturnMethod {
+        match (self.read_only, self.into, self.no_header) {
+            (true, Some(s), false) => {
+                ReturnMethod::Stream { name: s }
+            }
+            (_, Some(s), _) => ReturnMethod::Stream { name: s },
+            (_, _, true) => ReturnMethod::Reply,
+            (_, _, false) => ReturnMethod::ReplyWithHeader,
+        }
+    }
     pub fn is_now(&self) -> bool {
         self.now
+    }
+    pub fn get_query(&self) -> Option<&str> {
+        match self.to_execute {
+            Some(ToExecute::Query(q)) => Some(q),
+            _ => None,
+        }
     }
 }
 

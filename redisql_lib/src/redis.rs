@@ -448,6 +448,17 @@ pub struct RedisKey {
     pub key: *mut rm::ffi::RedisModuleKey,
 }
 
+pub struct UndroppableDBKey {
+    dbkey: std::mem::ManuallyDrop<DBKey>,
+}
+
+impl std::ops::Deref for UndroppableDBKey {
+    type Target = DBKey;
+    fn deref(&self) -> &Self::Target {
+        &self.dbkey
+    }
+}
+
 impl RedisKey {
     pub fn new(key_name: &str, ctx: &Context) -> Self {
         let key_name = rm::RMString::new(ctx, key_name);
@@ -482,14 +493,26 @@ impl RedisKey {
     }
     pub fn get_channel(
         &self,
-    ) -> Result<&Sender<Command>, RediSQLError> {
+    ) -> Result<Sender<Command>, RediSQLError> {
+        let dbkey = self.get_dbkey()?;
+        Ok(dbkey.tx.clone())
+    }
+    pub fn get_dbkey(
+        &self,
+    ) -> Result<UndroppableDBKey, RediSQLError> {
         match self.key_type() {
-            KeyTypes::RediSQL => unsafe {
-                let dbkey = rm::ffi::RedisModule_ModuleTypeGetValue
-                    .unwrap()(self.key)
-                    as *mut DBKey;
-                Ok(&(*dbkey).tx)
-            },
+            KeyTypes::RediSQL => {
+                let dbkey = unsafe {
+                    rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(
+                        self.key,
+                    ) as *mut DBKey
+                };
+                Ok(UndroppableDBKey {
+                    dbkey: std::mem::ManuallyDrop::new(unsafe {
+                        dbkey.read()
+                    }),
+                })
+            }
             KeyTypes::Empty => Err(RediSQLError::empty_key()),
             _ => Err(RediSQLError::no_redisql_key()),
         }
