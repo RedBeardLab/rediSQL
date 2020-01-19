@@ -442,6 +442,83 @@ impl QueryResult {
             }
         }
     }
+
+    pub fn from_cursor_before_with_header(
+        mut cursor: Cursor,
+        timeout: std::time::Instant,
+    ) -> Result<Self, err::RediSQLError> {
+        let now = std::time::Instant::now();
+        if now > timeout {
+            return Err(err::RediSQLError::timeout());
+        }
+        match cursor {
+            Cursor::OKCursor {} => Ok(QueryResult::OK {}),
+            Cursor::DONECursor { modified_rows } => {
+                Ok(QueryResult::DONE { modified_rows })
+            }
+            Cursor::RowsCursor {
+                ref stmt,
+                num_columns,
+                ref mut previous_status,
+                ..
+            } => {
+                let mut now = std::time::Instant::now();
+                if now > timeout {
+                    return Err(err::RediSQLError::timeout());
+                }
+                let mut result = vec![];
+                let mut names =
+                    Vec::with_capacity(num_columns as usize);
+                let mut types =
+                    Vec::with_capacity(num_columns as usize);
+                for i in 0..num_columns {
+                    let name = unsafe {
+                        CStr::from_ptr(ffi::sqlite3_column_name(
+                            stmt.as_ptr(),
+                            i,
+                        ))
+                        .to_string_lossy()
+                        .into_owned()
+                    };
+                    names.push(name.clone());
+                    result.push(Entity::Text { text: name });
+                }
+                for i in 0..num_columns {
+                    let t = type_to_string(unsafe {
+                        ffi::sqlite3_column_type(stmt.as_ptr(), i)
+                    });
+                    types.push(t);
+                    result.push(Entity::Text {
+                        text: t.to_string(),
+                    });
+                }
+                while *previous_status == ffi::SQLITE_ROW {
+                    now = std::time::Instant::now();
+                    if now > timeout {
+                        return Err(err::RediSQLError::timeout());
+                    }
+                    for i in 0..num_columns {
+                        let entity_value = Entity::new(stmt, i);
+                        result.push(entity_value);
+                    }
+                    unsafe {
+                        *previous_status =
+                            ffi::sqlite3_step(stmt.as_ptr());
+                    };
+                }
+                match *previous_status {
+                     ffi::SQLITE_INTERRUPT => {
+                        Err(err::RediSQLError::new("Query Interrupted".to_string(), "The query was interrupted, most likely because it runs out of time.".to_string()))
+                    },
+                    _ => Ok(QueryResult::Array {
+                        names,
+                        array: result,
+                        types,
+                    }),
+                }
+            }
+        }
+    }
 }
 
 impl TryFrom<Cursor> for QueryResult {

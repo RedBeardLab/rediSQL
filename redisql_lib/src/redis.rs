@@ -506,6 +506,7 @@ impl Drop for RedisKey {
 
 pub enum ReturnMethod {
     Reply,
+    ReplyWithHeaders,
     Stream { name: &'static str },
 }
 
@@ -736,6 +737,13 @@ impl<'s> Returner for Cursor {
                         Ok(res) => Box::new(Box::new(res)),
                         Err(e) => Box::new(Box::new(e)),
                     }
+                }
+                ReturnMethod::ReplyWithHeaders => {
+                    let query_result =
+                        QueryResult::from_cursor_before_with_header(
+                            self, timeout,
+                        );
+                    Box::new(Box::new(query_result))
                 }
                 ReturnMethod::Reply => {
                     let query_result =
@@ -1100,6 +1108,12 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     (ReturnMethod::Reply, Err(_)) => {
                         STATISTICS.query_err()
                     }
+                    (ReturnMethod::ReplyWithHeaders, Ok(_)) => {
+                        STATISTICS.query_ok()
+                    }
+                    (ReturnMethod::ReplyWithHeaders, Err(_)) => {
+                        STATISTICS.query_err()
+                    }
                     (ReturnMethod::Stream { .. }, Ok(_)) => {
                         STATISTICS.query_into_ok()
                     }
@@ -1226,6 +1240,12 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                         STATISTICS.query_statement_ok()
                     }
                     (ReturnMethod::Reply, Err(_)) => {
+                        STATISTICS.query_statement_err()
+                    }
+                    (ReturnMethod::ReplyWithHeaders, Ok(_)) => {
+                        STATISTICS.query_statement_ok()
+                    }
+                    (ReturnMethod::ReplyWithHeaders, Err(_)) => {
                         STATISTICS.query_statement_err()
                     }
                     (ReturnMethod::Stream { .. }, Ok(_)) => {
