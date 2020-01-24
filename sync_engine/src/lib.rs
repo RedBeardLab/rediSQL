@@ -439,7 +439,7 @@ pub extern "C" fn UpdateStatementNow(
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
-                        .update_statement(args[2], args[3]);
+                        .update_statement(args[2], args[3], false);
                     match result {
                         Ok(mut res) => {
                             ReplicateVerbatim(&context);

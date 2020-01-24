@@ -72,6 +72,7 @@ pub trait StatementCache<'a> {
         &mut self,
         identifier: &str,
         statement: &str,
+        can_create: bool,
     ) -> Result<QueryResult, RediSQLError>;
     fn exec_statement(
         &self,
@@ -147,16 +148,26 @@ impl<'a> StatementCache<'a> for ReplicationBook {
         &mut self,
         identifier: &str,
         statement: &str,
+        can_create: bool,
     ) -> Result<QueryResult, RediSQLError> {
         let db = self.db.clone();
         let mut map = self.data.write().unwrap();
         match map.entry(identifier.to_owned()) {
-            Entry::Vacant(_) => {
-                let debug = String::from("Statement not present.");
-                let description = String::from(
+            Entry::Vacant(v) => {
+                if can_create {
+                    let stmt =
+                        create_statement(db, identifier, statement)?;
+                    let read_only = stmt.is_read_only();
+                    v.insert((stmt, read_only));
+                    Ok(QueryResult::OK {})
+                } else {
+                    let debug =
+                        String::from("Statement not present.");
+                    let description = String::from(
                     "The statement is not present in the database, impossible to update it.",
                 );
-                Err(RediSQLError::new(debug, description))
+                    Err(RediSQLError::new(debug, description))
+                }
             }
             Entry::Occupied(mut o) => {
                 let stmt =
@@ -559,6 +570,7 @@ pub enum Command {
         identifier: &'static str,
         statement: &'static str,
         client: BlockedClient,
+        can_create: bool,
     },
     DeleteStatement {
         identifier: &'static str,
@@ -1152,15 +1164,17 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             Ok(Command::UpdateStatement {
                 identifier,
                 statement,
+                can_create,
                 client,
             }) => {
                 debug!(
                     "UpdateStatement | Identifier = {:?} Statement = {:?}",
                     identifier, statement
                 );
-                let result = loopdata
-                    .get_replication_book()
-                    .update_statement(identifier, statement);
+                let result =
+                    loopdata.get_replication_book().update_statement(
+                        identifier, statement, can_create,
+                    );
                 match result {
                     Ok(_) => STATISTICS.update_statement_ok(),
                     Err(_) => STATISTICS.update_statement_err(),

@@ -591,6 +591,7 @@ pub extern "C" fn UpdateStatement(
                 identifier: argvector[2],
                 statement: argvector[3],
                 client: blocked_client,
+                can_create: false,
             };
 
             match ch.send(cmd) {

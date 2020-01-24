@@ -1,3 +1,5 @@
+use redisql_lib::redis::Command;
+use redisql_lib::redis_type::BlockedClient;
 use redisql_lib::redisql_error::RediSQLError;
 
 use crate::common::CommandV2;
@@ -19,6 +21,32 @@ pub struct Statement<'s> {
     now: bool,
     can_update: bool,
     can_create: bool,
+}
+
+impl Statement<'static> {
+    pub fn get_command(self, client: BlockedClient) -> Command {
+        match self.action {
+            Action::Delete => Command::DeleteStatement {
+                identifier: self.stmt_name,
+                client,
+            },
+            Action::Update => Command::UpdateStatement {
+                identifier: self.stmt_name,
+                statement: self.stmt_query.unwrap(),
+                can_create: self.can_create,
+                client,
+            },
+            Action::New => Command::CompileStatement {
+                identifier: self.stmt_name,
+                statement: self.stmt_query.unwrap(),
+                client,
+            },
+            Action::Show => todo!(),
+        }
+    }
+    pub fn is_now(&self) -> bool {
+        self.now
+    }
 }
 
 impl<'s> CommandV2<'s> for Statement<'s> {
