@@ -32,7 +32,12 @@ impl Exec<'static> {
         let return_method = self.get_return_method();
         match self.to_execute {
             Some(ToExecute::Query(q)) => match self.read_only {
-                true => todo!(),
+                true => Command::Query {
+                    query: q,
+                    timeout,
+                    return_method,
+                    client,
+                },
                 false => Command::Exec {
                     query: q,
                     timeout,

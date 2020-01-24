@@ -240,6 +240,35 @@ class TestSynchronous(TestRediSQLWithExec):
       result = self.exec_query("A", "SELECT * FROM test ORDER BY a ASC", "NOW", "NO_HEADER")
       self.assertEqual(result, [[1, b'ciao'], [2, b'foo'], [100, b'baz']])
 
+class TestRead(TestRediSQLWithExec):
+  def test_read(self):
+    with DB(self, "A"):
+      done = self.exec_query("A", "CREATE TABLE t1(a INTEGER);")
+      self.assertEqual(done, [b'DONE', 0])
+      done = self.exec_query("A", "INSERT INTO t1 VALUES(4);")
+      result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT A FROM t1 LIMIT 1;", "READ_ONLY", "NO_HEADER")
+      self.assertEqual(result, [[4]])
+      result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT A FROM t1 LIMIT 1;", "READ_ONLY")
+      self.assertEqual(result, [[b'a'], [b'INT'], [4]])
+
+  def test_not_insert(self):
+    with DB(self, "B"):
+      done = self.exec_query("B", "CREATE TABLE t1(a INTEGER);")
+      self.assertEqual(done, [b'DONE', 0])
+      with self.assertRaises(redis.exceptions.ResponseError):
+        self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "INSERT INTO t1 VALUES(5);", "READ_ONLY")
+
+      done = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "CREATE TABLE test(a INT, b TEXT);")
+      self.assertEqual(done, [b'DONE', 0])
+      done = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY",
+          "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
+      self.assertEqual(done, [b'DONE', 3])
+      result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM test ORDER BY a ASC",
+          "READ_ONLY", "NO_HEADER")
+      self.assertEqual(result, [[1, b'ciao'], [2, b'foo'], [100, b'baz']])
+      result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM test ORDER BY a ASC", "READ_ONLY")
+      self.assertEqual(result, [[b'a', b'b'], [b'INT', b'TEXT'], [1, b'ciao'], [2, b'foo'], [100, b'baz']])
+
 
 
 if __name__ == '__main__':
