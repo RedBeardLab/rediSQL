@@ -392,7 +392,9 @@ pub extern "C" fn CreateStatementNow(
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
-                        .insert_new_statement(args[2], args[3]);
+                        .insert_new_statement(
+                            args[2], args[3], false,
+                        );
                     match result {
                         Ok(mut res) => {
                             ReplicateVerbatim(&context);

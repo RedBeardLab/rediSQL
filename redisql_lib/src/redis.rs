@@ -49,8 +49,11 @@ impl ReplicationBook {
         let data = self.data.read().unwrap();
         for (name, (statement, _)) in data.iter() {
             // this could fail in theory, but panic would be too much
-            let _ = new
-                .insert_new_statement(name, &statement.to_string());
+            let _ = new.insert_new_statement(
+                name,
+                &statement.to_string(),
+                false,
+            );
         }
         new
     }
@@ -63,6 +66,7 @@ pub trait StatementCache<'a> {
         &mut self,
         identifier: &str,
         statement: &str,
+        can_update: bool,
     ) -> Result<QueryResult, RediSQLError>;
     fn delete_statement(
         &mut self,
@@ -101,6 +105,7 @@ impl<'a> StatementCache<'a> for ReplicationBook {
         &mut self,
         identifier: &str,
         statement: &str,
+        can_update: bool,
     ) -> Result<QueryResult, RediSQLError> {
         let db = self.db.clone();
         let mut map = self.data.write().unwrap();
@@ -112,12 +117,21 @@ impl<'a> StatementCache<'a> for ReplicationBook {
                 v.insert((stmt, read_only));
                 Ok(QueryResult::OK {})
             }
-            Entry::Occupied(_) => {
-                let debug = String::from("Statement already present");
-                let description = String::from(
+            Entry::Occupied(mut o) => {
+                if can_update {
+                    let stmt =
+                        update_statement(&db, identifier, statement)?;
+                    let read_only = stmt.is_read_only();
+                    o.insert((stmt, read_only));
+                    Ok(QueryResult::OK {})
+                } else {
+                    let debug =
+                        String::from("Statement already present");
+                    let description = String::from(
                     "The statement is already present in the database, try with UPDATE_STATEMENT",
                 );
-                Err(RediSQLError::new(debug, description))
+                    Err(RediSQLError::new(debug, description))
+                }
             }
         }
     }
@@ -559,6 +573,7 @@ pub enum Command {
         identifier: &'static str,
         statement: &'static str,
         client: BlockedClient,
+        can_update: bool,
     },
     ExecStatement {
         identifier: &'static str,
@@ -1210,6 +1225,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 identifier,
                 statement,
                 client,
+                can_update,
             }) => {
                 debug!(
                     "CompileStatement | Identifier = {:?} Statement = {:?}",
@@ -1217,7 +1233,9 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 );
                 let result = loopdata
                     .get_replication_book()
-                    .insert_new_statement(identifier, statement);
+                    .insert_new_statement(
+                        identifier, statement, can_update,
+                    );
                 match result {
                     Ok(_) => STATISTICS.create_statement_ok(),
                     Err(_) => STATISTICS.create_statement_err(),

@@ -518,6 +518,7 @@ pub extern "C" fn CreateStatement(
                 identifier: argvector[2],
                 statement: argvector[3],
                 client: blocked_client,
+                can_update: false,
             };
 
             match ch.send(cmd) {

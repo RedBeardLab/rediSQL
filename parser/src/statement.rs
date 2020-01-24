@@ -39,6 +39,7 @@ impl Statement<'static> {
             Action::New => Command::CompileStatement {
                 identifier: self.stmt_name,
                 statement: self.stmt_query.unwrap(),
+                can_update: self.can_update,
                 client,
             },
             Action::Show => todo!(),
