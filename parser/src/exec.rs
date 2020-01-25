@@ -6,7 +6,7 @@ use redisql_lib::redisql_error::RediSQLError;
 use crate::common::CommandV2;
 
 #[derive(Debug, PartialEq, Clone)]
-enum ToExecute<'s> {
+pub enum ToExecute<'s> {
     Query(&'s str),
     Statement(&'s str),
 }
@@ -20,7 +20,7 @@ pub struct Exec<'s> {
     now: bool,
     no_header: bool,
     to_execute: Option<ToExecute<'s>>,
-    args: Option<Vec<&'s str>>,
+    pub args: Vec<&'s str>,
 }
 
 impl Exec<'static> {
@@ -30,40 +30,37 @@ impl Exec<'static> {
         client: BlockedClient,
     ) -> Command {
         let return_method = self.get_return_method();
-        match self.to_execute {
-            Some(ToExecute::Query(q)) => match self.read_only {
-                true => Command::Query {
-                    query: q,
-                    timeout,
-                    return_method,
-                    client,
-                },
-                false => Command::Exec {
-                    query: q,
-                    timeout,
-                    client,
-                    return_method,
-                },
+        match (self.to_execute.unwrap(), self.read_only) {
+            (ToExecute::Query(q), true) => Command::Query {
+                query: q,
+                timeout,
+                return_method,
+                client,
             },
-            Some(ToExecute::Statement(identifier)) => {
-                let arguments = self.args.unwrap_or_else(Vec::new);
-                match self.read_only {
-                    false => Command::ExecStatement {
-                        identifier,
-                        arguments,
-                        timeout,
-                        client,
-                    },
-                    true => Command::QueryStatement {
-                        identifier,
-                        arguments,
-                        timeout,
-                        client,
-                        return_method,
-                    },
+
+            (ToExecute::Query(q), false) => Command::Exec {
+                query: q,
+                timeout,
+                client,
+                return_method,
+            },
+            (ToExecute::Statement(identifier), true) => {
+                Command::QueryStatement {
+                    identifier,
+                    arguments: self.args,
+                    timeout,
+                    client,
+                    return_method,
                 }
             }
-            None => todo!(),
+            (ToExecute::Statement(identifier), false) => {
+                Command::ExecStatement {
+                    identifier,
+                    arguments: self.args,
+                    timeout,
+                    client,
+                }
+            }
         }
     }
     pub fn get_return_method(&self) -> ReturnMethod {
@@ -85,6 +82,15 @@ impl Exec<'static> {
             _ => None,
         }
     }
+    pub fn get_to_execute(&self) -> &ToExecute {
+        self.to_execute.as_ref().unwrap()
+    }
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
+    }
+    pub fn arguments(self) -> Vec<&'static str> {
+        self.args
+    }
 }
 
 impl<'s> CommandV2<'s> for Exec<'s> {
@@ -103,7 +109,7 @@ impl<'s> CommandV2<'s> for Exec<'s> {
             now: false,
             no_header: false,
             to_execute: None,
-            args: None,
+            args: Vec::new(),
         };
         while let Some(arg) = args_iter.next() {
             let mut arg_string = String::from(*arg);
@@ -184,11 +190,10 @@ impl<'s> CommandV2<'s> for Exec<'s> {
                 "NO_HEADER" => exec.no_header = true,
                 "ARGS" => {
                     let (size, _) = args_iter.size_hint();
-                    let mut args = Vec::with_capacity(size);
+                    exec.args.reserve(size);
                     while let Some(arg) = args_iter.next() {
-                        args.push(*arg);
+                        exec.args.push(*arg);
                     }
-                    exec.args = Some(args);
                 }
                 _ => {}
             }

@@ -1,10 +1,14 @@
 use parser::common::CommandV2;
 use parser::exec::Exec;
+use parser::exec::ToExecute;
 
 use redisql_lib::redis as r;
 use redisql_lib::redis::do_execute;
+use redisql_lib::redis::do_query;
+use redisql_lib::redis::LoopData;
 use redisql_lib::redis::RedisReply;
 use redisql_lib::redis::Returner;
+use redisql_lib::redis::StatementCache;
 use redisql_lib::redis_type::BlockedClient;
 use redisql_lib::redis_type::ReplicateVerbatim;
 
@@ -27,6 +31,8 @@ pub extern "C" fn Exec_v2(
         Ok(comm) => comm,
         Err(mut e) => return e.reply(&context),
     };
+    let t = std::time::Instant::now()
+        + std::time::Duration::from_secs(10);
     let key = command.key(&context);
     if !command.is_now() {
         match key.get_channel() {
@@ -39,10 +45,7 @@ pub extern "C" fn Exec_v2(
                     free_privdata,
                     10_000,
                 );
-                let timeout = std::time::Instant::now()
-                    + std::time::Duration::from_secs(10);
-                let command =
-                    command.get_command(timeout, blocked_client);
+                let command = command.get_command(t, blocked_client);
                 match ch.send(command) {
                     Err(e) => {
                         dbg!(
@@ -60,22 +63,85 @@ pub extern "C" fn Exec_v2(
             Ok(k) => k,
             Err(mut e) => return e.reply(&context),
         };
-        let result = do_execute(
-            &db,
-            command.get_query().expect("todo if panic"),
-        );
-        let t = std::time::Instant::now()
-            + std::time::Duration::from_secs(10);
+        let read_only = command.is_read_only();
         let return_method = command.get_return_method();
-        let mut result = match result {
-            Ok(r) => {
-                ReplicateVerbatim(&context);
-                r.create_data_to_return(&context, &return_method, t)
+        match command.get_to_execute() {
+            ToExecute::Query(s) => {
+                let mut res = match read_only {
+                    true => match do_query(&db, s) {
+                        Ok(r) => r.create_data_to_return(
+                            &context,
+                            &return_method,
+                            t,
+                        ),
+                        Err(e) => e.create_data_to_return(
+                            &context,
+                            &return_method,
+                            t,
+                        ),
+                    },
+                    false => match do_execute(&db, s) {
+                        Ok(r) => {
+                            ReplicateVerbatim(&context);
+                            r.create_data_to_return(
+                                &context,
+                                &return_method,
+                                t,
+                            )
+                        }
+                        Err(e) => e.create_data_to_return(
+                            &context,
+                            &return_method,
+                            t,
+                        ),
+                    },
+                };
+                res.reply(&context)
             }
-            Err(e) => {
-                e.create_data_to_return(&context, &return_method, t)
+            ToExecute::Statement(id) => {
+                let loop_data = match key.get_loop_data() {
+                    Ok(k) => k,
+                    Err(mut e) => return e.reply(&context),
+                };
+
+                let mut result = match read_only {
+                    true => {
+                        match loop_data
+                            .get_replication_book()
+                            .query_statement(&id, &command.args)
+                        {
+                            Ok(r) => r.create_data_to_return(
+                                &context,
+                                &return_method,
+                                t,
+                            ),
+                            Err(e) => e.create_data_to_return(
+                                &context,
+                                &return_method,
+                                t,
+                            ),
+                        }
+                    }
+                    false => {
+                        match loop_data
+                            .get_replication_book()
+                            .exec_statement(&id, &command.args)
+                        {
+                            Ok(r) => r.create_data_to_return(
+                                &context,
+                                &return_method,
+                                t,
+                            ),
+                            Err(e) => e.create_data_to_return(
+                                &context,
+                                &return_method,
+                                t,
+                            ),
+                        }
+                    }
+                };
+                result.reply(&context)
             }
-        };
-        result.reply(&context)
+        }
     }
 }

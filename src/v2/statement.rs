@@ -76,6 +76,35 @@ pub extern "C" fn Statement_v2(
                     }
                 }
             }
+            Action::Update => {
+                let result = loop_data
+                    .get_replication_book()
+                    .update_statement(
+                        command.identifier(),
+                        command.statement(),
+                        command.can_create(),
+                    );
+                match result {
+                    Err(mut e) => e.reply(&context),
+                    Ok(_) => {
+                        ReplicateVerbatim(&context);
+                        (QueryResult::OK {}).reply(&context)
+                    }
+                }
+            }
+
+            Action::Delete => {
+                let result = loop_data
+                    .get_replication_book()
+                    .delete_statement(command.identifier());
+                match result {
+                    Err(mut e) => e.reply(&context),
+                    Ok(_) => {
+                        ReplicateVerbatim(&context);
+                        (QueryResult::OK {}).reply(&context)
+                    }
+                }
+            }
             _ => todo!(),
         }
     }
