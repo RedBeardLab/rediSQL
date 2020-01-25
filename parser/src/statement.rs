@@ -4,7 +4,7 @@ use redisql_lib::redisql_error::RediSQLError;
 
 use crate::common::CommandV2;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Action {
     Delete,
     Update,
@@ -47,6 +47,21 @@ impl Statement<'static> {
     }
     pub fn is_now(&self) -> bool {
         self.now
+    }
+    pub fn get_action(&self) -> Action {
+        self.action
+    }
+    pub fn identifier(&self) -> &'static str {
+        self.stmt_name
+    }
+    pub fn statement(&self) -> &'static str {
+        self.stmt_query.unwrap()
+    }
+    pub fn can_update(&self) -> bool {
+        self.can_update
+    }
+    pub fn can_create(&self) -> bool {
+        self.can_create
     }
 }
 

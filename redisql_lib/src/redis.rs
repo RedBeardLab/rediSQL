@@ -538,6 +538,20 @@ impl RedisKey {
             _ => Err(RediSQLError::no_redisql_key()),
         }
     }
+    pub fn get_loop_data(&self) -> Result<&Loop, RediSQLError> {
+        match self.key_type() {
+            KeyTypes::RediSQL => {
+                let dbkey = unsafe {
+                    rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(
+                        self.key,
+                    ) as *mut DBKey
+                };
+                Ok(unsafe { &(*dbkey).loop_data })
+            }
+            KeyTypes::Empty => Err(RediSQLError::empty_key()),
+            _ => Err(RediSQLError::no_redisql_key()),
+        }
+    }
 }
 
 impl Drop for RedisKey {
