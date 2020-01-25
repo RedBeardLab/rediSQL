@@ -32,6 +32,7 @@ use commands_v1::{
 };
 use v2::create_db::CreateDB_v2;
 use v2::exec::Exec_v2;
+use v2::statement::Statement_v2;
 
 #[cfg(not(feature = "pro"))]
 extern crate telemetrics;
@@ -381,6 +382,21 @@ pub extern "C" fn RedisModule_OnLoad(
     }
 
     match register_write_function(&ctx, "REDISQL.EXEC", Exec_v2) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(
+        &ctx,
+        "REDISQL.V2.STATEMENT",
+        Statement_v2,
+    ) {
+        Ok(()) => (),
+        Err(e) => return e,
+    }
+
+    match register_write_function(&ctx, "REDISQL.STATEMENT", Exec_v2)
+    {
         Ok(()) => (),
         Err(e) => return e,
     }
