@@ -243,9 +243,9 @@ class TestSynchronous(TestRediSQLWithExec):
 class TestRead(TestRediSQLWithExec):
   def test_read(self):
     with DB(self, "A"):
-      done = self.exec_query("B", "CREATE TABLE t1(a INTEGER);")
+      done = self.exec_query("A", "CREATE TABLE t1(a INTEGER);")
       self.assertEqual(done, [b'DONE', 0])
-      done = self.exec_query("B", "INSERT INTO t1 VALUES(4);")
+      done = self.exec_query("A", "INSERT INTO t1 VALUES(4);")
       result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT A FROM t1 LIMIT 1;", "READ_ONLY", "NO_HEADER")
       self.assertEqual(result, [[4]])
       result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT A FROM t1 LIMIT 1;", "READ_ONLY")
