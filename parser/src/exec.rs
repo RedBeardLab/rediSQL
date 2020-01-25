@@ -45,7 +45,24 @@ impl Exec<'static> {
                     return_method,
                 },
             },
-            Some(ToExecute::Statement(_)) => todo!(),
+            Some(ToExecute::Statement(identifier)) => {
+                let arguments = self.args.unwrap_or_else(Vec::new);
+                match self.read_only {
+                    false => Command::ExecStatement {
+                        identifier,
+                        arguments,
+                        timeout,
+                        client,
+                    },
+                    true => Command::QueryStatement {
+                        identifier,
+                        arguments,
+                        timeout,
+                        client,
+                        return_method,
+                    },
+                }
+            }
             None => todo!(),
         }
     }
