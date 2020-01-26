@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use parser::common::CommandV2;
 use parser::exec::Exec;
 use parser::exec::ToExecute;
@@ -45,9 +47,9 @@ pub extern "C" fn Exec_v2(
                     free_privdata,
                     10_000,
                 );
-                let command = command.get_command(t, blocked_client);
-                ReplicateVerbatim(&context);
-                match ch.send(command) {
+                let repl_args = command.replicate_args(&context);
+                let comm = command.get_command(t, blocked_client);
+                match ch.send(comm) {
                     Err(e) => {
                         dbg!(
                             "Error in sending the command!",
@@ -55,7 +57,30 @@ pub extern "C" fn Exec_v2(
                         );
                         r::rm::ffi::REDISMODULE_OK
                     }
-                    _ => r::rm::ffi::REDISMODULE_OK,
+                    Ok(_) => {
+                        if repl_args.is_some() {
+                            let repl_args = repl_args.unwrap();
+
+                            let command =
+                                CString::new("REDISQL.V2.EXEC")
+                                    .unwrap();
+                            let format = CString::new("v").unwrap();
+                            unsafe {
+                                r::rm::ffi::RedisModule_Replicate
+                                    .unwrap()(
+                                    context.as_ptr(),
+                                    command.as_ptr(),
+                                    format.as_ptr(),
+                                    repl_args.as_ptr(),
+                                    repl_args.len(),
+                                );
+                                for ptr in repl_args {
+                                    r::rm::ffi::RedisModule_FreeString.unwrap()(context.as_ptr(), ptr);
+                                }
+                            }
+                        }
+                        r::rm::ffi::REDISMODULE_OK
+                    }
                 }
             }
         }

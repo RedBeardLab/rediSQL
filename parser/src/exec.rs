@@ -1,9 +1,12 @@
 use redisql_lib::redis::Command;
 use redisql_lib::redis::ReturnMethod;
 use redisql_lib::redis_type::BlockedClient;
+use redisql_lib::redis_type::Context;
+use redisql_lib::redis_type::RMString;
 use redisql_lib::redisql_error::RediSQLError;
 
 use crate::common::CommandV2;
+use redisql_lib::redis_type::ffi::RedisModuleString;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ToExecute<'s> {
@@ -90,6 +93,45 @@ impl Exec<'static> {
     }
     pub fn arguments(self) -> Vec<&'static str> {
         self.args
+    }
+    pub fn replicate_args(
+        &self,
+        ctx: &Context,
+    ) -> Option<Vec<*mut RedisModuleString>> {
+        if self.read_only {
+            return None;
+        }
+        if self.now {
+            return None;
+        }
+        let mut v = Vec::new();
+        let to_push = RMString::new(ctx, self.database);
+        v.push(to_push.as_ptr());
+        std::mem::forget(to_push);
+        let to_push = RMString::new(ctx, "NOW");
+        v.push(to_push.as_ptr());
+        std::mem::forget(to_push);
+        let (t, s) = match self.to_execute.as_ref().unwrap() {
+            ToExecute::Command(s) => ("COMMAND", s),
+            ToExecute::Statement(s) => ("STATEMENT", s),
+        };
+        let to_push = RMString::new(ctx, t);
+        v.push(to_push.as_ptr());
+        std::mem::forget(to_push);
+        let to_push = RMString::new(ctx, s);
+        v.push(to_push.as_ptr());
+        std::mem::forget(to_push);
+        if self.args.len() > 0 {
+            let to_push = RMString::new(ctx, "ARGS");
+            v.push(to_push.as_ptr());
+            std::mem::forget(to_push);
+            for arg in self.args.iter() {
+                let to_push = RMString::new(ctx, arg);
+                v.push(to_push.as_ptr());
+                std::mem::forget(to_push);
+            }
+        }
+        Some(v)
     }
 }
 
