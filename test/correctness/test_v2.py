@@ -47,7 +47,6 @@ class DB():
   def __exit__(self, type, value, traceback):
     self.redis.client.execute_command("DEL", self.key)
 
-
 class TestRediSQLWithExec(ModuleTestCase('')):
   def setUp(self):
     self.disposable_redis = self.redis()
@@ -230,15 +229,40 @@ class TestRediSQLExec(TestRediSQLWithExec):
               [1, 2, 1, 2],
               [3, 4, 3, 4]])
 
-class TestSynchronous(TestRediSQLWithExec):
-  def test_exec(self):
-    with DB(self, "A"):
-      done = self.exec_query("A", "CREATE TABLE test(a INT, b TEXT);", "NOW")
+class TestMultipleInserts(TestRediSQLWithExec):
+  def test_insert_two_rows(self):
+    with DB(self, "M"):
+      done = self.exec_naked("REDISQL.V2.EXEC", "M", "QUERY", "CREATE TABLE t1(A INTEGER, B INTEGER);")
       self.assertEqual(done, [b'DONE', 0])
-      done = self.exec_query("A", "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');", "NOW")
+      done = self.exec_naked("REDISQL.V2.EXEC", "M", "QUERY", "INSERT INTO t1 values(1, 2);")
+      self.assertEqual(done, [b'DONE', 1])
+      done = self.exec_naked("REDISQL.V2.EXEC", "M", "QUERY", "INSERT INTO t1 values(3, 4),(5, 6);")
+      self.assertEqual(done, [b'DONE', 2])
+      done = self.exec_naked("REDISQL.V2.EXEC", "M", "QUERY", "INSERT INTO t1 values(7, 8);")
+      self.assertEqual(done, [b'DONE', 1])
+
+  def test_multi_insert_same_statement(self):
+    with DB(self, "N"):
+      done = self.exec_naked("REDISQL.V2.EXEC", "N", "QUERY", "CREATE TABLE t1(A INTEGER, B INTEGER);")
+      self.assertEqual(done, [b'DONE', 0])
+      done = self.exec_naked("REDISQL.V2.EXEC", "N", "QUERY", "INSERT INTO t1 values(1, 2); INSERT INTO t1 values(3, 4);")
+      self.assertEqual(done, [b'DONE', 2])
+      done = self.exec_naked("REDISQL.V2.EXEC", "N", "QUERY", """BEGIN;
+            INSERT INTO t1 values(3, 4);
+            INSERT INTO t1 values(5, 6);
+            INSERT INTO t1 values(7, 8);
+            COMMIT;""")
       self.assertEqual(done, [b'DONE', 3])
-      result = self.exec_query("A", "SELECT * FROM test ORDER BY a ASC", "NOW", "NO_HEADER")
-      self.assertEqual(result, [[1, b'ciao'], [2, b'foo'], [100, b'baz']])
+      done = self.exec_naked("REDISQL.V2.EXEC", "N", "QUERY", """BEGIN;
+            INSERT INTO t1 values(3, 4);
+            INSERT INTO t1 values(5, 6);
+            INSERT INTO t1 values(7, 8);
+            INSERT INTO t1 values(3, 4);
+            INSERT INTO t1 values(5, 6);
+            INSERT INTO t1 values(7, 8);
+            COMMIT;""")
+      self.assertEqual(done, [b'DONE', 6])
+
 
 class TestRead(TestRediSQLWithExec):
   def test_read(self):
