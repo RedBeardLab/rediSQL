@@ -12,6 +12,7 @@ use redisql_lib::redis::RedisReply;
 use redisql_lib::redis::Returner;
 use redisql_lib::redis::StatementCache;
 use redisql_lib::redis_type::BlockedClient;
+use redisql_lib::redis_type::Context;
 use redisql_lib::redis_type::ReplicateVerbatim;
 
 use crate::common::{free_privdata, reply, timeout};
@@ -33,6 +34,31 @@ pub extern "C" fn Exec_v2(
         Ok(comm) => comm,
         Err(mut e) => return e.reply(&context),
     };
+    do_exec_v2(command, context)
+}
+
+#[allow(non_snake_case)]
+pub extern "C" fn Query_v2(
+    ctx: *mut r::rm::ffi::RedisModuleCtx,
+    argv: *mut *mut r::rm::ffi::RedisModuleString,
+    argc: ::std::os::raw::c_int,
+) -> i32 {
+    let context = r::rm::Context::new(ctx);
+    let argvector = match r::create_argument(argv, argc) {
+        Ok(argvector) => argvector,
+        Err(mut error) => {
+            return error.reply(&context);
+        }
+    };
+    let mut command: Exec = match CommandV2::parse(argvector) {
+        Ok(comm) => comm,
+        Err(mut e) => return e.reply(&context),
+    };
+    command.make_into_query();
+    do_exec_v2(command, context)
+}
+
+fn do_exec_v2(command: Exec<'static>, context: Context) -> i32 {
     let t = std::time::Instant::now()
         + std::time::Duration::from_secs(10);
     let key = command.key(&context);
@@ -92,7 +118,7 @@ pub extern "C" fn Exec_v2(
         let read_only = command.is_read_only();
         let return_method = command.get_return_method();
         match command.get_to_execute() {
-            ToExecute::Query(s) => {
+            ToExecute::Command(s) => {
                 let mut res = match read_only {
                     true => match do_query(&db, s) {
                         Ok(r) => r.create_data_to_return(

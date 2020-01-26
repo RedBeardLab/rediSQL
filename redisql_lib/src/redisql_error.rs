@@ -25,11 +25,11 @@ pub struct RediSQLError {
  * 6   - Error in opening the database connection
  * 7   - Error to store the key into redis
  * 8   - Unknow error in saving the key
- * 9   - Provided QUERY keyword without providing a query to run
+ * 9   - Provided COMMAND keyword without providing a query to run
  * 10  - Provided STATEMENT keywork without providing a statement to run
  * 11  - Provided INTO keywork without providing the stream to use
- * 12  - Provided both QUERY and STATEMENT keywords
- * 13  - Provided QUERY twice
+ * 12  - Provided both COMMAND and STATEMENT keywords
+ * 13  - Provided COMMAND twice
  * 14  - Provided STATEMENT twice
  * 15  - Provided key does not exists
  * 16  - Ask stream without heading, which does not make sense
@@ -40,6 +40,7 @@ pub struct RediSQLError {
  * 21  - Only Statement NEW support CAN_UPDATE flag
  * 22  - Only Statement UPDATE support CAN_CREATE flag
  * 23  - Command for Statement unknown
+ * 24  - Didn't provide neither COMMAND nor STATEMENT
  */
 impl RediSQLError {
     pub fn new(debug: String, error_description: String) -> Self {

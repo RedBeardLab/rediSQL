@@ -1,17 +1,16 @@
 #!/usr/bin/python -tt
 # -*- coding: utf-8 -*-
 
-import unittest
 import os
 import tempfile
 import shutil
 import time
 
 import redis
+from rmtest import BaseModuleTestCase
 from rmtest import ModuleTestCase
 
-if "REDIS_MODULE_PATH" not in os.environ:
-    os.environ["REDIS_MODULE_PATH"] = "../../target/release/libredis_sql.so"
+module_path = os.environ.get("REDIS_MODULE_PATH", "../../target/release/libredis_sql.so")
 
 os.environ["RUST_BACKTRACE"] = "full"
 
@@ -47,12 +46,7 @@ class DB():
   def __exit__(self, type, value, traceback):
     self.redis.client.execute_command("DEL", self.key)
 
-class TestRediSQLWithExec(ModuleTestCase('')):
-  def setUp(self):
-    self.disposable_redis = self.redis()
-
-  def tearDown(self):
-    pass
+class TestRediSQLWithExec(ModuleTestCase(module_path)):
 
   def exec_naked(self, *command):
     return self.client.execute_command(*command)
@@ -61,7 +55,7 @@ class TestRediSQLWithExec(ModuleTestCase('')):
     return self.client.execute_command("REDISQL.V2.EXEC", *command)
 
   def exec_query(self, database, query, *command):
-    return self.client.execute_command("REDISQL.V2.EXEC", database, "QUERY", query, *command)
+    return self.client.execute_command("REDISQL.V2.EXEC", database, "COMMAND", query, *command)
 
   def create_db(self, key):
     return self.client.execute_command("REDISQL.V2.CREATE_DB", key)
@@ -104,16 +98,16 @@ class TestRediSQLExec(TestRediSQLWithExec):
 
   def test_simple_select(self):
     with DB(self, "A"):
-      result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT 1;", "NO_HEADER")
+      result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT 1;", "NO_HEADER")
       self.assertEqual(result, [[1]])
 
   def test_with_table(self):
     with DB(self, "B"):
-      self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "CREATE TABLE foo(bar string, baz int, ping float);")
-      self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "INSERT INTO foo VALUES('AAA', 3, 4.5),('BBB', 4, 5.5);")
-      result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM foo;", "NO_HEADER")
+      self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "CREATE TABLE foo(bar string, baz int, ping float);")
+      self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "INSERT INTO foo VALUES('AAA', 3, 4.5),('BBB', 4, 5.5);")
+      result = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "SELECT * FROM foo;", "NO_HEADER")
       self.assertEqual(result, [[b'AAA', 3, b'4.5'], [b'BBB', 4, b'5.5']])
-      result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM foo;")
+      result = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "SELECT * FROM foo;")
       self.assertEqual(result, [
           [b'bar', b'baz', b'ping'],
           [b'TEXT', b'INT', b'FLOAT'],
@@ -232,28 +226,28 @@ class TestRediSQLExec(TestRediSQLWithExec):
 class TestMultipleInserts(TestRediSQLWithExec):
   def test_insert_two_rows(self):
     with DB(self, "M"):
-      done = self.exec_naked("REDISQL.V2.EXEC", "M", "QUERY", "CREATE TABLE t1(A INTEGER, B INTEGER);")
+      done = self.exec_naked("REDISQL.V2.EXEC", "M", "COMMAND", "CREATE TABLE t1(A INTEGER, B INTEGER);")
       self.assertEqual(done, [b'DONE', 0])
-      done = self.exec_naked("REDISQL.V2.EXEC", "M", "QUERY", "INSERT INTO t1 values(1, 2);")
+      done = self.exec_naked("REDISQL.V2.EXEC", "M", "COMMAND", "INSERT INTO t1 values(1, 2);")
       self.assertEqual(done, [b'DONE', 1])
-      done = self.exec_naked("REDISQL.V2.EXEC", "M", "QUERY", "INSERT INTO t1 values(3, 4),(5, 6);")
+      done = self.exec_naked("REDISQL.V2.EXEC", "M", "COMMAND", "INSERT INTO t1 values(3, 4),(5, 6);")
       self.assertEqual(done, [b'DONE', 2])
-      done = self.exec_naked("REDISQL.V2.EXEC", "M", "QUERY", "INSERT INTO t1 values(7, 8);")
+      done = self.exec_naked("REDISQL.V2.EXEC", "M", "COMMAND", "INSERT INTO t1 values(7, 8);")
       self.assertEqual(done, [b'DONE', 1])
 
   def test_multi_insert_same_statement(self):
     with DB(self, "N"):
-      done = self.exec_naked("REDISQL.V2.EXEC", "N", "QUERY", "CREATE TABLE t1(A INTEGER, B INTEGER);")
+      done = self.exec_naked("REDISQL.V2.EXEC", "N", "COMMAND", "CREATE TABLE t1(A INTEGER, B INTEGER);")
       self.assertEqual(done, [b'DONE', 0])
-      done = self.exec_naked("REDISQL.V2.EXEC", "N", "QUERY", "INSERT INTO t1 values(1, 2); INSERT INTO t1 values(3, 4);")
+      done = self.exec_naked("REDISQL.V2.EXEC", "N", "COMMAND", "INSERT INTO t1 values(1, 2); INSERT INTO t1 values(3, 4);")
       self.assertEqual(done, [b'DONE', 2])
-      done = self.exec_naked("REDISQL.V2.EXEC", "N", "QUERY", """BEGIN;
+      done = self.exec_naked("REDISQL.V2.EXEC", "N", "COMMAND", """BEGIN;
             INSERT INTO t1 values(3, 4);
             INSERT INTO t1 values(5, 6);
             INSERT INTO t1 values(7, 8);
             COMMIT;""")
       self.assertEqual(done, [b'DONE', 3])
-      done = self.exec_naked("REDISQL.V2.EXEC", "N", "QUERY", """BEGIN;
+      done = self.exec_naked("REDISQL.V2.EXEC", "N", "COMMAND", """BEGIN;
             INSERT INTO t1 values(3, 4);
             INSERT INTO t1 values(5, 6);
             INSERT INTO t1 values(7, 8);
@@ -270,9 +264,9 @@ class TestRead(TestRediSQLWithExec):
       done = self.exec_query("A", "CREATE TABLE t1(a INTEGER);")
       self.assertEqual(done, [b'DONE', 0])
       done = self.exec_query("A", "INSERT INTO t1 VALUES(4);")
-      result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT A FROM t1 LIMIT 1;", "READ_ONLY", "NO_HEADER")
+      result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT A FROM t1 LIMIT 1;", "READ_ONLY", "NO_HEADER")
       self.assertEqual(result, [[4]])
-      result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT A FROM t1 LIMIT 1;", "READ_ONLY")
+      result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT A FROM t1 LIMIT 1;", "READ_ONLY")
       self.assertEqual(result, [[b'a'], [b'INT'], [4]])
 
   def test_not_insert(self):
@@ -280,17 +274,17 @@ class TestRead(TestRediSQLWithExec):
       done = self.exec_query("B", "CREATE TABLE t1(a INTEGER);")
       self.assertEqual(done, [b'DONE', 0])
       with self.assertRaises(redis.exceptions.ResponseError):
-        self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "INSERT INTO t1 VALUES(5);", "READ_ONLY")
+        self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "INSERT INTO t1 VALUES(5);", "READ_ONLY")
 
-      done = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "CREATE TABLE test(a INT, b TEXT);")
+      done = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "CREATE TABLE test(a INT, b TEXT);")
       self.assertEqual(done, [b'DONE', 0])
-      done = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY",
+      done = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND",
           "INSERT INTO test VALUES(1, 'ciao'), (2, 'foo'), (100, 'baz');")
       self.assertEqual(done, [b'DONE', 3])
-      result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM test ORDER BY a ASC",
+      result = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "SELECT * FROM test ORDER BY a ASC",
           "READ_ONLY", "NO_HEADER")
       self.assertEqual(result, [[1, b'ciao'], [2, b'foo'], [100, b'baz']])
-      result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM test ORDER BY a ASC", "READ_ONLY")
+      result = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "SELECT * FROM test ORDER BY a ASC", "READ_ONLY")
       self.assertEqual(result, [[b'a', b'b'], [b'INT', b'TEXT'], [1, b'ciao'], [2, b'foo'], [100, b'baz']])
 
 
@@ -304,9 +298,9 @@ class TestStatements(TestRediSQLWithExec):
         self.assertEqual(done, [b'DONE', 1])
         done = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
         self.assertEqual(result, [[3], [4]])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;")
         self.assertEqual(result, [[b'A'], [b'INT'], [3], [4]])
 
   def test_create_statement_with_update(self):
@@ -318,9 +312,9 @@ class TestStatements(TestRediSQLWithExec):
         self.assertEqual(done, [b'DONE', 1])
         done = self.exec_naked("REDISQL.V2.EXEC", "B", "STATEMENT", "insert", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
         self.assertEqual(result, [[3], [4]])
-        result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM t1 ORDER BY A;")
+        result = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "SELECT * FROM t1 ORDER BY A;")
         self.assertEqual(result, [[b'A'], [b'INT'], [3], [4]])
 
   def test_multi_statement_single_bind(self):
@@ -332,9 +326,9 @@ class TestStatements(TestRediSQLWithExec):
         self.assertEqual(done, [b'DONE', 2])
         done = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "ARGS", "5")
         self.assertEqual(done, [b'DONE', 2])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
         self.assertEqual(result, [[3], [4], [5], [6]])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;")
         self.assertEqual(result, [[b'A'], [b'INT'], [3], [4], [5], [6]])
 
   def test_multi_statement_multi_table_single_bind(self):
@@ -348,10 +342,10 @@ class TestStatements(TestRediSQLWithExec):
           done = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "ARGS", "5")
           self.assertEqual(done, [b'DONE', 2])
 
-          result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
+          result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
           self.assertEqual(result, [[3], [5]])
 
-          result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t2 ORDER BY A;", "NO_HEADER")
+          result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t2 ORDER BY A;", "NO_HEADER")
           self.assertEqual(result, [[2], [4]])
 
   def test_multi_statement_different_bindings(self):
@@ -374,7 +368,7 @@ class TestStatements(TestRediSQLWithExec):
         self.assertEqual(ok, b'OK')
         done = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
         self.assertEqual(result, [[3], [10005]])
 
   def test_update_statement_with_create(self):
@@ -388,7 +382,7 @@ class TestStatements(TestRediSQLWithExec):
         self.assertEqual(ok, b'OK')
         done = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
         self.assertEqual(result, [[3], [10005]])
 
   def test_rdb_persistency(self):
@@ -404,24 +398,24 @@ class TestStatements(TestRediSQLWithExec):
 
         done = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
         self.assertEqual(result, [[3], [4]])
 
   def test_rdb_persistency_no_statements(self):
     with DB(self, "A"):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
 
-        done = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "INSERT INTO t1 VALUES(5)")
+        done = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "INSERT INTO t1 VALUES(5)")
         self.assertEqual(done, [b'DONE', 1])
 
         for _ in self.retry_with_reload():
           pass
         time.sleep(0.5)
 
-        done = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "INSERT INTO t1 VALUES(6)")
+        done = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "INSERT INTO t1 VALUES(6)")
         self.assertEqual(done, [b'DONE', 1])
 
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER")
         self.assertEqual(result, [[5], [6]])
 
   def test_rdb_persistency_multiple_statements(self):
@@ -446,7 +440,7 @@ class TestStatements(TestRediSQLWithExec):
         done = self.exec_naked("REDISQL.V2.EXEC", "A", "STateMent", "insert più cento", "aRGs", "4")
         self.assertEqual(done, [b'DONE', 1])
 
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUeRY", "SELECT * FROM t1 ORDER BY A;", "no_HEader")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "coMManD", "SELECT * FROM t1 ORDER BY A;", "no_HEader")
         self.assertEqual(result, [[3], [4], [103], [104]])
 
 
@@ -461,9 +455,9 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         self.assertEqual(done, [b'DONE', 1])
         done = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "NOW", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
         self.assertEqual(result, [[3], [4]])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NOW")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NOW")
         self.assertEqual(result, [[b'A'], [b'INT'], [3], [4]])
 
   def test_create_statement_with_update_synchronous(self):
@@ -475,9 +469,9 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         self.assertEqual(done, [b'DONE', 1])
         done = self.exec_naked("REDISQL.V2.EXEC", "B", "STATEMENT", "insert", "NOW", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
+        result = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
         self.assertEqual(result, [[3], [4]])
-        result = self.exec_naked("REDISQL.V2.EXEC", "B", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NOW")
+        result = self.exec_naked("REDISQL.V2.EXEC", "B", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NOW")
         self.assertEqual(result, [[b'A'], [b'INT'], [3], [4]])
 
   def test_multi_statement_single_bind_synchronous(self):
@@ -489,9 +483,9 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         self.assertEqual(done, [b'DONE', 2])
         done = self.exec_naked("REDISQL.V2.EXEC", "C", "STATEMENT", "insert", "NOW", "ARGS", "5")
         self.assertEqual(done, [b'DONE', 2])
-        result = self.exec_naked("REDISQL.V2.EXEC", "C", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
+        result = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
         self.assertEqual(result, [[3], [4], [5], [6]])
-        result = self.exec_naked("REDISQL.V2.EXEC", "C", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NOW")
+        result = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NOW")
         self.assertEqual(result, [[b'A'], [b'INT'], [3], [4], [5], [6]])
 
   def test_multi_statement_multi_table_single_bind_synchronous(self):
@@ -505,10 +499,10 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
           done = self.exec_naked("REDISQL.V2.EXEC", "D", "STATEMENT", "insert", "NOW", "ARGS", "5")
           self.assertEqual(done, [b'DONE', 2])
 
-          result = self.exec_naked("REDISQL.V2.EXEC", "D", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
+          result = self.exec_naked("REDISQL.V2.EXEC", "D", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
           self.assertEqual(result, [[3], [5]])
 
-          result = self.exec_naked("REDISQL.V2.EXEC", "D", "QUERY", "SELECT * FROM t2 ORDER BY A;", "NO_HEADER", "NOW")
+          result = self.exec_naked("REDISQL.V2.EXEC", "D", "COMMAND", "SELECT * FROM t2 ORDER BY A;", "NO_HEADER", "NOW")
           self.assertEqual(result, [[2], [4]])
 
   def test_multi_statement_different_bindings_synchronous(self):
@@ -531,7 +525,7 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         self.assertEqual(ok, b'OK')
         done = self.exec_naked("REDISQL.V2.EXEC", "F", "STATEMENT", "insert", "NOW", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "F", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NOW", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "F", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NOW", "NO_HEADER")
         self.assertEqual(result, [[3], [10005]])
 
   def test_update_statement_with_create_synchronous(self):
@@ -545,7 +539,7 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         self.assertEqual(ok, b'OK')
         done = self.exec_naked("REDISQL.V2.EXEC", "G", "STATEMENT", "insert", "NOW", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "G", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NOW", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "G", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NOW", "NO_HEADER")
         self.assertEqual(result, [[3], [10005]])
 
   def test_rdb_persistency_synchronous(self):
@@ -561,24 +555,24 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
 
         done = self.exec_naked("REDISQL.V2.EXEC", "H", "STATEMENT", "insert", "NOW", "ARGS", "4")
         self.assertEqual(done, [b'DONE', 1])
-        result = self.exec_naked("REDISQL.V2.EXEC", "H", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
+        result = self.exec_naked("REDISQL.V2.EXEC", "H", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NO_HEADER", "NOW")
         self.assertEqual(result, [[3], [4]])
 
   def test_rdb_persistency_no_statements_synchronous(self):
     with DB(self, "I"):
       with Table(self, "t1", "(A INTEGER)", key = "I"):
 
-        done = self.exec_naked("REDISQL.V2.EXEC", "I", "QUERY", "INSERT INTO t1 VALUES(5)", "NOW")
+        done = self.exec_naked("REDISQL.V2.EXEC", "I", "COMMAND", "INSERT INTO t1 VALUES(5)", "NOW")
         self.assertEqual(done, [b'DONE', 1])
 
         for _ in self.retry_with_reload():
           pass
         time.sleep(0.5)
 
-        done = self.exec_naked("REDISQL.V2.EXEC", "I", "QUERY", "INSERT INTO t1 VALUES(6)", "NOW")
+        done = self.exec_naked("REDISQL.V2.EXEC", "I", "COMMAND", "INSERT INTO t1 VALUES(6)", "NOW")
         self.assertEqual(done, [b'DONE', 1])
 
-        result = self.exec_naked("REDISQL.V2.EXEC", "I", "QUERY", "SELECT * FROM t1 ORDER BY A;", "NOW", "NO_HEADER")
+        result = self.exec_naked("REDISQL.V2.EXEC", "I", "COMMAND", "SELECT * FROM t1 ORDER BY A;", "NOW", "NO_HEADER")
         self.assertEqual(result, [[5], [6]])
 
   def test_rdb_persistency_multiple_statements_synchronous(self):
@@ -603,10 +597,11 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         done = self.exec_naked("REDISQL.V2.EXEC", "L", "STateMent", "insert più cento", "NOW", "aRGs", "4")
         self.assertEqual(done, [b'DONE', 1])
 
-        result = self.exec_naked("REDISQL.V2.EXEC", "L", "QUeRY", "SELECT * FROM t1 ORDER BY A;", "no_HEader", "NoW")
+        result = self.exec_naked("REDISQL.V2.EXEC", "L", "COmmaNd", "SELECT * FROM t1 ORDER BY A;", "no_HEader", "NoW")
         self.assertEqual(result, [[3], [4], [103], [104]])
 
 
 
 if __name__ == '__main__':
-   unittest.main()
+  import unittest
+  unittest.main()

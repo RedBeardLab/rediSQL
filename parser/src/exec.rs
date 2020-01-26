@@ -10,7 +10,7 @@ use redisql_lib::redis_type::ffi::RedisModuleString;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ToExecute<'s> {
-    Query(&'s str),
+    Command(&'s str),
     Statement(&'s str),
 }
 
@@ -33,15 +33,18 @@ impl Exec<'static> {
         client: BlockedClient,
     ) -> Command {
         let return_method = self.get_return_method();
+        if self.to_execute.is_none() {
+            todo!("to_execute not set");
+        }
         match (self.to_execute.unwrap(), self.read_only) {
-            (ToExecute::Query(q), true) => Command::Query {
+            (ToExecute::Command(q), true) => Command::Query {
                 query: q,
                 timeout,
                 return_method,
                 client,
             },
 
-            (ToExecute::Query(q), false) => Command::Exec {
+            (ToExecute::Command(q), false) => Command::Exec {
                 query: q,
                 timeout,
                 client,
@@ -81,7 +84,7 @@ impl Exec<'static> {
     }
     pub fn get_query(&self) -> Option<&str> {
         match self.to_execute {
-            Some(ToExecute::Query(q)) => Some(q),
+            Some(ToExecute::Command(q)) => Some(q),
             _ => None,
         }
     }
@@ -91,8 +94,8 @@ impl Exec<'static> {
     pub fn is_read_only(&self) -> bool {
         self.read_only
     }
-    pub fn arguments(self) -> Vec<&'static str> {
-        self.args
+    pub fn make_into_query(&mut self) {
+        self.read_only = true;
     }
     pub fn replicate_args(
         &self,
@@ -111,9 +114,10 @@ impl Exec<'static> {
         let to_push = RMString::new(ctx, "NOW");
         v.push(to_push.as_ptr());
         std::mem::forget(to_push);
-        let (t, s) = match self.to_execute.as_ref().unwrap() {
-            ToExecute::Command(s) => ("COMMAND", s),
-            ToExecute::Statement(s) => ("STATEMENT", s),
+        let (t, s) = match self.to_execute.as_ref() {
+            Some(ToExecute::Command(s)) => ("COMMAND", s),
+            Some(ToExecute::Statement(s)) => ("STATEMENT", s),
+            None => todo!("Should never happen"),
         };
         let to_push = RMString::new(ctx, t);
         v.push(to_push.as_ptr());
@@ -157,17 +161,17 @@ impl<'s> CommandV2<'s> for Exec<'s> {
             let mut arg_string = String::from(*arg);
             arg_string.make_ascii_uppercase();
             match arg_string.as_str() {
-                "QUERY" => match exec.to_execute {
+                "COMMAND" => match exec.to_execute {
                     Some(ToExecute::Statement(_)) => {
                         return Err(
                             RediSQLError::both_statement_and_query(),
                         );
                     }
-                    Some(ToExecute::Query(_)) => {
+                    Some(ToExecute::Command(_)) => {
                         return Err(RediSQLError::with_code(
                             13,
                             "Impossible to know which query should be executed".to_string(),
-                            "Provided QUERY twice".to_string(),
+                            "Provided COMMAND twice".to_string(),
                         ));
                     }
                     None => {
@@ -176,17 +180,17 @@ impl<'s> CommandV2<'s> for Exec<'s> {
                             None => {
                                 return Err(RediSQLError::with_code(
                                     9,
-                                    "Provided the QUERY keyword but not the query to execute".to_string(),
+                                    "Provided the COMMAND keyword but not the query to execute".to_string(),
                                     "No query provided".to_string(),
                                 ))
                             }
                         };
                         exec.to_execute =
-                            Some(ToExecute::Query(query));
+                            Some(ToExecute::Command(query));
                     }
                 },
                 "STATEMENT" => match exec.to_execute {
-                    Some(ToExecute::Query(_)) => {
+                    Some(ToExecute::Command(_)) => {
                         return Err(
                             RediSQLError::both_statement_and_query(),
                         );
@@ -239,6 +243,9 @@ impl<'s> CommandV2<'s> for Exec<'s> {
                 }
                 _ => {}
             }
+        }
+        if exec.to_execute.is_none() {
+            return Err(RediSQLError::with_code(24, "You didn't provide neither `COMMAND` nor `STATEMENT` fields".to_string(), "Command incomplete, no `COMMAND` nor `STATEMENT` fields".to_string()));
         }
         if exec.into.is_some() && exec.no_header {
             return Err(RediSQLError::with_code(16, "Asked a STREAM without the header".to_string(), "The header is part of the stream, does not make sense to provide a stream without header".to_string()));
