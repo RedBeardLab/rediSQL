@@ -46,6 +46,7 @@ pub extern "C" fn Exec_v2(
                     10_000,
                 );
                 let command = command.get_command(t, blocked_client);
+                ReplicateVerbatim(&context);
                 match ch.send(command) {
                     Err(e) => {
                         dbg!(
