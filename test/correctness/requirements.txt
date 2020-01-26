@@ -1,3 +1,4 @@
 redis==2.10.6
 rmtest==0.7.0
 configparser==4.0.2
+ConfigParser==4.0.2
