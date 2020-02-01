@@ -814,7 +814,14 @@ impl<'s> Returner for Cursor {
                     Box::new(Box::new(query_result))
                 }
             },
-            _ => Box::new(Box::new(self)),
+            Cursor::OKCursor => {
+                Box::new(Box::new(QueryResult::OK {}))
+            }
+            Cursor::DONECursor { modified_rows } => {
+                Box::new(Box::new(QueryResult::DONE {
+                    modified_rows,
+                }))
+            }
         }
     }
 }
@@ -824,21 +831,6 @@ impl RedisReply for Result<QueryResult, err::RediSQLError> {
         match self {
             Ok(ok) => ok.reply(ctx),
             Err(e) => e.reply(ctx),
-        }
-    }
-}
-
-impl<'s> RedisReply for Cursor {
-    fn reply(&mut self, ctx: &Context) -> i32 {
-        match self {
-            Cursor::OKCursor {} => reply_with_ok(ctx.as_ptr()),
-            Cursor::DONECursor { modified_rows } => {
-                reply_with_done(ctx.as_ptr(), *modified_rows)
-            }
-            Cursor::RowsCursor { stmt, .. } => reply_with_array(
-                ctx,
-                SQLiteResultIterator::from_stmt(stmt),
-            ),
         }
     }
 }

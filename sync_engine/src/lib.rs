@@ -340,6 +340,8 @@ pub extern "C" fn ExecStatementNow(
                     // _rc must be
                     // 1. Define befor the call to exec_statement() and .reply(&context)
                     // 2. Dropped before we forget the `dbkey`
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -348,9 +350,14 @@ pub extern "C" fn ExecStatementNow(
                             &argvector[3..],
                         );
                     match result {
-                        Ok(mut res) => {
+                        Ok(res) => {
                             ReplicateVerbatim(&context);
-                            res.reply(&context)
+                            let mut r = res.create_data_to_return(
+                                &context,
+                                &ReturnMethod::Reply,
+                                t,
+                            );
+                            r.reply(&context)
                         }
                         Err(mut err) => err.reply(&context),
                     }
@@ -531,6 +538,8 @@ pub extern "C" fn QueryStatementNow(
                 ),
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
+                    let t = std::time::Instant::now()
+                        + std::time::Duration::from_secs(10);
                     let result = dbkey
                         .loop_data
                         .get_replication_book()
@@ -539,9 +548,14 @@ pub extern "C" fn QueryStatementNow(
                             &argvector[3..],
                         );
                     match result {
-                        Ok(mut res) => {
+                        Ok(res) => {
                             ReplicateVerbatim(&context);
-                            res.reply(&context)
+                            let mut r = res.create_data_to_return(
+                                &context,
+                                &ReturnMethod::Reply,
+                                t,
+                            );
+                            r.reply(&context)
                         }
                         Err(mut err) => err.reply(&context),
                     }
