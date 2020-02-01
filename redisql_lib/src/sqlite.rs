@@ -358,6 +358,12 @@ pub enum QueryResult {
         types: Vec<&'static str>,
         array: Vec<Entity>,
     },
+    Stream {
+        stream: String,
+        first_id: String,
+        last_id: String,
+        size: u32,
+    },
 }
 
 fn type_to_string(t: i32) -> &'static str {

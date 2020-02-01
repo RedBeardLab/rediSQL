@@ -317,7 +317,7 @@ impl RedisReply for Entity {
                 rm::ReplyWithStringBuffer(ctx, blob.as_bytes())
             }
             Entity::Null => rm::ReplyWithNull(ctx),
-            Entity::OK { .. } => QueryResult::OK {}.reply(ctx),
+            Entity::OK { .. } => (QueryResult::OK {}).reply(ctx),
             Entity::DONE { modified_rows, .. } => {
                 QueryResult::DONE { modified_rows }.reply(ctx)
             }
@@ -687,6 +687,115 @@ impl<'r> RowFiller for std::slice::Chunks<'_, Entity> {
     }
 }
 
+struct QueryResultRowFiller<'qr> {
+    filled_rows: u8,
+    query_result: &'qr QueryResult,
+}
+
+impl<'qr> From<&'qr mut QueryResult> for QueryResultRowFiller<'qr> {
+    fn from(q: &'qr mut QueryResult) -> Self {
+        QueryResultRowFiller {
+            filled_rows: 0,
+            query_result: q,
+        }
+    }
+}
+
+impl RowFiller for QueryResultRowFiller<'_> {
+    fn fill_row(&mut self, row: &mut Vec<Entity>) -> Option<usize> {
+        row.clear();
+        match &self.query_result {
+            QueryResult::OK {} => match self.filled_rows {
+                0 => {
+                    row.push(Entity::Text {
+                        text: "OK".to_string(),
+                    });
+                    self.filled_rows += 1;
+                    Some(1)
+                }
+                _ => None,
+            },
+            QueryResult::DONE { modified_rows } => {
+                match self.filled_rows {
+                    0 => {
+                        let v = Entity::Text {
+                            text: "DONE".to_string(),
+                        };
+                        row.push(v);
+                        self.filled_rows += 1;
+                        Some(1)
+                    }
+                    1 => {
+                        let v = Entity::Integer {
+                            int: *modified_rows as i64,
+                        };
+                        row.push(v);
+                        self.filled_rows += 1;
+                        Some(1)
+                    }
+                    _ => None,
+                }
+            }
+            QueryResult::Array { array, names, .. } => {
+                if self.filled_rows == 0 {
+                    let v = Entity::Text {
+                        text: "RESULT".to_string(),
+                    };
+                    row.push(v);
+                    self.filled_rows += 1;
+                    return Some(1);
+                }
+                let len = names.len();
+                let offset = (self.filled_rows as usize - 1) * len;
+                if array.len() <= offset {
+                    return None;
+                }
+                for i in 0..len {
+                    row.push(array[offset + i].clone())
+                }
+                self.filled_rows += 1;
+                Some(len)
+            }
+            QueryResult::Stream {
+                stream,
+                first_id,
+                last_id,
+                size,
+            } => match self.filled_rows {
+                0 => {
+                    let v = Entity::Text {
+                        text: "STREAM".to_string(),
+                    };
+                    row.push(v);
+                    self.filled_rows += 1;
+                    Some(1)
+                }
+                1 => {
+                    let v = Entity::Text {
+                        text: stream.to_owned(),
+                    };
+                    row.push(v);
+                    let v = Entity::Text {
+                        text: first_id.to_owned(),
+                    };
+                    row.push(v);
+                    let v = Entity::Text {
+                        text: last_id.to_owned(),
+                    };
+                    row.push(v);
+                    let v = Entity::Text {
+                        text: size.to_string(),
+                    };
+                    row.push(v);
+                    self.filled_rows += 1;
+                    Some(1)
+                }
+                _ => None,
+            },
+        }
+    }
+}
+
 impl<'s> Iterator for SQLiteResultIterator<'s> {
     type Item = Vec<Entity>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -836,6 +945,12 @@ impl RedisReply for Result<QueryResult, err::RediSQLError> {
             Err(e) => e.reply(ctx),
         }
     }
+    fn reply_v2(&mut self, ctx: &Context) -> i32 {
+        match self {
+            Ok(ok) => ok.reply_v2(ctx),
+            Err(e) => e.reply_v2(ctx),
+        }
+    }
 }
 
 impl RedisReply for QueryResult {
@@ -849,33 +964,33 @@ impl RedisReply for QueryResult {
                 debug!("QueryResult::Array");
                 reply_with_array(ctx, array.chunks(names.len()))
             }
+            QueryResult::Stream {
+                stream,
+                first_id,
+                last_id,
+                size,
+            } => {
+                let row = vec![
+                    Entity::Text {
+                        text: stream.to_owned(),
+                    },
+                    Entity::Text {
+                        text: first_id.to_owned(),
+                    },
+                    Entity::Text {
+                        text: last_id.to_owned(),
+                    },
+                    Entity::Text {
+                        text: size.to_string(),
+                    },
+                ];
+                reply_with_array(ctx, row.chunks(4))
+            }
         }
     }
     fn reply_v2(&mut self, ctx: &rm::Context) -> i32 {
-        match self {
-            QueryResult::OK {} => reply_with_array(
-                ctx,
-                vec![Entity::Text {
-                    text: "OK".to_string(),
-                }]
-                .chunks(1),
-            ),
-            QueryResult::DONE { modified_rows, .. } => {
-                let row = vec![
-                    Entity::Text {
-                        text: "DONE".to_string(),
-                    },
-                    Entity::Integer {
-                        int: *modified_rows as i64,
-                    },
-                ];
-                reply_with_array(ctx, row.chunks(1))
-            }
-            QueryResult::Array { array, names, .. } => {
-                debug!("QueryResult::Array");
-                reply_with_array(ctx, array.chunks(names.len()))
-            }
-        }
+        let filler = QueryResultRowFiller::from(self);
+        reply_with_array(ctx, filler)
     }
 }
 
