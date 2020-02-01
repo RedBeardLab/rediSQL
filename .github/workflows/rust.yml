@@ -58,7 +58,7 @@ jobs:
           name: redisql.so
           path: target/release/
 
-  test-redis4:
+  test-redis4-v1:
     runs-on: ubuntu-18.04
     needs: build-release
     steps:
@@ -91,18 +91,53 @@ jobs:
           mv ./$REDIS redis-4
           cd ./redis-4
           make
-      - name: Run the tests v1
-        run: python3 test/correctness/test_v1.py
-        env:
-          REDIS_MODULE_PATH: build/redisql.so
-          REDIS_PATH: redis-4/src/redis-server
       - name: Run the tests v2
         run: python3 test/correctness/test_v2.py
         env:
           REDIS_MODULE_PATH: build/redisql.so
           REDIS_PATH: redis-4/src/redis-server
 
-  test-redis5:
+  test-redis4-v2:
+    runs-on: ubuntu-18.04
+    needs: build-release
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download build
+        uses: actions/download-artifact@v1
+        with:
+          name: redisql.so
+          path: build
+      - name: Setup Python for integration tests
+        uses: actions/setup-python@v1.1.1
+        with:
+          python-version: 3.8
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r test/correctness/requirements.txt
+      - name: Cache redis-4
+        id: cache-redis-4
+        uses: actions/cache@v1
+        with:
+          path: redis-4
+          key: redis-4
+      - name: Build redis-4
+        if: steps.cache-redis-4.outputs.cache-hit != 'true'
+        run: |
+          REDIS="redis-4.0.14"
+          wget http://download.redis.io/releases/$REDIS.tar.gz
+          tar xzf ./$REDIS.tar.gz
+          mv ./$REDIS redis-4
+          cd ./redis-4
+          make
+     - name: Run the tests v2
+        run: python3 test/correctness/test_v2.py
+        env:
+          REDIS_MODULE_PATH: build/redisql.so
+          REDIS_PATH: redis-4/src/redis-server
+
+
+  test-redis5-v1:
     runs-on: ubuntu-18.04
     needs: build-release
     steps:
@@ -140,6 +175,40 @@ jobs:
         env:
           REDIS_MODULE_PATH: build/redisql.so
           REDIS_PATH: redis-5/src/redis-server
+
+  test-redis5-v2:
+    runs-on: ubuntu-18.04
+    needs: build-release
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download build
+        uses: actions/download-artifact@v1
+        with:
+          name: redisql.so
+          path: build
+      - name: Setup Python for integration tests
+        uses: actions/setup-python@v1.1.1
+        with:
+          python-version: 3.8
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r test/correctness/requirements.txt
+      - name: Cache redis-5
+        id: cache-redis-5
+        uses: actions/cache@v1
+        with:
+          path: redis-5
+          key: redis-5
+      - name: Build redis-5
+        if: steps.cache-redis-5.outputs.cache-hit != 'true'
+        run: |
+          REDIS="redis-5.0.7"
+          wget http://download.redis.io/releases/$REDIS.tar.gz
+          tar xzf ./$REDIS.tar.gz
+          mv ./$REDIS redis-5
+          cd ./redis-5
+          make
       - name: Run the tests v2
         run: python3 test/correctness/test_v2.py
         env:
