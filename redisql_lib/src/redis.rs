@@ -869,7 +869,7 @@ impl RedisReply for QueryResult {
                         int: *modified_rows as i64,
                     },
                 ];
-                reply_with_array(ctx, row.chunks(2))
+                reply_with_array(ctx, row.chunks(1))
             }
             QueryResult::Array { array, names, .. } => {
                 debug!("QueryResult::Array");
