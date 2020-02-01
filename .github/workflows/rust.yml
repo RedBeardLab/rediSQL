@@ -130,7 +130,7 @@ jobs:
           mv ./$REDIS redis-4
           cd ./redis-4
           make
-     - name: Run the tests v2
+      - name: Run the tests v2
         run: python3 test/correctness/test_v2.py
         env:
           REDIS_MODULE_PATH: build/redisql.so
