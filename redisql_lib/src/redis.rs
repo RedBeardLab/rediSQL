@@ -841,9 +841,35 @@ impl RedisReply for Result<QueryResult, err::RediSQLError> {
 impl RedisReply for QueryResult {
     fn reply(&mut self, ctx: &rm::Context) -> i32 {
         match self {
-            QueryResult::OK { .. } => reply_with_ok(ctx.as_ptr()),
+            QueryResult::OK {} => reply_with_ok(ctx.as_ptr()),
             QueryResult::DONE { modified_rows, .. } => {
                 reply_with_done(ctx.as_ptr(), *modified_rows)
+            }
+            QueryResult::Array { array, names, .. } => {
+                debug!("QueryResult::Array");
+                reply_with_array(ctx, array.chunks(names.len()))
+            }
+        }
+    }
+    fn reply_v2(&mut self, ctx: &rm::Context) -> i32 {
+        match self {
+            QueryResult::OK {} => reply_with_array(
+                ctx,
+                vec![Entity::Text {
+                    text: "OK".to_string(),
+                }]
+                .chunks(1),
+            ),
+            QueryResult::DONE { modified_rows, .. } => {
+                let row = vec![
+                    Entity::Text {
+                        text: "DONE".to_string(),
+                    },
+                    Entity::Integer {
+                        int: *modified_rows as i64,
+                    },
+                ];
+                reply_with_array(ctx, row.chunks(2))
             }
             QueryResult::Array { array, names, .. } => {
                 debug!("QueryResult::Array");
