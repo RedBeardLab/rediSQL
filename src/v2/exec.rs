@@ -15,7 +15,7 @@ use redisql_lib::redis_type::BlockedClient;
 use redisql_lib::redis_type::Context;
 use redisql_lib::redis_type::ReplicateVerbatim;
 
-use crate::common::{free_privdata, reply, timeout};
+use crate::common::{free_privdata, reply_v2, timeout};
 
 #[allow(non_snake_case)]
 pub extern "C" fn Exec_v2(
@@ -27,12 +27,12 @@ pub extern "C" fn Exec_v2(
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
         Err(mut error) => {
-            return error.reply(&context);
+            return error.reply_v2(&context);
         }
     };
     let command: Exec = match CommandV2::parse(argvector) {
         Ok(comm) => comm,
-        Err(mut e) => return e.reply(&context),
+        Err(mut e) => return e.reply_v2(&context),
     };
     do_exec_v2(command, context)
 }
@@ -47,12 +47,12 @@ pub extern "C" fn Query_v2(
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
         Err(mut error) => {
-            return error.reply(&context);
+            return error.reply_v2(&context);
         }
     };
     let mut command: Exec = match CommandV2::parse(argvector) {
         Ok(comm) => comm,
-        Err(mut e) => return e.reply(&context),
+        Err(mut e) => return e.reply_v2(&context),
     };
     command.make_into_query();
     do_exec_v2(command, context)
@@ -64,11 +64,11 @@ fn do_exec_v2(command: Exec<'static>, context: Context) -> i32 {
     let key = command.key(&context);
     if !command.is_now() {
         match key.get_channel() {
-            Err(mut e) => e.reply(&context),
+            Err(mut e) => e.reply_v2(&context),
             Ok(ch) => {
                 let blocked_client = BlockedClient::new(
                     &context,
-                    reply,
+                    reply_v2,
                     timeout,
                     free_privdata,
                     10_000,
@@ -113,7 +113,7 @@ fn do_exec_v2(command: Exec<'static>, context: Context) -> i32 {
     } else {
         let db = match key.get_db() {
             Ok(k) => k,
-            Err(mut e) => return e.reply(&context),
+            Err(mut e) => return e.reply_v2(&context),
         };
         let read_only = command.is_read_only();
         let return_method = command.get_return_method();
@@ -148,12 +148,12 @@ fn do_exec_v2(command: Exec<'static>, context: Context) -> i32 {
                         ),
                     },
                 };
-                res.reply(&context)
+                res.reply_v2(&context)
             }
             ToExecute::Statement(id) => {
                 let loop_data = match key.get_loop_data() {
                     Ok(k) => k,
-                    Err(mut e) => return e.reply(&context),
+                    Err(mut e) => return e.reply_v2(&context),
                 };
 
                 let mut result = match read_only {
@@ -192,7 +192,7 @@ fn do_exec_v2(command: Exec<'static>, context: Context) -> i32 {
                         }
                     }
                 };
-                result.reply(&context)
+                result.reply_v2(&context)
             }
         }
     }

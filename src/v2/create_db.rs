@@ -20,12 +20,12 @@ pub extern "C" fn CreateDB_v2(
     let argvector = match r::create_argument(argv, argc) {
         Ok(argvector) => argvector,
         Err(mut error) => {
-            return error.reply(&context);
+            return error.reply_v2(&context);
         }
     };
     let command: CreateDB = match CommandV2::parse(argvector) {
         Ok(comm) => comm,
-        Err(mut e) => return e.reply(&context),
+        Err(mut e) => return e.reply_v2(&context),
     };
     let key = command.key(&context);
     match key.key_type() {
@@ -33,26 +33,26 @@ pub extern "C" fn CreateDB_v2(
             match create_db_from_path(key, command.path) {
                 Ok(mut ok) => {
                     ReplicateVerbatim(&context);
-                    ok.reply(&context)
+                    ok.reply_v2(&context)
                 }
-                Err(mut e) => e.reply(&context),
+                Err(mut e) => e.reply_v2(&context),
             }
         }
         KeyTypes::RediSQL => {
             if command.can_exists {
-                (QueryResult::OK {}).reply(&context)
+                (QueryResult::OK {}).reply_v2(&context)
             } else {
                 let mut err = RediSQLError::with_code(
                     4,
                     "Database already exists".to_string(),
                     "A database with the same name already exists but you explicitely asked to create one (using the MUST_CREATE flag).".to_string(),
                 );
-                err.reply(&context)
+                err.reply_v2(&context)
             }
         }
         _ => {
             let mut err = RediSQLError::no_redisql_key();
-            err.reply(&context)
+            err.reply_v2(&context)
         }
     }
 }

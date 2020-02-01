@@ -296,6 +296,9 @@ impl Loop {
 
 pub trait RedisReply {
     fn reply(&mut self, ctx: &rm::Context) -> i32;
+    fn reply_v2(&mut self, ctx: &rm::Context) -> i32 {
+        self.reply(ctx)
+    }
 }
 
 impl RedisReply for Entity {
