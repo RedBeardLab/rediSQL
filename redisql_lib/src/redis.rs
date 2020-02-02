@@ -688,7 +688,7 @@ impl<'r> RowFiller for std::slice::Chunks<'_, Entity> {
 }
 
 struct QueryResultRowFiller<'qr> {
-    filled_rows: u8,
+    filled_rows: u64,
     query_result: &'qr QueryResult,
 }
 
