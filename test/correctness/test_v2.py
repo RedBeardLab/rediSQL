@@ -455,6 +455,17 @@ class TestStatements(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.V2.EXEC", "R", "STATEMENT", "select_all")
         self.assertEqual(result, [["RESULT"], ["A", "B"], ["INT", "INT"], [1,2], [3,4], [5, 6]])
 
+  def test_read_statement_now(self):
+    with DB(self, "R"):
+      with Table(self, "t1", "(A int, B int)", key = "R"):
+        ok = self.exec_naked("REDISQL.V2.STATEMENT", "R", "NEW", "select_all", "SELECT * FROM t1 ORDER BY A;")
+        self.assertEqual(ok, [['OK']])
+        done = self.exec_naked("REDISQL.V2.EXEC", "R", "COMMAND", "INSERT INTO t1 VALUES(1,2),(3,4),(5,6);")
+        self.assertEqual(done, [["DONE"], [3]])
+        result = self.exec_naked("REDISQL.V2.EXEC", "R", "STATEMENT", "select_all", "NOW")
+        self.assertEqual(result, [["RESULT"], ["A", "B"], ["INT", "INT"], [1,2], [3,4], [5, 6]])
+
+
 class TestStatementsSynchronous(TestRediSQLWithExec):
   def test_create_statement_synchronous(self):
     with DB(self, "A"):
