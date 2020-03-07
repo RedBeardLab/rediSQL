@@ -64,6 +64,7 @@ impl Exec<'static> {
                     identifier,
                     arguments: self.args,
                     timeout,
+                    return_method,
                     client,
                 }
             }

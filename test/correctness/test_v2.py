@@ -355,7 +355,7 @@ class TestStatements(TestRediSQLWithExec):
       with Table(self, "t1", "(A INTEGER)", key = "A"):
         ok = self.exec_naked("REDISQL.V2.STATEMENT", "A", "NEW", "insert", "insert into t1 values(?1); insert into t1 values(?2 + 1); select * from t1;")
         self.assertEqual(ok, [['OK']])
-        result = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "ARGS", "3", "8")
+        result = self.exec_naked("REDISQL.V2.EXEC", "A", "STATEMENT", "insert", "NO_HEADER", "ARGS", "3", "8")
         self.assertEqual(result, [["RESULT"], [3], [9]])
 
 
@@ -445,7 +445,15 @@ class TestStatements(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.V2.EXEC", "A", "coMManD", "SELECT * FROM t1 ORDER BY A;", "no_HEader")
         self.assertEqual(result, [["RESULT"], [3], [4], [103], [104]])
 
-
+  def test_read_statement(self):
+    with DB(self, "R"):
+      with Table(self, "t1", "(A int, B int)", key = "R"):
+        ok = self.exec_naked("REDISQL.V2.STATEMENT", "R", "NEW", "select_all", "SELECT * FROM t1 ORDER BY A;")
+        self.assertEqual(ok, [['OK']])
+        done = self.exec_naked("REDISQL.V2.EXEC", "R", "COMMAND", "INSERT INTO t1 VALUES(1,2),(3,4),(5,6);")
+        self.assertEqual(done, [["DONE"], [3]])
+        result = self.exec_naked("REDISQL.V2.EXEC", "R", "STATEMENT", "select_all")
+        self.assertEqual(result, [["RESULT"], ["A", "B"], ["INT", "INT"], [1,2], [3,4], [5, 6]])
 
 class TestStatementsSynchronous(TestRediSQLWithExec):
   def test_create_statement_synchronous(self):

@@ -87,6 +87,7 @@ pub extern "C" fn ExecStatement(
                 identifier: argvector[2],
                 arguments: argvector[3..].to_vec(),
                 client: blocked_client,
+                return_method: r::ReturnMethod::Reply{},
                 timeout: t,
             };
 

@@ -596,6 +596,7 @@ pub enum Command {
         identifier: &'static str,
         arguments: Vec<&'static str>,
         timeout: std::time::Instant,
+        return_method: ReturnMethod,
         client: BlockedClient,
     },
     UpdateStatement {
@@ -1405,6 +1406,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 identifier,
                 arguments,
                 timeout,
+                return_method,
                 client,
             }) => {
                 debug!(
@@ -1421,7 +1423,7 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
 
                 return_value(
                     &client,
-                    &ReturnMethod::Reply,
+                    &return_method,
                     result,
                     timeout,
                 );
