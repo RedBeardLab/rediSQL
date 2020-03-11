@@ -1544,8 +1544,23 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData>(
     }
 }
 
+#[derive(Debug)]
+pub struct NoisyDrop<T: std::fmt::Debug>(T);
+impl<T: std::fmt::Debug> std::ops::Deref for NoisyDrop<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<T: std::fmt::Debug> Drop for NoisyDrop<T> {
+    fn drop(&mut self) {
+        dbg!("@@@ DROPPING {:?} @@@", self);
+    }
+}
+
 pub struct DBKey {
-    pub tx: Sender<Command>,
+    pub tx: NoisyDrop<Sender<Command>>,
     pub loop_data: Loop,
     pub connections: HashMap<String, Sender<Command>>,
 }
@@ -1557,7 +1572,7 @@ impl DBKey {
     ) -> DBKey {
         let loop_data = Loop::new_from_arc(db);
         DBKey {
-            tx,
+            tx: NoisyDrop(tx),
             loop_data,
             connections: HashMap::new(),
         }
@@ -1590,7 +1605,7 @@ impl DBKey {
                 if self.tx.send(Command::Stop).is_err() {
                     return Err(());
                 }
-                self.tx = new_tx;
+                self.tx = NoisyDrop(new_tx);
                 self.loop_data = new_loop.clone();
                 thread::spawn(move || {
                     listen_and_execute(&mut new_loop, &new_rx);
