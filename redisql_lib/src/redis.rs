@@ -606,7 +606,7 @@ pub enum Command {
         client: BlockedClient,
     },
     MakeCopy {
-        destination: DBKey,
+        destination: DBKey<'static>,
         client: BlockedClient,
     },
 }
@@ -1011,9 +1011,9 @@ pub fn do_query(
 
 /// implements the copy of the source database into the destination one
 /// it also leak the two DBKeys
-pub fn do_copy<L: LoopData>(
+pub fn do_copy(
     source_db: &ConcurrentConnection,
-    destination_loopdata: &L,
+    destination_loopdata: &Loop,
 ) -> Result<impl Returner, err::RediSQLError> {
     debug!("DoCopy | Start");
 
@@ -1533,22 +1533,24 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData>(
     }
 }
 
-pub struct DBKey {
+pub struct DBKey<'c> {
     pub tx: Sender<Command>,
     pub loop_data: Loop,
+    pub context: Option<&'c Context>,
     pub connections: HashMap<String, Sender<Command>>,
 }
 
-impl DBKey {
+impl<'c> DBKey<'c> {
     pub fn new_from_arc(
         tx: Sender<Command>,
         db: ConcurrentConnection,
-    ) -> DBKey {
+    ) -> Self {
         let loop_data = Loop::new_from_arc(db);
         DBKey {
             tx: tx,
             loop_data,
             connections: HashMap::new(),
+            context: None,
         }
     }
     pub fn add_connection(
@@ -1610,7 +1612,7 @@ impl DBKey {
     }
 }
 
-impl Drop for DBKey {
+impl<'c> Drop for DBKey<'c> {
     fn drop(&mut self) {
         debug!("### Dropping DBKey ###")
     }
