@@ -1,4 +1,5 @@
 use redisql_lib::redis::Command;
+use redisql_lib::redis::ReturnMethod;
 use redisql_lib::redis_type::BlockedClient;
 use redisql_lib::redisql_error::RediSQLError;
 
@@ -10,13 +11,14 @@ pub enum Action {
     Update,
     New,
     Show,
+    List,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Statement<'s> {
     database: &'s str,
     action: Action,
-    stmt_name: &'s str,
+    stmt_name: Option<&'s str>,
     stmt_query: Option<&'s str>,
     now: bool,
     can_update: bool,
@@ -27,22 +29,26 @@ impl Statement<'static> {
     pub fn get_command(self, client: BlockedClient) -> Command {
         match self.action {
             Action::Delete => Command::DeleteStatement {
-                identifier: self.stmt_name,
+                identifier: self.stmt_name.unwrap(),
                 client,
             },
             Action::Update => Command::UpdateStatement {
-                identifier: self.stmt_name,
+                identifier: self.stmt_name.unwrap(),
                 statement: self.stmt_query.unwrap(),
                 can_create: self.can_create,
                 client,
             },
             Action::New => Command::CompileStatement {
-                identifier: self.stmt_name,
+                identifier: self.stmt_name.unwrap(),
                 statement: self.stmt_query.unwrap(),
                 can_update: self.can_update,
                 client,
             },
             Action::Show => todo!(),
+            Action::List => Command::ListStatements {
+                return_method: ReturnMethod::ReplyWithHeader,
+                client,
+            },
         }
     }
     pub fn is_now(&self) -> bool {
@@ -52,7 +58,7 @@ impl Statement<'static> {
         self.action
     }
     pub fn identifier(&self) -> &'static str {
-        self.stmt_name
+        self.stmt_name.unwrap()
     }
     pub fn statement(&self) -> &'static str {
         self.stmt_query.unwrap()
@@ -83,15 +89,24 @@ impl<'s> CommandV2<'s> for Statement<'s> {
                     "UPDATE" => Action::Update,
                     "NEW" => Action::New,
                     "SHOW" => Action::Show,
+                    "LIST" => Action::List,
                     _ => return Err(RediSQLError::with_code(23,
                             "You provide a command for the statement that is not supported".to_string(),
                             "Statement command unknow".to_string()))
                 }
             }
         };
-        let stmt_name = match args_iter.next() {
-            Some(s) => s,
-            None => return Err(RediSQLError::with_code(19, "You should provide the name of the statement to operate with".to_string(), "Statement command with statement name".to_string())),
+        let stmt_name = match action {
+            Action::New
+            | Action::Update
+            | Action::Delete
+            | Action::Show => match args_iter.next() {
+                Some(s) => Some(*s),
+                None => {
+                    return Err(RediSQLError::with_code(19, "You should provide the name of the statement to operate with".to_string(), "Statement command with statement name".to_string()));
+                }
+            },
+            Action::List => None,
         };
         let stmt_query = match action {
             Action::Update | Action::New => match args_iter.next() {

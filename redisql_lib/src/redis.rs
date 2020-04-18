@@ -88,6 +88,7 @@ pub trait StatementCache<'a> {
         identifier: &str,
         args: &[&str],
     ) -> Result<Cursor, RediSQLError>;
+    fn list_statements(&self) -> Result<QueryResult, RediSQLError>;
 }
 
 impl<'a> StatementCache<'a> for ReplicationBook {
@@ -242,6 +243,37 @@ impl<'a> StatementCache<'a> for ReplicationBook {
                 Ok(cursor)
             }
         }
+    }
+    fn list_statements(&self) -> Result<QueryResult, RediSQLError> {
+        let map = self.data.read().unwrap();
+        let names = vec![
+            "identifier".to_string(),
+            "SQL".to_string(),
+            "parameters_count".to_string(),
+            "read_only".to_string(),
+        ];
+        let types = vec!["TEXT", "TEXT", "INT", "INT"];
+        let n = map.len() * 4;
+        let mut array = Vec::with_capacity(n);
+        for (key, (multi_stmt, read_only)) in map.iter() {
+            array.push(Entity::Text {
+                text: key.to_string(),
+            });
+            array.push(Entity::Text {
+                text: multi_stmt.sql(),
+            });
+            array.push(Entity::Integer {
+                int: multi_stmt.parameters_count() as i64,
+            });
+            array.push(Entity::Integer {
+                int: if *read_only { 1 } else { 0 },
+            });
+        }
+        Ok(QueryResult::Array {
+            names,
+            types,
+            array,
+        })
     }
 }
 
@@ -509,51 +541,40 @@ impl RedisKey {
             _ => KeyTypes::Unknow,
         }
     }
-    pub fn get_channel(
-        &self,
-    ) -> Result<&Sender<Command>, RediSQLError> {
+    fn get_dbkey(&self) -> Result<&DBKey, RediSQLError> {
         match self.key_type() {
-            KeyTypes::RediSQL => unsafe {
-                let dbkey = {
-                    rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(
-                        self.key,
-                    ) as *mut DBKey
+            KeyTypes::RediSQL => {
+                let dbkey = unsafe {
+                    let dbkey = {
+                        rm::ffi::RedisModule_ModuleTypeGetValue
+                            .unwrap()(self.key)
+                            as *mut DBKey
+                    };
+                    let dbkey = { &*dbkey };
+                    dbkey
                 };
-                Ok(&(*dbkey).tx)
-            },
+                Ok(dbkey)
+            }
             KeyTypes::Empty => Err(RediSQLError::empty_key()),
             _ => Err(RediSQLError::no_redisql_key()),
         }
+    }
+    pub fn get_channel(
+        &self,
+    ) -> Result<Sender<Command>, RediSQLError> {
+        let dbkey = self.get_dbkey()?;
+        let channel = dbkey.tx.clone();
+        Ok(channel)
     }
     pub fn get_db(
         &self,
     ) -> Result<ConcurrentConnection, RediSQLError> {
-        match self.key_type() {
-            KeyTypes::RediSQL => {
-                let dbkey = unsafe {
-                    rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(
-                        self.key,
-                    ) as *mut DBKey
-                };
-                Ok(unsafe { (*dbkey).loop_data.get_db() })
-            }
-            KeyTypes::Empty => Err(RediSQLError::empty_key()),
-            _ => Err(RediSQLError::no_redisql_key()),
-        }
+        let dbkey = self.get_dbkey()?;
+        Ok(dbkey.loop_data.get_db().clone())
     }
-    pub fn get_loop_data(&self) -> Result<&Loop, RediSQLError> {
-        match self.key_type() {
-            KeyTypes::RediSQL => {
-                let dbkey = unsafe {
-                    rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(
-                        self.key,
-                    ) as *mut DBKey
-                };
-                Ok(unsafe { &(*dbkey).loop_data })
-            }
-            KeyTypes::Empty => Err(RediSQLError::empty_key()),
-            _ => Err(RediSQLError::no_redisql_key()),
-        }
+    pub fn get_loop_data(&self) -> Result<Loop, RediSQLError> {
+        let dbkey = self.get_dbkey()?;
+        Ok(dbkey.loop_data.clone())
     }
 }
 
@@ -616,8 +637,12 @@ pub enum Command {
         return_method: ReturnMethod,
         client: BlockedClient,
     },
+    ListStatements {
+        return_method: ReturnMethod,
+        client: BlockedClient,
+    },
     MakeCopy {
-        destination: DBKey,
+        destination: DBKey<'static>,
         client: BlockedClient,
     },
 }
@@ -855,6 +880,33 @@ impl Returner for QueryResult {
                     _ => Box::new(Box::new(self)),
                 }
             }
+            ReturnMethod::ReplyWithHeader {} => match self {
+                QueryResult::Array {
+                    mut array,
+                    names,
+                    types,
+                } => {
+                    let mut new_array = Vec::with_capacity(
+                        names.len() + types.len() + array.len(),
+                    );
+                    for name in names.clone() {
+                        new_array.push(Entity::Text { text: name });
+                    }
+                    for t in &types {
+                        new_array.push(Entity::Text {
+                            text: t.to_string(),
+                        });
+                    }
+                    new_array.append(&mut array);
+                    let res = QueryResult::Array {
+                        names,
+                        types,
+                        array: new_array,
+                    };
+                    Box::new(Box::new(res))
+                }
+                _ => Box::new(Box::new(self)),
+            },
             _ => Box::new(Box::new(self)),
         }
     }
@@ -1022,9 +1074,9 @@ pub fn do_query(
 
 /// implements the copy of the source database into the destination one
 /// it also leak the two DBKeys
-pub fn do_copy<L: LoopData>(
+pub fn do_copy(
     source_db: &ConcurrentConnection,
-    destination_loopdata: &L,
+    destination_loopdata: &Loop,
 ) -> Result<impl Returner, err::RediSQLError> {
     debug!("DoCopy | Start");
 
@@ -1468,6 +1520,16 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     timeout,
                 );
             }
+            Ok(Command::ListStatements {
+                return_method,
+                client,
+            }) => {
+                let result =
+                    loopdata.get_replication_book().list_statements();
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
+                return_value(&client, &return_method, result, t);
+            }
             Ok(Command::MakeCopy {
                 destination,
                 client,
@@ -1544,22 +1606,24 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData>(
     }
 }
 
-pub struct DBKey {
+pub struct DBKey<'c> {
     pub tx: Sender<Command>,
     pub loop_data: Loop,
+    pub context: Option<&'c Context>,
     pub connections: HashMap<String, Sender<Command>>,
 }
 
-impl DBKey {
+impl<'c> DBKey<'c> {
     pub fn new_from_arc(
         tx: Sender<Command>,
         db: ConcurrentConnection,
-    ) -> DBKey {
+    ) -> Self {
         let loop_data = Loop::new_from_arc(db);
         DBKey {
-            tx,
+            tx: tx,
             loop_data,
             connections: HashMap::new(),
+            context: None,
         }
     }
     pub fn add_connection(
@@ -1621,7 +1685,7 @@ impl DBKey {
     }
 }
 
-impl Drop for DBKey {
+impl<'c> Drop for DBKey<'c> {
     fn drop(&mut self) {
         debug!("### Dropping DBKey ###")
     }
@@ -1928,60 +1992,6 @@ pub fn get_dbkeyptr_from_name(
     }
 }
 
-pub struct RedisDBKey {
-    key: *mut rm::ffi::RedisModuleKey,
-    pub dbkey: *mut DBKey,
-}
-
-impl Drop for RedisDBKey {
-    fn drop(&mut self) {
-        debug!("***Closing the key.***");
-        unsafe {
-            rm::ffi::RedisModule_CloseKey.unwrap()(self.key);
-        }
-    }
-}
-
-impl RedisDBKey {
-    pub fn new(context: &Context, name: &str) -> Result<Self, i32> {
-        let key_name = rm::RMString::new(&context, name);
-        let key =
-            OpenKey(context, &key_name, rm::ffi::REDISMODULE_WRITE);
-        let key_type =
-            unsafe { rm::ffi::RedisModule_KeyType.unwrap()(key) };
-        if unsafe {
-            rm::ffi::DBType
-                == rm::ffi::RedisModule_ModuleTypeGetType.unwrap()(
-                    key,
-                )
-        } {
-            let dbkey = unsafe {
-                rm::ffi::RedisModule_ModuleTypeGetValue.unwrap()(key)
-                    as *mut DBKey
-            };
-            Ok(RedisDBKey { key, dbkey })
-        } else {
-            Err(key_type)
-        }
-    }
-    pub fn get_channel(
-        &self,
-        connection: Option<&str>,
-    ) -> &Sender<Command> {
-        unsafe {
-            match connection {
-                None => &(*self.dbkey).tx,
-                Some(connection) => {
-                    match (*self.dbkey).connections.get(connection) {
-                        None => &(*self.dbkey).tx,
-                        Some(s) => s,
-                    }
-                }
-            }
-        }
-    }
-}
-
 pub fn get_dbkey_from_name(
     ctx: *mut rm::ffi::RedisModuleCtx,
     name: &str,
@@ -1994,8 +2004,7 @@ pub fn get_dbkey_from_name(
 pub unsafe fn get_ch_from_dbkeyptr(
     db: *mut DBKey,
 ) -> Sender<Command> {
-    let tx = (*db).tx.clone();
-    tx
+    (*db).tx.clone()
 }
 
 pub fn reply_with_error_from_key_type(

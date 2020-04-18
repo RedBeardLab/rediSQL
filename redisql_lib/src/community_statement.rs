@@ -56,11 +56,7 @@ unsafe impl Sync for InternalStatement {}
 
 impl<'a> fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let sql = unsafe {
-            CStr::from_ptr(ffi::sqlite3_sql(self.as_ptr()))
-                .to_string_lossy()
-                .into_owned()
-        };
+        let sql = self.sql();
         writeln!(f, "{}", sql)
     }
 }
@@ -250,6 +246,19 @@ impl<'a> StatementTrait<'a> for Statement {
         let v = unsafe { ffi::sqlite3_stmt_readonly(self.as_ptr()) };
         v != 0
     }
+
+    fn parameters_count(&self) -> u32 {
+        unsafe {
+            ffi::sqlite3_bind_parameter_count(self.as_ptr()) as u32
+        }
+    }
+    fn sql(&self) -> String {
+        unsafe {
+            CStr::from_ptr(ffi::sqlite3_sql(self.as_ptr()))
+                .to_string_lossy()
+                .into_owned()
+        }
+    }
 }
 
 impl<'a> StatementTrait<'a> for MultiStatement {
@@ -350,6 +359,22 @@ impl<'a> StatementTrait<'a> for MultiStatement {
             }
         }
         true
+    }
+    fn parameters_count(&self) -> u32 {
+        self.stmts
+            .iter()
+            .map(|s| s.parameters_count())
+            .max()
+            .unwrap_or(0)
+    }
+    fn sql(&self) -> String {
+        let sqls = self.stmts.iter().map(|s| s.sql());
+        let n: usize = sqls.clone().map(|s| s.len()).sum();
+        let mut s = String::with_capacity(n);
+        for sql in sqls {
+            s.push_str(&sql);
+        }
+        s
     }
 }
 

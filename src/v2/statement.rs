@@ -5,6 +5,8 @@ use parser::statement::Statement;
 use redisql_lib::redis as r;
 use redisql_lib::redis::LoopData;
 use redisql_lib::redis::RedisReply;
+use redisql_lib::redis::ReturnMethod;
+use redisql_lib::redis::Returner;
 use redisql_lib::redis::StatementCache;
 use redisql_lib::redis_type::BlockedClient;
 use redisql_lib::redis_type::ReplicateVerbatim;
@@ -102,6 +104,23 @@ pub extern "C" fn Statement_v2(
                     Ok(_) => {
                         ReplicateVerbatim(&context);
                         (QueryResult::OK {}).reply_v2(&context)
+                    }
+                }
+            }
+            Action::List => {
+                let result = loop_data
+                    .get_replication_book()
+                    .list_statements();
+                match result {
+                    Err(mut e) => e.reply_v2(&context),
+                    Ok(q) => {
+                        let mut to_return = q.create_data_to_return(
+                            &context,
+                            &ReturnMethod::ReplyWithHeader,
+                            std::time::Instant::now()
+                                + std::time::Duration::from_secs(10),
+                        );
+                        to_return.reply_v2(&context)
                     }
                 }
             }
