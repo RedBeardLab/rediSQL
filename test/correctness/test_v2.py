@@ -674,6 +674,15 @@ class TestListStatements(TestRediSQLWithExec):
           ['insert_ntimes', "insert into t1 values(?1); insert into t1 values(?2); select ?3;", 3, 0],
           ['select_all', 'SELECT * from t1', 0, 1],
           ['select_multiples', "select ?1; select ?2; select ?3;", 3, 1]])
+      result = self.exec_naked("REDISQL.v2.STATEMENT", "A", "LIST", "NOW")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['insert', 'insert into t1 values(?1);', 1, 0],
+          ['insert_twice', "insert into t1 values(?1); insert into t1 values(?1 * 10)", 1, 0],
+          ['insert_ntimes', "insert into t1 values(?1); insert into t1 values(?2); select ?3;", 3, 0],
+          ['select_all', 'SELECT * from t1', 0, 1],
+          ['select_multiples', "select ?1; select ?2; select ?3;", 3, 1]])
 
 
 if __name__ == '__main__':
