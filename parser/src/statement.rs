@@ -1,4 +1,5 @@
 use redisql_lib::redis::Command;
+use redisql_lib::redis::ReturnMethod;
 use redisql_lib::redis_type::BlockedClient;
 use redisql_lib::redisql_error::RediSQLError;
 
@@ -44,7 +45,10 @@ impl Statement<'static> {
                 client,
             },
             Action::Show => todo!(),
-            Action::List => todo!(),
+            Action::List => Command::ListStatements {
+                return_method: ReturnMethod::ReplyWithHeader,
+                client,
+            },
         }
     }
     pub fn is_now(&self) -> bool {
@@ -93,12 +97,6 @@ impl<'s> CommandV2<'s> for Statement<'s> {
             }
         };
         let stmt_name = match action {
-            Action::List => {
-                if args_iter.next().is_some() {
-                    return Err(RediSQLError::with_code(25, "You should not provide the name of the statement to list".to_string(), "Statement LIST command with statement name".to_string()));
-                }
-                None
-            }
             Action::New
             | Action::Update
             | Action::Delete
@@ -108,6 +106,7 @@ impl<'s> CommandV2<'s> for Statement<'s> {
                     return Err(RediSQLError::with_code(19, "You should provide the name of the statement to operate with".to_string(), "Statement command with statement name".to_string()));
                 }
             },
+            Action::List => None,
         };
         let stmt_query = match action {
             Action::Update | Action::New => match args_iter.next() {

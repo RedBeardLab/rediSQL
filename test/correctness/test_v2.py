@@ -621,6 +621,59 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.V2.EXEC", "L", "COmmaNd", "SELECT * FROM t1 ORDER BY A;", "no_HEader", "NoW")
         self.assertEqual(result, [["RESULT"], [3], [4], [103], [104]])
 
+class TestListStatements(TestRediSQLWithExec):
+  def compare_results(self, a, b):
+    self.assertEquals(a[0], b[0]) # 'RESULT'
+    self.assertEquals(a[1], b[1]) # names
+    self.assertEquals(a[2], b[2]) # types
+    a_rows = set([tuple(x) for x in a[3:]])
+    b_rows = set([tuple(x) for x in b[3:]])
+    self.assertEquals(a_rows, b_rows)
+
+  def test_list_one(self):
+    with DB(self, "A"):
+      done = self.exec_query("A", "CREATE TABLE t1(a INTEGER);")
+      self.assertEqual(done, [['DONE'],[0]])
+      ok = self.exec_naked("REDISQL.V2.STATEMENT", "A", "NEW", "insert", "insert into t1 values(?1);", "NOW")
+      result = self.exec_naked("REDISQL.v2.STATEMENT", "A", "LIST")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['insert', 'insert into t1 values(?1);', 1, 0]])
+      ok = self.exec_naked("REDISQL.V2.STATEMENT", "A", "NEW", "select_all", "SELECT * from t1", "NOW")
+      result = self.exec_naked("REDISQL.v2.STATEMENT", "A", "LIST")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['insert', 'insert into t1 values(?1);', 1, 0],
+          ['select_all', 'SELECT * from t1', 0, 1]])
+      ok = self.exec_naked("REDISQL.V2.STATEMENT", "A", "NEW", "insert_twice", "insert into t1 values(?1); insert into t1 values(?1 * 10)", "NOW")
+      result = self.exec_naked("REDISQL.v2.STATEMENT", "A", "LIST")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['insert', 'insert into t1 values(?1);', 1, 0],
+          ['insert_twice', "insert into t1 values(?1); insert into t1 values(?1 * 10)", 1, 0],
+          ['select_all', 'SELECT * from t1', 0, 1]])
+      ok = self.exec_naked("REDISQL.V2.STATEMENT", "A", "NEW", "insert_ntimes", "insert into t1 values(?1); insert into t1 values(?2); select ?3;", "NOW")
+      result = self.exec_naked("REDISQL.v2.STATEMENT", "A", "LIST")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['insert', 'insert into t1 values(?1);', 1, 0],
+          ['insert_twice', "insert into t1 values(?1); insert into t1 values(?1 * 10)", 1, 0],
+          ['insert_ntimes', "insert into t1 values(?1); insert into t1 values(?2); select ?3;", 3, 0],
+          ['select_all', 'SELECT * from t1', 0, 1]])
+      ok = self.exec_naked("REDISQL.V2.STATEMENT", "A", "NEW", "select_multiples", "select ?1; select ?2; select ?3;", "NOW")
+      result = self.exec_naked("REDISQL.v2.STATEMENT", "A", "LIST")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['insert', 'insert into t1 values(?1);', 1, 0],
+          ['insert_twice', "insert into t1 values(?1); insert into t1 values(?1 * 10)", 1, 0],
+          ['insert_ntimes', "insert into t1 values(?1); insert into t1 values(?2); select ?3;", 3, 0],
+          ['select_all', 'SELECT * from t1', 0, 1],
+          ['select_multiples', "select ?1; select ?2; select ?3;", 3, 1]])
 
 
 if __name__ == '__main__':

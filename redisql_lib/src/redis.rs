@@ -88,6 +88,7 @@ pub trait StatementCache<'a> {
         identifier: &str,
         args: &[&str],
     ) -> Result<Cursor, RediSQLError>;
+    fn list_statements(&self) -> Result<QueryResult, RediSQLError>;
 }
 
 impl<'a> StatementCache<'a> for ReplicationBook {
@@ -242,6 +243,37 @@ impl<'a> StatementCache<'a> for ReplicationBook {
                 Ok(cursor)
             }
         }
+    }
+    fn list_statements(&self) -> Result<QueryResult, RediSQLError> {
+        let map = self.data.read().unwrap();
+        let names = vec![
+            "identifier".to_string(),
+            "SQL".to_string(),
+            "parameters_count".to_string(),
+            "read_only".to_string(),
+        ];
+        let types = vec!["TEXT", "TEXT", "INT", "INT"];
+        let n = map.len() * 4;
+        let mut array = Vec::with_capacity(n);
+        for (key, (multi_stmt, read_only)) in map.iter() {
+            array.push(Entity::Text {
+                text: key.to_string(),
+            });
+            array.push(Entity::Text {
+                text: multi_stmt.sql(),
+            });
+            array.push(Entity::Integer {
+                int: multi_stmt.parameters_count() as i64,
+            });
+            array.push(Entity::Integer {
+                int: if *read_only { 1 } else { 0 },
+            });
+        }
+        Ok(QueryResult::Array {
+            names,
+            types,
+            array,
+        })
     }
 }
 
@@ -605,6 +637,10 @@ pub enum Command {
         return_method: ReturnMethod,
         client: BlockedClient,
     },
+    ListStatements {
+        return_method: ReturnMethod,
+        client: BlockedClient,
+    },
     MakeCopy {
         destination: DBKey<'static>,
         client: BlockedClient,
@@ -844,6 +880,33 @@ impl Returner for QueryResult {
                     _ => Box::new(Box::new(self)),
                 }
             }
+            ReturnMethod::ReplyWithHeader {} => match self {
+                QueryResult::Array {
+                    mut array,
+                    names,
+                    types,
+                } => {
+                    let mut new_array = Vec::with_capacity(
+                        names.len() + types.len() + array.len(),
+                    );
+                    for name in names.clone() {
+                        new_array.push(Entity::Text { text: name });
+                    }
+                    for t in &types {
+                        new_array.push(Entity::Text {
+                            text: t.to_string(),
+                        });
+                    }
+                    new_array.append(&mut array);
+                    let res = QueryResult::Array {
+                        names,
+                        types,
+                        array: new_array,
+                    };
+                    Box::new(Box::new(res))
+                }
+                _ => Box::new(Box::new(self)),
+            },
             _ => Box::new(Box::new(self)),
         }
     }
@@ -1456,6 +1519,16 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     result,
                     timeout,
                 );
+            }
+            Ok(Command::ListStatements {
+                return_method,
+                client,
+            }) => {
+                let result =
+                    loopdata.get_replication_book().list_statements();
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
+                return_value(&client, &return_method, result, t);
             }
             Ok(Command::MakeCopy {
                 destination,

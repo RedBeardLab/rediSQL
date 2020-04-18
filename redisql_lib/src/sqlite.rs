@@ -212,6 +212,8 @@ pub trait StatementTrait<'a>: Sized {
     fn is_read_only(&self) -> bool {
         false
     }
+    fn parameters_count(&self) -> u32;
+    fn sql(&self) -> String;
 }
 
 enum EntityType {

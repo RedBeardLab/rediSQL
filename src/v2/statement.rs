@@ -105,6 +105,15 @@ pub extern "C" fn Statement_v2(
                     }
                 }
             }
+            Action::List => {
+                let result = loop_data
+                    .get_replication_book()
+                    .list_statements();
+                match result {
+                    Err(mut e) => e.reply_v2(&context),
+                    Ok(mut q) => q.reply_v2(&context),
+                }
+            }
             _ => todo!(),
         }
     }
