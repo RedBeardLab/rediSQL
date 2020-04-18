@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use std::error;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::iter::FromIterator;
@@ -36,7 +35,7 @@ impl FromIterator<SQLiteOK> for SQLiteOK {
 
 #[derive(Clone)]
 pub struct SQLite3Error {
-    pub code: i32,
+    pub code: u32,
     pub error_message: String,
     pub error_string: String,
 }
@@ -54,12 +53,6 @@ impl fmt::Display for SQLite3Error {
 impl fmt::Debug for SQLite3Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
-    }
-}
-
-impl error::Error for SQLite3Error {
-    fn description(&self) -> &str {
-        self.error_message.as_str()
     }
 }
 
@@ -152,7 +145,7 @@ pub fn get_last_error_from_db_connection(
             .into_owned()
     };
     SQLite3Error {
-        code: error_code,
+        code: error_code as u32,
         error_message,
         error_string,
     }

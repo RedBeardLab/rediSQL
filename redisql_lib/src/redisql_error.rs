@@ -1,10 +1,8 @@
-use std::error;
-use std::error::Error;
 use std::fmt;
 
 use crate::sqlite as sql;
 
-pub trait RediSQLErrorTrait: fmt::Display + error::Error {}
+pub trait RediSQLErrorTrait: fmt::Display {}
 
 pub struct RediSQLError {
     #[allow(dead_code)]
@@ -41,6 +39,7 @@ pub struct RediSQLError {
  * 22  - Only Statement UPDATE support CAN_CREATE flag
  * 23  - Command for Statement unknown
  * 24  - Didn't provide neither COMMAND nor STATEMENT
+ * 25  - Provide name of the statement to STATEMENT LIST
  */
 impl RediSQLError {
     pub fn new(debug: String, error_description: String) -> Self {
@@ -109,18 +108,12 @@ impl fmt::Display for RediSQLError {
     }
 }
 
-impl error::Error for RediSQLError {
-    fn description(&self) -> &str {
-        self.error_description.as_str()
-    }
-}
-
 impl From<sql::SQLite3Error> for RediSQLError {
     fn from(err: sql::SQLite3Error) -> RediSQLError {
         RediSQLError {
-            code: 0,
+            code: err.code,
             debug: format!("{}", err),
-            error_description: err.description().to_owned(),
+            error_description: err.error_message,
         }
     }
 }
