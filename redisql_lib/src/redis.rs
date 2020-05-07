@@ -1066,7 +1066,7 @@ pub fn do_execute(
 pub fn do_query(
     db: &ConcurrentConnection,
     query: &str,
-    args: &Vec<&'static str>,
+    args: &Vec<&str>,
 ) -> Result<impl Returner, err::RediSQLError> {
     let mut stmt = MultiStatement::new(db.clone(), query)?;
     if stmt.is_read_only() {
