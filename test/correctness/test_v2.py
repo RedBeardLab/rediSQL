@@ -684,6 +684,26 @@ class TestListStatements(TestRediSQLWithExec):
           ['select_all', 'SELECT * from t1', 0, 1],
           ['select_multiples', "select ?1; select ?2; select ?3;", 3, 1]])
 
+class TestExecWithArguments(TestRediSQLWithExec):
+    def test_exec_with_args(self):
+        with DB(self, "C"):
+            done = self.exec_query("C", "CREATE TABLE foo(a INT, b INT);")
+            self.assertEqual(done, [['DONE'], [0]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "INSERT INTO foo VALUES(?1, ?2)", "ARGS", 3, 4)
+            self.assertEqual(done, [['DONE'], [1]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "INSERT INTO foo VALUES(?1, ?1 * 100)", "ARGS", "4")
+            self.assertEqual(done, [['DONE'], [1]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "INSERT INTO foo VALUES(?1, ?1 + 100)", "ARGS", "5")
+            self.assertEqual(done, [['DONE'], [1]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "SELECT * FROM foo ORDER BY a ASC;", "NO_HEADER")
+            self.assertEqual(done, [['RESULT'], [3, 4], [4, 400], [5, 105]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "SELECT * FROM foo WHERE a >= ?1 ORDER BY a ASC", "NO_HEADER", "ARGS", 4)
+            self.assertEqual(done, [['RESULT'], [4, 400], [5, 105]])
 
 if __name__ == '__main__':
   import unittest
