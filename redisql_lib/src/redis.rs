@@ -597,12 +597,14 @@ pub enum Command {
     Stop,
     Exec {
         query: &'static str,
+        arguments: Vec<&'static str>,
         timeout: std::time::Instant,
         return_method: ReturnMethod,
         client: BlockedClient,
     },
     Query {
         query: &'static str,
+        arguments: Vec<&'static str>,
         timeout: std::time::Instant,
         return_method: ReturnMethod,
         client: BlockedClient,
@@ -1050,8 +1052,11 @@ impl RedisReply for QueryResult {
 pub fn do_execute(
     db: &ConcurrentConnection,
     query: &str,
+    args: &Vec<&str>,
 ) -> Result<impl Returner, err::RediSQLError> {
-    let stmt = MultiStatement::new(db.clone(), query)?;
+    let mut stmt = MultiStatement::new(db.clone(), query)?;
+    stmt.reset();
+    let stmt = bind_statement(&mut stmt, args)?;
     debug!("do_execute | created statement");
     let cursor = stmt.execute()?;
     debug!("do_execute | statement executed");
@@ -1061,9 +1066,12 @@ pub fn do_execute(
 pub fn do_query(
     db: &ConcurrentConnection,
     query: &str,
+    args: &Vec<&'static str>,
 ) -> Result<impl Returner, err::RediSQLError> {
-    let stmt = MultiStatement::new(db.clone(), query)?;
+    let mut stmt = MultiStatement::new(db.clone(), query)?;
     if stmt.is_read_only() {
+        stmt.reset();
+        let stmt = bind_statement(&mut stmt, args)?;
         Ok(stmt.execute()?)
     } else {
         let debug = String::from("Not read only statement");
@@ -1325,12 +1333,14 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             Ok(Command::Ping {}) => debug!("Received PING!"),
             Ok(Command::Exec {
                 query,
+                arguments,
                 client,
                 return_method,
                 timeout,
             }) => {
                 debug!("Exec | Query = {:?}", query);
-                let result = do_execute(&loopdata.get_db(), query);
+                let result =
+                    do_execute(&loopdata.get_db(), query, &arguments);
                 match result {
                     Ok(_) => STATISTICS.exec_ok(),
                     Err(_) => STATISTICS.exec_err(),
@@ -1345,12 +1355,14 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
             }
             Ok(Command::Query {
                 query,
+                arguments,
                 timeout,
                 return_method,
                 client,
             }) => {
                 debug!("Query | Query = {:?}", query);
-                let result = do_query(&loopdata.get_db(), query);
+                let result =
+                    do_query(&loopdata.get_db(), query, &arguments);
 
                 match (&return_method, &result) {
                     (ReturnMethod::Reply, Ok(_)) => {
