@@ -44,7 +44,10 @@ impl Statement<'static> {
                 can_update: self.can_update,
                 client,
             },
-            Action::Show => Command::ShowStatement {},
+            Action::Show => Command::ShowStatement {
+                return_method: ReturnMethod::ReplyWithHeader,
+                client,
+            },
             Action::List => Command::ListStatements {
                 return_method: ReturnMethod::ReplyWithHeader,
                 client,

@@ -639,7 +639,10 @@ pub enum Command {
         return_method: ReturnMethod,
         client: BlockedClient,
     },
-    ShowStatement {},
+    ShowStatement {
+        return_method: ReturnMethod,
+        client: BlockedClient,
+    },
     ListStatements {
         return_method: ReturnMethod,
         client: BlockedClient,
@@ -1533,7 +1536,10 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                     timeout,
                 );
             }
-            Ok(Command::ShowStatement {}) => todo!(),
+            Ok(Command::ShowStatement {
+                return_method,
+                client,
+            }) => todo!(),
             Ok(Command::ListStatements {
                 return_method,
                 client,
