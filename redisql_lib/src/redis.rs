@@ -252,7 +252,42 @@ impl<'a> StatementCache<'a> for ReplicationBook {
         &self,
         identifier: &str,
     ) -> Result<QueryResult, RediSQLError> {
-        todo!();
+        let map = self.data.read().unwrap();
+        match map.get(identifier) {
+            None => {
+                let debug = String::from("No statement found");
+                let description = String::from(
+                    "The statement is not present in the database",
+                );
+                Err(RediSQLError::new(debug, description))
+            }
+            Some(&(ref stmt, read_only)) => {
+                let names = vec![
+                    "identifier".to_string(),
+                    "SQL".to_string(),
+                    "parameters_count".to_string(),
+                    "read_only".to_string(),
+                ];
+                let types = vec!["TEXT", "TEXT", "INT", "INT"];
+                let array = vec![
+                    Entity::Text {
+                        text: identifier.to_string(),
+                    },
+                    Entity::Text { text: stmt.sql() },
+                    Entity::Integer {
+                        int: stmt.parameters_count() as i64,
+                    },
+                    Entity::Integer {
+                        int: if read_only { 1 } else { 0 },
+                    },
+                ];
+                Ok(QueryResult::Array {
+                    names,
+                    types,
+                    array,
+                })
+            }
+        }
     }
     fn list_statements(&self) -> Result<QueryResult, RediSQLError> {
         let map = self.data.read().unwrap();
