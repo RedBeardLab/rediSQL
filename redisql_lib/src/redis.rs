@@ -88,6 +88,10 @@ pub trait StatementCache<'a> {
         identifier: &str,
         args: &[&str],
     ) -> Result<Cursor, RediSQLError>;
+    fn show_statement(
+        &self,
+        identifier: &str,
+    ) -> Result<QueryResult, RediSQLError>;
     fn list_statements(&self) -> Result<QueryResult, RediSQLError>;
 }
 
@@ -243,6 +247,12 @@ impl<'a> StatementCache<'a> for ReplicationBook {
                 Ok(cursor)
             }
         }
+    }
+    fn show_statement(
+        &self,
+        identifier: &str,
+    ) -> Result<QueryResult, RediSQLError> {
+        todo!();
     }
     fn list_statements(&self) -> Result<QueryResult, RediSQLError> {
         let map = self.data.read().unwrap();
@@ -640,6 +650,7 @@ pub enum Command {
         client: BlockedClient,
     },
     ShowStatement {
+        identifier: &'static str,
         return_method: ReturnMethod,
         client: BlockedClient,
     },
@@ -1537,9 +1548,17 @@ pub fn listen_and_execute<'a, L: 'a + LoopData>(
                 );
             }
             Ok(Command::ShowStatement {
+                identifier,
                 return_method,
                 client,
-            }) => todo!(),
+            }) => {
+                let result = loopdata
+                    .get_replication_book()
+                    .show_statement(identifier);
+                let t = std::time::Instant::now()
+                    + std::time::Duration::from_secs(10);
+                return_value(&client, &return_method, result, t);
+            }
             Ok(Command::ListStatements {
                 return_method,
                 client,

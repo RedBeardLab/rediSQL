@@ -45,6 +45,7 @@ impl Statement<'static> {
                 client,
             },
             Action::Show => Command::ShowStatement {
+                identifier: self.stmt_name.unwrap(),
                 return_method: ReturnMethod::ReplyWithHeader,
                 client,
             },
