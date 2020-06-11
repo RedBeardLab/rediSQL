@@ -621,7 +621,7 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.V2.EXEC", "L", "COmmaNd", "SELECT * FROM t1 ORDER BY A;", "no_HEader", "NoW")
         self.assertEqual(result, [["RESULT"], [3], [4], [103], [104]])
 
-class TestListStatements(TestRediSQLWithExec):
+class TestStatementsIntrospection(TestRediSQLWithExec):
   def compare_results(self, a, b):
     self.assertEquals(a[0], b[0]) # 'RESULT'
     self.assertEquals(a[1], b[1]) # names
@@ -683,6 +683,20 @@ class TestListStatements(TestRediSQLWithExec):
           ['insert_ntimes', "insert into t1 values(?1); insert into t1 values(?2); select ?3;", 3, 0],
           ['select_all', 'SELECT * from t1', 0, 1],
           ['select_multiples', "select ?1; select ?2; select ?3;", 3, 1]])
+
+      result = self.exec_naked("REDISQL.V2.STATEMENT", "A", "SHOW", "insert")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['insert', 'insert into t1 values(?1);', 1, 0]
+          ])
+
+      result = self.exec_naked("REDISQL.V2.STATEMENT", "A", "SHOW", "select_multiples")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['select_multiples', "select ?1; select ?2; select ?3;", 3, 1]
+          ])
 
 class TestExecWithArguments(TestRediSQLWithExec):
     def test_exec_with_args(self):
