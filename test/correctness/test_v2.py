@@ -621,7 +621,7 @@ class TestStatementsSynchronous(TestRediSQLWithExec):
         result = self.exec_naked("REDISQL.V2.EXEC", "L", "COmmaNd", "SELECT * FROM t1 ORDER BY A;", "no_HEader", "NoW")
         self.assertEqual(result, [["RESULT"], [3], [4], [103], [104]])
 
-class TestListStatements(TestRediSQLWithExec):
+class TestStatementsIntrospection(TestRediSQLWithExec):
   def compare_results(self, a, b):
     self.assertEquals(a[0], b[0]) # 'RESULT'
     self.assertEquals(a[1], b[1]) # names
@@ -684,6 +684,40 @@ class TestListStatements(TestRediSQLWithExec):
           ['select_all', 'SELECT * from t1', 0, 1],
           ['select_multiples', "select ?1; select ?2; select ?3;", 3, 1]])
 
+      result = self.exec_naked("REDISQL.V2.STATEMENT", "A", "SHOW", "insert")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['insert', 'insert into t1 values(?1);', 1, 0]
+          ])
+
+      result = self.exec_naked("REDISQL.V2.STATEMENT", "A", "SHOW", "select_multiples")
+      self.compare_results(result, [['RESULT'],
+          ["identifier", 'SQL', 'parameters_count', 'read_only'],
+          ['TEXT', 'TEXT', 'INT', 'INT'],
+          ['select_multiples', "select ?1; select ?2; select ?3;", 3, 1]
+          ])
+
+class TestExecWithArguments(TestRediSQLWithExec):
+    def test_exec_with_args(self):
+        with DB(self, "C"):
+            done = self.exec_query("C", "CREATE TABLE foo(a INT, b INT);")
+            self.assertEqual(done, [['DONE'], [0]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "INSERT INTO foo VALUES(?1, ?2)", "ARGS", 3, 4)
+            self.assertEqual(done, [['DONE'], [1]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "INSERT INTO foo VALUES(?1, ?1 * 100)", "ARGS", "4")
+            self.assertEqual(done, [['DONE'], [1]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "INSERT INTO foo VALUES(?1, ?1 + 100)", "ARGS", "5")
+            self.assertEqual(done, [['DONE'], [1]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "SELECT * FROM foo ORDER BY a ASC;", "NO_HEADER")
+            self.assertEqual(done, [['RESULT'], [3, 4], [4, 400], [5, 105]])
+            done = self.exec_naked("REDISQL.V2.EXEC", "C", "COMMAND",
+                    "SELECT * FROM foo WHERE a >= ?1 ORDER BY a ASC", "NO_HEADER", "ARGS", 4)
+            self.assertEqual(done, [['RESULT'], [4, 400], [5, 105]])
 
 if __name__ == '__main__':
   import unittest
