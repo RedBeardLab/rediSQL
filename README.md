@@ -13,7 +13,7 @@ It provides several benefits for your application.
 
 1. Fast, it can top up to 130k inserts per *second*.
 2. Familiar, it works with standard SQL, no weird dialect or syntax to learn.
-3. Easy to Operate, it is based on Redis, just start the standard Redis binary and and pass the RediSQL binary.
+3. Easy to Operate, it is based on Redis, just start the standard Redis binary and pass the RediSQL binary.
 4. Easy to Use, being based on Redis there are already bindings for any language.
 
 ## Jump start
