@@ -126,7 +126,7 @@ impl Exec<'static> {
         let to_push = RMString::new(ctx, s);
         v.push(to_push.as_ptr());
         std::mem::forget(to_push);
-        if self.args.len() > 0 {
+        if !self.args.is_empty() {
             let to_push = RMString::new(ctx, "ARGS");
             v.push(to_push.as_ptr());
             std::mem::forget(to_push);

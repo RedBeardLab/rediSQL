@@ -104,7 +104,7 @@ impl Iterator for DumpIterator {
     }
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe extern "C" fn WriteAOF(
     aof: *mut RedisModuleIO,
     key: *mut RedisModuleString,
@@ -705,7 +705,7 @@ pub extern "C" fn MakeCopyNow(
     }
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Replicate(
     ctx: &Context,
     command: &str,

@@ -84,9 +84,7 @@ fn do_exec_v2(command: Exec<'static>, context: Context) -> i32 {
                         r::rm::ffi::REDISMODULE_OK
                     }
                     Ok(_) => {
-                        if repl_args.is_some() {
-                            let repl_args = repl_args.unwrap();
-
+                        if let Some(repl_args) = repl_args {
                             let command =
                                 CString::new("REDISQL.V2.EXEC")
                                     .unwrap();

@@ -1,5 +1,4 @@
 use fnv::FnvHashMap;
-use std;
 use std::clone::Clone;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -550,8 +549,7 @@ impl RedisKey {
                             .unwrap()(self.key)
                             as *mut DBKey
                     };
-                    let dbkey = { &*dbkey };
-                    dbkey
+                    &*dbkey
                 };
                 Ok(dbkey)
             }
@@ -570,7 +568,7 @@ impl RedisKey {
         &self,
     ) -> Result<ConcurrentConnection, RediSQLError> {
         let dbkey = self.get_dbkey()?;
-        Ok(dbkey.loop_data.get_db().clone())
+        Ok(dbkey.loop_data.get_db())
     }
     pub fn get_loop_data(&self) -> Result<Loop, RediSQLError> {
         let dbkey = self.get_dbkey()?;
@@ -1620,7 +1618,7 @@ impl<'c> DBKey<'c> {
     ) -> Self {
         let loop_data = Loop::new_from_arc(db);
         DBKey {
-            tx: tx,
+            tx,
             loop_data,
             connections: HashMap::new(),
             context: None,
