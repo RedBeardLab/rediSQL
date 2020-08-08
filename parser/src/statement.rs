@@ -44,7 +44,11 @@ impl Statement<'static> {
                 can_update: self.can_update,
                 client,
             },
-            Action::Show => todo!(),
+            Action::Show => Command::ShowStatement {
+                identifier: self.stmt_name.unwrap(),
+                return_method: ReturnMethod::ReplyWithHeader,
+                client,
+            },
             Action::List => Command::ListStatements {
                 return_method: ReturnMethod::ReplyWithHeader,
                 client,

@@ -10,8 +10,8 @@ use redisql_lib::redis_type::ffi::RedisModuleString;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ToExecute<'s> {
-    Command(&'s str),
-    Statement(&'s str),
+    Command { query: &'s str, args: Vec<&'s str> },
+    Statement { stmt: &'s str, args: Vec<&'s str> },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -23,7 +23,6 @@ pub struct Exec<'s> {
     now: bool,
     no_header: bool,
     to_execute: Option<ToExecute<'s>>,
-    pub args: Vec<&'s str>,
 }
 
 impl Exec<'static> {
@@ -37,37 +36,51 @@ impl Exec<'static> {
             todo!("to_execute not set");
         }
         match (self.to_execute.unwrap(), self.read_only) {
-            (ToExecute::Command(q), true) => Command::Query {
-                query: q,
-                timeout,
-                return_method,
-                client,
-            },
+            (ToExecute::Command { query: q, args }, true) => {
+                Command::Query {
+                    query: q,
+                    arguments: args,
+                    timeout,
+                    return_method,
+                    client,
+                }
+            }
 
-            (ToExecute::Command(q), false) => Command::Exec {
-                query: q,
+            (ToExecute::Command { query: q, args }, false) => {
+                Command::Exec {
+                    query: q,
+                    arguments: args,
+                    timeout,
+                    client,
+                    return_method,
+                }
+            }
+            (
+                ToExecute::Statement {
+                    stmt: identifier,
+                    args,
+                },
+                true,
+            ) => Command::QueryStatement {
+                identifier,
+                arguments: args,
                 timeout,
                 client,
                 return_method,
             },
-            (ToExecute::Statement(identifier), true) => {
-                Command::QueryStatement {
-                    identifier,
-                    arguments: self.args,
-                    timeout,
-                    client,
-                    return_method,
-                }
-            }
-            (ToExecute::Statement(identifier), false) => {
-                Command::ExecStatement {
-                    identifier,
-                    arguments: self.args,
-                    timeout,
-                    return_method,
-                    client,
-                }
-            }
+            (
+                ToExecute::Statement {
+                    stmt: identifier,
+                    args,
+                },
+                false,
+            ) => Command::ExecStatement {
+                identifier,
+                arguments: args,
+                timeout,
+                return_method,
+                client,
+            },
         }
     }
     pub fn get_return_method(&self) -> ReturnMethod {
@@ -85,7 +98,7 @@ impl Exec<'static> {
     }
     pub fn get_query(&self) -> Option<&str> {
         match self.to_execute {
-            Some(ToExecute::Command(q)) => Some(q),
+            Some(ToExecute::Command { query: q, .. }) => Some(q),
             _ => None,
         }
     }
@@ -115,9 +128,13 @@ impl Exec<'static> {
         let to_push = RMString::new(ctx, "NOW");
         v.push(to_push.as_ptr());
         std::mem::forget(to_push);
-        let (t, s) = match self.to_execute.as_ref() {
-            Some(ToExecute::Command(s)) => ("COMMAND", s),
-            Some(ToExecute::Statement(s)) => ("STATEMENT", s),
+        let (t, s, args) = match self.to_execute.as_ref() {
+            Some(ToExecute::Command { query: q, args }) => {
+                ("COMMAND", q, args)
+            }
+            Some(ToExecute::Statement { stmt: s, args }) => {
+                ("STATEMENT", s, args)
+            }
             None => todo!("Should never happen"),
         };
         let to_push = RMString::new(ctx, t);
@@ -130,7 +147,7 @@ impl Exec<'static> {
             let to_push = RMString::new(ctx, "ARGS");
             v.push(to_push.as_ptr());
             std::mem::forget(to_push);
-            for arg in self.args.iter() {
+            for arg in args.iter() {
                 let to_push = RMString::new(ctx, arg);
                 v.push(to_push.as_ptr());
                 std::mem::forget(to_push);
@@ -156,19 +173,18 @@ impl<'s> CommandV2<'s> for Exec<'s> {
             now: false,
             no_header: false,
             to_execute: None,
-            args: Vec::new(),
         };
         while let Some(arg) = args_iter.next() {
             let mut arg_string = String::from(*arg);
             arg_string.make_ascii_uppercase();
             match arg_string.as_str() {
                 "COMMAND" => match exec.to_execute {
-                    Some(ToExecute::Statement(_)) => {
+                    Some(ToExecute::Statement { .. }) => {
                         return Err(
                             RediSQLError::both_statement_and_query(),
                         );
                     }
-                    Some(ToExecute::Command(_)) => {
+                    Some(ToExecute::Command { .. }) => {
                         return Err(RediSQLError::with_code(
                             13,
                             "Impossible to know which query should be executed".to_string(),
@@ -186,17 +202,19 @@ impl<'s> CommandV2<'s> for Exec<'s> {
                                 ))
                             }
                         };
-                        exec.to_execute =
-                            Some(ToExecute::Command(query));
+                        exec.to_execute = Some(ToExecute::Command {
+                            query,
+                            args: Vec::new(),
+                        });
                     }
                 },
                 "STATEMENT" => match exec.to_execute {
-                    Some(ToExecute::Command(_)) => {
+                    Some(ToExecute::Command { .. }) => {
                         return Err(
                             RediSQLError::both_statement_and_query(),
                         );
                     }
-                    Some(ToExecute::Statement(_)) => {
+                    Some(ToExecute::Statement { .. }) => {
                         return Err(RediSQLError::with_code(
                             14,
                             "Impossible to know which statement should be executed".to_string(),
@@ -216,7 +234,10 @@ impl<'s> CommandV2<'s> for Exec<'s> {
                             }
                         };
                         exec.to_execute =
-                            Some(ToExecute::Statement(stmt));
+                            Some(ToExecute::Statement {
+                                stmt,
+                                args: Vec::new(),
+                            });
                     }
                 },
                 "READ_ONLY" => exec.read_only = true,
@@ -236,10 +257,23 @@ impl<'s> CommandV2<'s> for Exec<'s> {
                 }
                 "NO_HEADER" => exec.no_header = true,
                 "ARGS" => {
+                    let args = match exec.to_execute {
+                        None => {
+                            return Err(RediSQLError::with_code(24, "You didn't provide neither `COMMAND` nor `STATEMENT` fields".to_string(), "Command incomplete, no `COMMAND` nor `STATEMENT` fields".to_string()));
+                        }
+                        Some(ToExecute::Command {
+                            ref mut args,
+                            ..
+                        }) => args,
+                        Some(ToExecute::Statement {
+                            ref mut args,
+                            ..
+                        }) => args,
+                    };
                     let (size, _) = args_iter.size_hint();
-                    exec.args.reserve(size);
+                    args.reserve(size);
                     while let Some(arg) = args_iter.next() {
-                        exec.args.push(*arg);
+                        args.push(*arg);
                     }
                 }
                 _ => {}

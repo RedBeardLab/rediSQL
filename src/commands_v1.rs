@@ -87,7 +87,7 @@ pub extern "C" fn ExecStatement(
                 identifier: argvector[2],
                 arguments: argvector[3..].to_vec(),
                 client: blocked_client,
-                return_method: r::ReturnMethod::Reply{},
+                return_method: r::ReturnMethod::Reply {},
                 timeout: t,
             };
 
@@ -301,6 +301,7 @@ pub extern "C" fn Exec(
 
             let cmd = r::Command::Exec {
                 query: argvector[2],
+                arguments: Vec::new(),
                 client: blocked_client,
                 timeout: t,
                 return_method: r::ReturnMethod::Reply,
@@ -382,6 +383,7 @@ pub extern "C" fn Query(
 
             let cmd = r::Command::Query {
                 query: argvector[2],
+                arguments: Vec::new(),
                 return_method: r::ReturnMethod::Reply,
                 client: blocked_client,
                 timeout: t,
@@ -450,6 +452,7 @@ pub extern "C" fn QueryInto(
 
             let cmd = r::Command::Query {
                 query: argvector[3],
+                arguments: Vec::new(),
                 return_method: r::ReturnMethod::Stream {
                     name: stream_name,
                 },

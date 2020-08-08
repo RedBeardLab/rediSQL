@@ -176,7 +176,8 @@ pub extern "C" fn ExecNow(
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let result = do_execute(&db, args[2]);
+                    let result =
+                        do_execute(&db, args[2], &Vec::new());
                     let t = std::time::Instant::now()
                         + std::time::Duration::from_secs(10);
                     let mut result = match result {
@@ -232,7 +233,7 @@ pub extern "C" fn QueryNow(
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let result = do_query(&db, args[2]);
+                    let result = do_query(&db, args[2], &Vec::new());
                     let t = std::time::Instant::now()
                         + std::time::Duration::from_secs(10);
                     let mut result = match result {
@@ -284,7 +285,7 @@ pub extern "C" fn QueryNowInto(
                 Ok(dbkey) => {
                     let dbkey = ManuallyDrop::new(dbkey);
                     let db = dbkey.loop_data.get_db();
-                    let result = do_query(&db, args[3]);
+                    let result = do_query(&db, args[3], &Vec::new());
                     let return_method =
                         ReturnMethod::Stream { name: args[1] };
                     let t = std::time::Instant::now()
