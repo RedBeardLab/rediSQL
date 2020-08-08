@@ -85,7 +85,9 @@ impl RawConnection {
         let conn = unsafe { conn.assume_init() };
         match r {
             ffi::SQLITE_OK => Ok(RawConnection { conn, flags }),
-            _ => Err(get_last_error_from_db_connection(conn)),
+            _ => Err(unsafe {
+                get_last_error_from_db_connection(conn)
+            }),
         }
     }
     fn nomutex_flags() -> i32 {
@@ -126,24 +128,21 @@ impl SQLiteConnection for Connection {
         self.db.conn
     }
     fn get_last_error(&self) -> SQLite3Error {
-        get_last_error_from_db_connection(self.get_db())
+        unsafe { get_last_error_from_db_connection(self.get_db()) }
     }
 }
 
-pub fn get_last_error_from_db_connection(
+pub unsafe fn get_last_error_from_db_connection(
     conn: *mut ffi::sqlite3,
 ) -> SQLite3Error {
-    let error_code = unsafe { ffi::sqlite3_extended_errcode(conn) };
-    let error_message = unsafe {
-        CStr::from_ptr(ffi::sqlite3_errmsg(conn))
-            .to_string_lossy()
-            .into_owned()
-    };
-    let error_string = unsafe {
+    let error_code = ffi::sqlite3_extended_errcode(conn);
+    let error_message = CStr::from_ptr(ffi::sqlite3_errmsg(conn))
+        .to_string_lossy()
+        .into_owned();
+    let error_string =
         CStr::from_ptr(ffi::sqlite3_errstr(error_code))
             .to_string_lossy()
-            .into_owned()
-    };
+            .into_owned();
     SQLite3Error {
         code: error_code as u32,
         error_message,
@@ -615,12 +614,12 @@ pub fn create_backup(
 }
 
 // TODO XXX finish work here
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn BackupStep(bk: &Backup, steps: i32) -> i32 {
     ffi::sqlite3_backup_step(bk.as_ptr(), steps)
 }
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn BackupFinish(bk: &Backup) -> i32 {
     ffi::sqlite3_backup_finish(bk.as_ptr())
 }

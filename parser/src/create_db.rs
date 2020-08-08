@@ -18,7 +18,7 @@ impl<'s> CommandV2<'s> for CreateDB<'s> {
             None => return Err(RediSQLError::no_database_name()),
         };
         let mut createdb = CreateDB {
-            name: name,
+            name,
             path: None,
             can_exists: true,
         };

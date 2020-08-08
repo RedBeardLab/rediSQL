@@ -157,7 +157,7 @@ impl Statement {
     }
     fn get_last_error(&self) -> SQLite3Error {
         let db = unsafe { ffi::sqlite3_db_handle(self.as_ptr()) };
-        get_last_error_from_db_connection(db)
+        unsafe { get_last_error_from_db_connection(db) }
     }
     pub fn as_ptr(&self) -> *mut ffi::sqlite3_stmt {
         self.stmt.stmt.as_ptr()
@@ -263,7 +263,7 @@ impl<'a> StatementTrait<'a> for Statement {
 
 impl<'a> StatementTrait<'a> for MultiStatement {
     fn reset(&self) {
-        self.stmts.iter().map(StatementTrait::reset).count();
+        self.stmts.iter().for_each(StatementTrait::reset);
     }
     fn execute(&self) -> Result<Cursor, SQLite3Error> {
         let db = self.db.clone();
@@ -399,7 +399,6 @@ fn count_parameters(
         Err(e) => Err(e),
         Ok(parameters) => {
             let mut discriminant: Vec<_> = parameters
-                .clone()
                 .iter()
                 .flat_map(|params| {
                     params.iter().map(|p| mem::discriminant(p))
