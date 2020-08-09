@@ -619,6 +619,12 @@ impl RedisKey {
         let dbkey = self.get_dbkey()?;
         Ok(dbkey.loop_data.clone())
     }
+    pub fn get_context_location(
+        &self,
+    ) -> Result<Option<&Context>, RediSQLError> {
+        let dbkey = self.get_dbkey()?;
+        Ok(*dbkey.context)
+    }
 }
 
 impl Drop for RedisKey {
@@ -1681,7 +1687,7 @@ fn compile_and_insert_statement<'a, L: 'a + LoopData>(
 pub struct DBKey<'c> {
     pub tx: Sender<Command>,
     pub loop_data: Loop,
-    pub context: Option<&'c Context>,
+    pub context: std::pin::Pin<Box<Option<&'c Context>>>,
     pub connections: HashMap<String, Sender<Command>>,
 }
 
@@ -1695,7 +1701,7 @@ impl<'c> DBKey<'c> {
             tx,
             loop_data,
             connections: HashMap::new(),
-            context: None,
+            context: std::pin::Pin::new(Box::new(None)),
         }
     }
     pub fn add_connection(

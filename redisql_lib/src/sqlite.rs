@@ -650,3 +650,98 @@ pub fn disable_global_memory_statistics() {
 pub fn SQLITE_TRANSIENT() -> ffi::sqlite3_destructor_type {
     Some(unsafe { mem::transmute(-1isize) })
 }
+
+pub extern "C" fn push_message(
+    sqlite3_context: *mut ffi::sqlite3_context,
+    argc: i32,
+    argv: *mut *mut ffi::sqlite3_value,
+) {
+    // first get the pinned context
+    // then call XADD
+    // then return the result form XADD
+
+    if argc < 1 {
+        let err = CString::new(
+            "Not enough paramenters, it requires at least one.",
+        )
+        .unwrap();
+        unsafe {
+            ffi::sqlite3_result_error(
+                sqlite3_context,
+                err.as_ptr(),
+                -1,
+            );
+        }
+        return;
+    }
+    if (argc % 2) != 1 {}
+    unsafe {
+        let ctx: *mut std::pin::Pin<
+            Box<Option<crate::redis_type::Context>>,
+        > = ffi::sqlite3_user_data(sqlite3_context) as _;
+        let ctx: std::pin::Pin<_> = ctx.read();
+        let ctx: &crate::redis_type::Context =
+            (*ctx).as_ref().unwrap();
+        let lock = ctx.lock();
+        let stream_name = *argv.offset(0 as isize);
+        let stream_name = ffi::sqlite3_value_text(stream_name);
+        let stream_name =
+            CStr::from_ptr(stream_name as _).to_string_lossy();
+        let mut xadd =
+            crate::redis_type::XADDCommand::new(ctx, &stream_name);
+        let mut i = 1;
+        while i < argc {
+            let key = *argv.offset(i as isize);
+            let key = ffi::sqlite3_value_text(key);
+            let key = CStr::from_ptr(key as _).to_string_lossy();
+            i += 1;
+            let value = *argv.offset(i as isize);
+            let value = ffi::sqlite3_value_text(value);
+            let value = CStr::from_ptr(value as _).to_string_lossy();
+            i += 1;
+            xadd.add_element(&key, &value);
+        }
+        let xadd_result = xadd.execute(&lock);
+        ctx.release(lock);
+        match xadd_result {
+            crate::redis_type::CallReply::RString { .. } => {
+                let idx = xadd_result.access_string().unwrap();
+                let idx = CString::new(idx).unwrap();
+                ffi::sqlite3_result_text(
+                    sqlite3_context,
+                    idx.as_ptr(),
+                    -1,
+                    SQLITE_TRANSIENT(),
+                );
+            }
+            crate::redis_type::CallReply::RError { .. } => {
+                let err = xadd_result.access_error().unwrap();
+                let err =
+                    format!("Error in adding to the stream: {}", err);
+                ffi::sqlite3_result_error(
+                    sqlite3_context,
+                    err.as_ptr() as _,
+                    -1,
+                );
+            }
+            crate::redis_type::CallReply::RNull { .. } => {
+                let err = CString::new("Error in adding to the stream, are stream available?").unwrap();
+                ffi::sqlite3_result_error(
+                    sqlite3_context,
+                    err.as_ptr(),
+                    -1,
+                );
+                return;
+            }
+            _ => {
+                let err = CString::new("Error in adding to the stream, are stream available?").unwrap();
+                ffi::sqlite3_result_error(
+                    sqlite3_context,
+                    err.as_ptr(),
+                    -1,
+                );
+                return;
+            }
+        }
+    }
+}

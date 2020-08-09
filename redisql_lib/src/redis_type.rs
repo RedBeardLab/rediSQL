@@ -91,8 +91,10 @@ type RedisReplyCallback = unsafe extern "C" fn(
     *mut *mut ffi::RedisModuleString,
     ::std::os::raw::c_int,
 ) -> i32;
+
 type RedisFreeDataCallback =
     unsafe extern "C" fn(*mut ::std::os::raw::c_void);
+
 impl BlockedClient {
     pub fn new(
         ctx: &Context,

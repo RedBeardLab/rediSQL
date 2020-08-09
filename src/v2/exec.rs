@@ -73,6 +73,7 @@ fn do_exec_v2(command: Exec<'static>, context: Context) -> i32 {
                     free_privdata,
                     10_000,
                 );
+                key.get_context_location().unwrap().replace(&context);
                 let repl_args = command.replicate_args(&context);
                 let comm = command.get_command(t, blocked_client);
                 match ch.send(comm) {

@@ -43,6 +43,7 @@ pub extern "C" fn Statement_v2(
                     free_privdata,
                     10_000,
                 );
+                key.get_context_location().unwrap().replace(&context);
                 let command = command.get_command(blocked_client);
                 match ch.send(command) {
                     Err(e) => {

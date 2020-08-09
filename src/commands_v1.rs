@@ -3,13 +3,17 @@ use std::os::raw::c_long;
 use std::sync::mpsc::channel;
 use std::thread;
 
+use redisql_lib::redis::LoopData;
 use redisql_lib::redis::{
     get_ch_from_dbkeyptr, get_dbkey_from_name,
     get_dbkeyptr_from_name, reply_with_error_from_key_type, RedisKey,
     RedisReply,
 };
 use redisql_lib::redis_type::ReplicateVerbatim;
-use redisql_lib::sqlite::{get_arc_connection, QueryResult};
+use redisql_lib::sqlite::SQLiteConnection;
+use redisql_lib::sqlite::{
+    ffi as sffi, get_arc_connection, push_message, QueryResult,
+};
 
 use redisql_lib::redis as r;
 
@@ -756,6 +760,37 @@ pub extern "C" fn CreateDB(
                                     let db = r::DBKey::new_from_arc(
                                         tx, rc,
                                     );
+                                    let ctx_location: std::pin::Pin<
+                                        Box<Option<_>>,
+                                    > = db.context.clone();
+                                    let push_to_stream =
+                                        CString::new(
+                                            "push_to_stream",
+                                        )
+                                        .unwrap();
+                                    {
+                                        let ptr =
+                                            db.loop_data.get_db();
+                                        let ptr = ptr.lock().unwrap();
+                                        let ctx: Box<_> =
+                                            std::pin::Pin::into_inner(
+                                                ctx_location,
+                                            );
+                                        let ctx: *mut _ =
+                                            Box::into_raw(ctx) as *mut std::ffi::c_void;
+                                        unsafe {
+                                            sffi::sqlite3_create_function(
+                                                (*ptr).get_db(),
+                                                push_to_stream.as_ptr(),
+                                                -1,
+                                                sffi::SQLITE_UTF8,
+                                                ctx,
+                                                Some(push_message),
+                                                None,
+                                                None,
+                                            );
+                                        }
+                                    }
                                     let mut loop_data =
                                         db.loop_data.clone();
                                     thread::spawn(move || {
