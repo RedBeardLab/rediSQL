@@ -1,3 +1,7 @@
+## Not maintained, all the updates will happen only to zeeSQL.
+
+For more info, please visit: [zeeSQL.com](https://zeesql.com)
+
 # RediSQL: Fast, in memory, SQL. With Batteries included.
 
 [![Gitter](https://img.shields.io/gitter/room/redbeardlab/redisql.svg?color=%2346BC99&style=for-the-badge)](https://gitter.im/rediSQL/community)
